@@ -2,6 +2,9 @@
 const downloadPathInput = document.getElementById('downloadPath');
 const langSeparationCb = document.getElementById('langSeparation');
 const disableEnglishSubCb = document.getElementById('disableEnglishSub');
+const syncScheduleSelect = document.getElementById('syncSchedule');
+const syncLanguageSelect = document.getElementById('syncLanguage');
+const syncProviderSelect = document.getElementById('syncProvider');
 
 async function loadSettings() {
   try {
@@ -10,6 +13,17 @@ async function loadSettings() {
     downloadPathInput.value = data.download_path || '';
     if (langSeparationCb) langSeparationCb.checked = data.lang_separation === '1';
     if (disableEnglishSubCb) disableEnglishSubCb.checked = data.disable_english_sub === '1';
+    if (syncScheduleSelect && data.sync_schedule) syncScheduleSelect.value = data.sync_schedule;
+
+    const isLangSep = data.lang_separation === '1';
+    let currentSyncLang = data.sync_language;
+    if (currentSyncLang === 'All Languages' && !isLangSep) {
+      currentSyncLang = 'German Dub';
+    }
+    updateSyncLanguageDropdown(isLangSep, currentSyncLang);
+
+    if (syncLanguageSelect && data.sync_language) syncLanguageSelect.value = data.sync_language;
+    if (syncProviderSelect && data.sync_provider) syncProviderSelect.value = data.sync_provider;
   } catch (e) {
     showToast('Failed to load settings: ' + e.message);
   }
@@ -19,7 +33,7 @@ async function saveLangSeparation() {
   try {
     const resp = await fetch('/api/settings', {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         download_path: downloadPathInput.value.trim(),
         lang_separation: langSeparationCb.checked
@@ -28,18 +42,45 @@ async function saveLangSeparation() {
     const data = await resp.json();
     if (data.error) { showToast(data.error); return; }
     showToast('Language separation ' + (langSeparationCb.checked ? 'enabled' : 'disabled'));
+
+    let currentSyncLang = syncLanguageSelect ? syncLanguageSelect.value : null;
+    if (!langSeparationCb.checked && currentSyncLang === 'All Languages') {
+      currentSyncLang = 'German Dub';
+      updateSyncLanguageDropdown(false, currentSyncLang);
+      saveSyncDefaults();
+    } else {
+      updateSyncLanguageDropdown(langSeparationCb.checked, currentSyncLang);
+    }
   } catch (e) {
     showToast('Failed to save setting: ' + e.message);
   }
+}
+
+function updateSyncLanguageDropdown(isLangSep, currentValue) {
+  if (!syncLanguageSelect) return;
+  syncLanguageSelect.innerHTML = '';
+  if (isLangSep) {
+    const opt = document.createElement('option');
+    opt.value = 'All Languages';
+    opt.textContent = 'All Languages';
+    syncLanguageSelect.appendChild(opt);
+  }
+  const langs = ['German Dub', 'English Sub', 'German Sub'];
+  langs.forEach(l => {
+    const opt = document.createElement('option');
+    opt.value = l;
+    opt.textContent = l;
+    syncLanguageSelect.appendChild(opt);
+  });
+  if (currentValue) syncLanguageSelect.value = currentValue;
 }
 
 async function saveDisableEnglishSub() {
   try {
     const resp = await fetch('/api/settings', {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        download_path: downloadPathInput.value.trim(),
         disable_english_sub: disableEnglishSubCb.checked
       })
     });
@@ -51,13 +92,14 @@ async function saveDisableEnglishSub() {
   }
 }
 
+
 async function saveDownloadPath() {
   const download_path = downloadPathInput.value.trim();
   try {
     const resp = await fetch('/api/settings', {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({download_path})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ download_path })
     });
     const data = await resp.json();
     if (data.error) { showToast(data.error); return; }
@@ -68,6 +110,40 @@ async function saveDownloadPath() {
 }
 
 loadSettings();
+
+async function saveSyncSchedule() {
+  if (!syncScheduleSelect) return;
+  try {
+    const resp = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sync_schedule: syncScheduleSelect.value })
+    });
+    const data = await resp.json();
+    if (data.ok) showToast('Auto-Sync schedule saved');
+    else showToast('Failed to save schedule');
+  } catch (e) {
+    showToast('Failed to save schedule: ' + e.message);
+  }
+}
+
+async function saveSyncDefaults() {
+  const body = {};
+  if (syncLanguageSelect) body.sync_language = syncLanguageSelect.value;
+  if (syncProviderSelect) body.sync_provider = syncProviderSelect.value;
+  try {
+    const resp = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.ok) showToast('Auto-Sync defaults saved');
+    else showToast('Failed to save defaults');
+  } catch (e) {
+    showToast('Failed to save defaults: ' + e.message);
+  }
+}
 
 // Custom paths management
 const customPathsBody = document.getElementById('customPathsBody');
@@ -96,7 +172,7 @@ function renderCustomPaths(paths) {
     customPathsBody.appendChild(tr);
     return;
   }
-  paths.forEach(function(p) {
+  paths.forEach(function (p) {
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + esc(p.name) + '</td>' +
@@ -113,8 +189,8 @@ async function addCustomPath() {
   try {
     const resp = await fetch('/api/custom-paths', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name: name, path: path})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, path: path })
     });
     const data = await resp.json();
     if (data.error) { showToast(data.error); return; }
@@ -130,7 +206,7 @@ async function addCustomPath() {
 async function deleteCustomPath(id) {
   if (!confirm('Delete this custom path?')) return;
   try {
-    const resp = await fetch('/api/custom-paths/' + id, {method: 'DELETE'});
+    const resp = await fetch('/api/custom-paths/' + id, { method: 'DELETE' });
     const data = await resp.json();
     if (data.error) { showToast(data.error); return; }
     showToast('Custom path deleted');
@@ -197,8 +273,8 @@ async function addUser() {
   try {
     const resp = await fetch('/admin/api/users', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({username, password, role})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, role })
     });
     const data = await resp.json();
     if (data.error) { showToast(data.error); return; }
@@ -214,7 +290,7 @@ async function addUser() {
 async function deleteUser(id) {
   if (!confirm('Delete this user?')) return;
   try {
-    const resp = await fetch(`/admin/api/users/${id}`, {method: 'DELETE'});
+    const resp = await fetch(`/admin/api/users/${id}`, { method: 'DELETE' });
     const data = await resp.json();
     if (data.error) { showToast(data.error); return; }
     showToast('User deleted');
@@ -228,8 +304,8 @@ async function changeRole(id, newRole) {
   try {
     const resp = await fetch(`/admin/api/users/${id}/role`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({role: newRole})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole })
     });
     const data = await resp.json();
     if (data.error) { showToast(data.error); loadUsers(); return; }

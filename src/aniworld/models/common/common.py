@@ -140,6 +140,118 @@ def _remove_empty_dirs(folder_path, base_folder):
         pass
 
 
+def _run_ffmpeg_with_progress(node, overwrite_output=True):
+    """Run an ffmpeg node and stream its progress output cleanly.
+
+    Includes stall detection: if FFmpeg stops making progress (same frame/time
+    values) for STALL_TIMEOUT seconds the process is killed so the caller's
+    retry logic can kick in.
+    """
+    import queue
+    import threading
+    import time
+
+    STALL_TIMEOUT = 300  # 5 minutes without progress → kill
+
+    # Regex to extract progress indicators from ffmpeg status lines
+    _RE_FRAME = re.compile(r"frame=\s*(\d+)")
+    _RE_TIME = re.compile(r"time=(\S+)")
+
+    # Append stats_period to reduce logging freq
+    args = ffmpeg.compile(node, overwrite_output=overwrite_output)
+    if "-stats_period" not in args:
+        # Insert before the output file (last arg)
+        args.insert(-1, "-stats_period")
+        args.insert(-1, "10")
+
+    process = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=False
+    )
+
+    # --- reader thread: reads stderr byte-by-byte and pushes complete lines ---
+    line_queue = queue.Queue()
+
+    def _reader():
+        buf = bytearray()
+        while True:
+            char = process.stderr.read(1)
+            if not char:
+                # EOF – push whatever is left
+                if buf:
+                    line_queue.put(buf.decode("utf-8", errors="replace").strip())
+                line_queue.put(None)  # sentinel
+                return
+            if char in (b"\r", b"\n"):
+                if buf:
+                    line_queue.put(buf.decode("utf-8", errors="replace").strip())
+                    buf.clear()
+            else:
+                buf.extend(char)
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
+    # --- main loop: consume lines, log them, and watch for stalls ---
+    stderr_lines = []  # collect non-progress stderr lines for error reporting
+    last_frame = None
+    last_time = None
+    last_change = time.monotonic()
+
+    while True:
+        try:
+            line_str = line_queue.get(timeout=1.0)
+        except queue.Empty:
+            # No new line within 1 s – just check the stall timer
+            if time.monotonic() - last_change > STALL_TIMEOUT:
+                logger.warning(
+                    "[FFmpeg] Stall detected – no progress for "
+                    f"{STALL_TIMEOUT}s. Killing process."
+                )
+                process.kill()
+                break
+            continue
+
+        if line_str is None:
+            # Reader thread finished (EOF)
+            break
+
+        # Log the line
+        if line_str.startswith("frame=") or line_str.startswith("size="):
+            logger.info(f"[FFmpeg Progress] {line_str}")
+
+            # --- stall detection: extract progress values ---
+            cur_frame = None
+            cur_time = None
+            m = _RE_FRAME.search(line_str)
+            if m:
+                cur_frame = m.group(1)
+            m = _RE_TIME.search(line_str)
+            if m:
+                cur_time = m.group(1)
+
+            if cur_frame != last_frame or cur_time != last_time:
+                last_frame = cur_frame
+                last_time = cur_time
+                last_change = time.monotonic()
+            elif time.monotonic() - last_change > STALL_TIMEOUT:
+                logger.warning(
+                    "[FFmpeg] Stall detected – no progress for "
+                    f"{STALL_TIMEOUT}s. Killing process."
+                )
+                process.kill()
+                break
+        elif line_str:
+            logger.debug(f"[FFmpeg] {line_str}")
+            stderr_lines.append(line_str)
+
+    reader_thread.join(timeout=5)
+    process.wait()
+    if process.returncode != 0:
+        detail = "\n".join(stderr_lines[-20:]) if stderr_lines else f"exit code {process.returncode}"
+        logger.error(f"[FFmpeg] Process failed (rc={process.returncode}):\n{detail}")
+        raise RuntimeError(f"ffmpeg error (rc={process.returncode}): {detail}")
+
+
 def download(self):
     """Download required audio/video streams for an episode (AniWorld + s.to) with retry logic."""
     if platform.system() == "Windows":
@@ -155,7 +267,11 @@ def download(self):
             check = check_downloaded(self._episode_path)
 
             headers = PROVIDER_HEADERS_D.get(self.selected_provider, {})
-            input_kwargs = {}
+            input_kwargs = {
+                "reconnect": 1,
+                "reconnect_streamed": 1,
+                "reconnect_delay_max": 300,  # wait up to 5 min for connection recovery
+            }
             if headers:
                 header_list = [f"{k}: {v}" for k, v in headers.items()]
                 input_kwargs["headers"] = "\r\n".join(header_list) + "\r\n"
@@ -213,12 +329,14 @@ def download(self):
                     stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
 
                 video_codec = get_video_codec()
-                ffmpeg.input(self.stream_url, **input_kwargs).output(
-                    str(temp_full),
-                    vcodec=video_codec,
-                    acodec=video_codec,
-                    **stream_metadata,
-                ).run(overwrite_output=True)
+                _run_ffmpeg_with_progress(
+                    ffmpeg.input(self.stream_url, **input_kwargs).output(
+                        str(temp_full),
+                        vcodec=video_codec,
+                        acodec=video_codec,
+                        **stream_metadata,
+                    )
+                )
 
                 if self._episode_path.exists():
                     inputs = [
@@ -226,8 +344,8 @@ def download(self):
                         ffmpeg.input(str(temp_full)),
                     ]
                     output_path = self._episode_path.with_suffix(".new.mkv")
-                    ffmpeg.output(*inputs, str(output_path), c="copy").run(
-                        overwrite_output=True
+                    _run_ffmpeg_with_progress(
+                        ffmpeg.output(*inputs, str(output_path), c="copy")
                     )
                     os.replace(output_path, self._episode_path)
                 else:
@@ -240,26 +358,30 @@ def download(self):
             if need_audio:
                 logger.debug("[DOWNLOADING] audio stream")
                 video_codec = get_video_codec()
-                ffmpeg.input(self.stream_url, **input_kwargs).output(
-                    str(temp_audio),
-                    acodec=video_codec,
-                    map="0:a:0?",
-                    **{"metadata:s:a:0": f"language={audio_code}"},
-                ).run(overwrite_output=True)
+                _run_ffmpeg_with_progress(
+                    ffmpeg.input(self.stream_url, **input_kwargs).output(
+                        str(temp_audio),
+                        acodec=video_codec,
+                        map="0:a:0?",
+                        **{"metadata:s:a:0": f"language={audio_code}"},
+                    )
+                )
 
             if need_video:
                 logger.debug("[DOWNLOADING] video stream")
                 video_codec = get_video_codec()
-                ffmpeg.input(self.stream_url, **input_kwargs).output(
-                    str(temp_video),
-                    vcodec=video_codec,
-                    map="0:v:0?",
-                    **(
-                        {}
-                        if wants_clean_video
-                        else {"metadata:s:v:0": f"language={sub_video_code}"}
-                    ),
-                ).run(overwrite_output=True)
+                _run_ffmpeg_with_progress(
+                    ffmpeg.input(self.stream_url, **input_kwargs).output(
+                        str(temp_video),
+                        vcodec=video_codec,
+                        map="0:v:0?",
+                        **(
+                            {}
+                            if wants_clean_video
+                            else {"metadata:s:v:0": f"language={sub_video_code}"}
+                        ),
+                    )
+                )
 
             logger.debug("[MUXING] combining streams")
             inputs = (
@@ -274,8 +396,8 @@ def download(self):
                 inputs.append(ffmpeg.input(str(temp_video)))
 
             output_path = self._episode_path.with_suffix(".new.mkv")
-            ffmpeg.output(*inputs, str(output_path), c="copy").run(
-                overwrite_output=True
+            _run_ffmpeg_with_progress(
+                ffmpeg.output(*inputs, str(output_path), c="copy")
             )
             os.replace(output_path, self._episode_path)
 
@@ -293,7 +415,7 @@ def download(self):
                 if temp.exists():
                     temp.unlink()
 
-            logger.warning(f"Download attempt {attempt} failed: {e}")
+            logger.error(f"Download attempt {attempt}/{max_retries} failed: {e}")
             if attempt >= max_retries:
                 _remove_empty_dirs(self._folder_path, self._base_folder)
                 raise
