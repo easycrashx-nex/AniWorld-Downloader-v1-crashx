@@ -117,17 +117,25 @@ SUPPORTED_PROVIDERS = (
     "VOE",
     "Vidmoly",
     "Vidoza",
-    # "Doodstream",
-    "Filemoon",
-    # "LoadX",
-    # "Luluvdo",
-    # "Streamtape",
+    #"Doodstream",
+    #"Filemoon",
+    #"LoadX",
+    #"Luluvdo",
+    #"Streamtape",
 )
 
 PROVIDER_HEADERS_D = {
     "Vidmoly": {"Referer": "https://vidmoly.biz"},
     "Doodstream": {"Referer": "https://dood.li/"},
-    "VOE": {"User-Agent": DEFAULT_USER_AGENT},
+    "VOE": {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Referer": "https://voe.sx/",
+        "Origin": "https://voe.sx",
+    },
     "LoadX": {"Accept": "*/*"},
     "Filemoon": {"User-Agent": DEFAULT_USER_AGENT, "Referer": "https://filemoon.to"},
     "Luluvdo": {
@@ -268,12 +276,6 @@ SERIENSTREAM_EPISODE_PATTERN = re.compile(
     r"/?$",
     re.IGNORECASE,
 )
-
-HIANIME_SERIES_PATTERN = re.compile(r"", re.IGNORECASE)
-
-HIANIME_SEASON_PATTERN = re.compile(r"", re.IGNORECASE)
-
-HIANIME_EPISODE_PATTERN = re.compile(r"", re.IGNORECASE)
 
 # -----------------------------
 # Directories
