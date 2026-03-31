@@ -29,6 +29,7 @@ let currentSeriesTitle = "";
 let currentSeriesUrl = "";
 // Provider data per language label
 let availableProviders = null;
+let langSeparationEnabled = false;
 // Static list of providers rendered into the template
 const staticProviders = Array.from(providerSelect.options).map((o) => o.value);
 
@@ -727,7 +728,6 @@ function esc(s) {
   return d.innerHTML;
 }
 
-let langSeparationEnabled = false;
 const downloadAllLangsBtn = document.getElementById("downloadAllLangsBtn");
 let defaultSyncLanguage = "German Dub";
 
