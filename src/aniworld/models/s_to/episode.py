@@ -11,7 +11,6 @@ from ...config import (
     logger,
 )
 from ...extractors import provider_functions
-from ...playwright.captcha import playwright_get_page_url
 from ..common import check_downloaded
 from ..common.common import (
     download as episode_download,
@@ -286,11 +285,25 @@ class SerienstreamEpisode:
     @property
     def provider_url(self):
         if self.__provider_url is None:
-            url = GLOBAL_SESSION.get(self.redirect_url)
-            if "<title>Stream wird vorbereitet...</title>" in url.text:
-                self.__provider_url = playwright_get_page_url(self.redirect_url)
+            from urllib.parse import urlparse
+            from ...playwright.captcha import solve_sto_modal
+
+            # Try plain HTTP first — works when no modal is shown
+            resp = GLOBAL_SESSION.get(self.redirect_url)
+            if urlparse(resp.url).netloc != urlparse(self.redirect_url).netloc:
+                # Redirect left s.to — no modal, plain session worked
+                self.__provider_url = resp.url
             else:
-                self.__provider_url = url.url
+                # Still on s.to — modal was shown, need browser
+                _lang_map = {Audio.GERMAN: "Deutsch", Audio.ENGLISH: "Englisch"}
+                lang = self.selected_language
+                audio = lang[0] if isinstance(lang, tuple) else lang
+                language_label = _lang_map.get(audio, "Deutsch")
+
+                result = solve_sto_modal(
+                    self.url, self.selected_provider, language_label
+                )
+                self.__provider_url = result if result else resp.url
         return self.__provider_url
 
     @property

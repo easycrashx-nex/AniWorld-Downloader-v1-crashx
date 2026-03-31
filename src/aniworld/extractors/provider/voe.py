@@ -1,15 +1,20 @@
 import base64
 import binascii
 import json
+import logging
 import re
 import time
 
 import niquests
 
+logger = logging.getLogger(__name__)
+
 try:
     from ...config import DEFAULT_USER_AGENT, GLOBAL_SESSION, PROVIDER_HEADERS_D
+    from ...playwright.captcha import is_captcha_page, solve_captcha
 except ImportError:
     from aniworld.config import DEFAULT_USER_AGENT, GLOBAL_SESSION, PROVIDER_HEADERS_D
+    from aniworld.playwright.captcha import is_captcha_page, solve_captcha
 
 # -----------------------------
 # Precompiled regex patterns
@@ -116,9 +121,7 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
             # Add delay between retries
             if attempt > 0:
                 wait_time = 2**attempt  # Exponential backoff: 2, 4, 8 seconds
-                print(
-                    f"Retry attempt {attempt + 1}/{max_retries}, waiting {wait_time}s..."
-                )
+                logger.warning(f"Retry attempt {attempt + 1}/{max_retries}, waiting {wait_time}s...")
                 time.sleep(wait_time)
 
             # First request to VOE
@@ -128,7 +131,22 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
             resp.raise_for_status()
             html = resp.text
 
-            # Extract redirect URL
+            # Captcha on VOE page -> solve and retry this request
+            if is_captcha_page(html, resp.status_code):
+                solve_captcha(embeded_voe_link)
+                resp = GLOBAL_SESSION.get(
+                    embeded_voe_link, headers=enhanced_headers, timeout=timeout
+                )
+                resp.raise_for_status()
+                html = resp.text
+
+            # Try extracting source directly from the VOE embed page first
+            source = extract_voe_source_from_html(html)
+            if source:
+                logger.warning(f"VOE source extracted on attempt {attempt + 1}")
+                return source
+
+            # Fallback: follow the redirect URL embedded in the page
             redirect_match = REDIRECT_PATTERN.search(html)
             if redirect_match:
                 redirect_url = redirect_match.group(0)
@@ -138,9 +156,7 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
                     try:
                         if redirect_attempt > 0:
                             wait_time = 2**redirect_attempt
-                            print(
-                                f"Redirect retry {redirect_attempt + 1}/{max_retries}, waiting {wait_time}s..."
-                            )
+                            logger.warning(f"Redirect retry {redirect_attempt + 1}/{max_retries}, waiting {wait_time}s...")
                             time.sleep(wait_time)
 
                         resp = GLOBAL_SESSION.get(
@@ -148,6 +164,15 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
                         )
                         resp.raise_for_status()
                         html = resp.text
+
+                        # Captcha on redirect target solve and retry
+                        if is_captcha_page(html, resp.status_code):
+                            solve_captcha(redirect_url)
+                            resp = GLOBAL_SESSION.get(
+                                redirect_url, headers=enhanced_headers, timeout=timeout
+                            )
+                            resp.raise_for_status()
+                            html = resp.text
                         break
                     except (niquests.RequestException, Exception) as err:
                         if redirect_attempt == max_retries - 1:
@@ -160,7 +185,7 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
             if not source:
                 raise ValueError("No VOE video source found in page.")
 
-            print(f"✓ Successfully extracted VOE source on attempt {attempt + 1}")
+            logger.warning(f"VOE source extracted on attempt {attempt + 1}")
             return source
 
         except (niquests.RequestException, Exception) as err:
@@ -168,7 +193,7 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
                 raise ValueError(
                     f"Failed to fetch VOE page after {max_retries} attempts: {err}"
                 ) from err
-            print(f"Attempt {attempt + 1} failed: {str(err)[:100]}...")
+            logger.warning(f"Attempt {attempt + 1} failed: {str(err)[:100]}...")
             continue
 
     raise ValueError("Unexpected error in get_direct_link_from_voe")
