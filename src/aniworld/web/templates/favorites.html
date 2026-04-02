@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Favorites - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container favorites-shell">
+  <div class="page-header">
+    <span class="eyebrow">Browse</span>
+    <h1>Favorites</h1>
+    <p class="page-description">
+      Keep your pinned series in one place and jump back into them without
+      digging through search again.
+    </p>
+  </div>
+
+  <section class="dashboard-panel">
+    <div class="section-heading section-heading-stack">
+      <div>
+        <span class="section-kicker">Pinned</span>
+        <h2 class="browse-heading">Favorite Series</h2>
+      </div>
+      <p class="section-description">
+        Open, manage, and clean up your tracked favorites from here.
+      </p>
+    </div>
+    <div class="favorites-grid favorites-grid-page" id="favoritesList">
+      <div class="stats-empty">No favorites yet. Open a series and pin it.</div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

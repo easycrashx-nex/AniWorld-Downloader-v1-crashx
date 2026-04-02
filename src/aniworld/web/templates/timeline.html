@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Timeline - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container insight-shell">
+  <div class="page-header">
+    <span class="eyebrow">History</span>
+    <h1>Timeline</h1>
+    <p class="page-description">
+      See what finished, what failed, and what needs attention without digging
+      through the queue modal.
+    </p>
+  </div>
+
+  <section class="dashboard-panel">
+    <div class="section-heading">
+      <div>
+        <span class="section-kicker">History</span>
+        <h2 class="browse-heading">Recent Activity</h2>
+      </div>
+      <div class="dashboard-inline-actions">
+        <button
+          class="btn-secondary btn-small"
+          onclick="retryFailedFromDashboard()"
+        >
+          Retry Failed
+        </button>
+        <button
+          class="btn-secondary btn-small"
+          onclick="clearFinishedFromDashboard()"
+        >
+          Clear Finished
+        </button>
+      </div>
+    </div>
+    <div class="activity-list" id="activityList">
+      <div class="stats-empty">No recent activity yet.</div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

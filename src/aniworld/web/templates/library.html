@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Library - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="library-container">
+  <div class="page-header">
+    <span class="eyebrow">Downloads</span>
+    <h1>Library</h1>
+    <p class="page-description">
+      Browse downloaded titles by location, season, and episode from a single
+      overview.
+    </p>
+  </div>
+  <div class="library-toolbar page-panel">
+    <input
+      type="text"
+      id="librarySearchInput"
+      placeholder="Search titles, episodes or files..."
+    />
+    <select id="libraryLocationFilter">
+      <option value="">All Locations</option>
+    </select>
+    <select id="libraryLanguageFilter">
+      <option value="">All Languages</option>
+    </select>
+  </div>
+  <div id="libraryList" class="library-list page-panel"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  var libraryCanDelete = {{ 'true' if not auth_enabled or (current_user and current_user.role == 'admin') else 'false' }};
+</script>
+<script src="{{ url_for('static', filename='library.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Auto-Sync - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container autosync-container">
+  <div class="page-header">
+    <span class="eyebrow">Settings</span>
+    <h1>Auto-Sync</h1>
+    <p class="page-description">
+      Keep tracked series current and manage scheduled download jobs from one
+      place.
+    </p>
+  </div>
+
+  <div class="page-panel">
+    <div
+      class="dashboard-inline-actions"
+      style="justify-content: flex-end; margin-bottom: 14px"
+    >
+      <button class="btn-secondary btn-small" onclick="syncAllNow()">
+        Sync All Now
+      </button>
+    </div>
+    <div id="autosyncList">
+      <div class="queue-empty" id="autosyncEmpty">
+        No sync jobs yet. Add a series via the search page.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  class="overlay"
+  id="editOverlay"
+  onclick="if (event.target === this) closeEditModal();"
+>
+  <div class="modal modal-compact" id="editModal">
+    <button class="close" onclick="closeEditModal()">&times;</button>
+    <h2>Edit Sync Job</h2>
+    <div id="editJobTitle" class="modal-supporting-text"></div>
+    <input type="hidden" id="editJobId" />
+    <div class="settings-row" style="margin-bottom: 12px">
+      <label class="modal-field-label">Language</label>
+      <select id="editLanguage" class="sync-select">
+        <option>German Dub</option>
+        <option>English Sub</option>
+        <option>German Sub</option>
+      </select>
+    </div>
+    <div class="settings-row" style="margin-bottom: 12px">
+      <label class="modal-field-label">Provider</label>
+      <select id="editProvider" class="sync-select">
+        <option>VOE</option>
+        <option>Vidmoly</option>
+        <option>Vidoza</option>
+      </select>
+    </div>
+    <div class="settings-row" style="margin-bottom: 12px">
+      <label class="modal-field-label">Path</label>
+      <select id="editPath" class="sync-select">
+        <option value="">Default</option>
+      </select>
+    </div>
+    <div class="settings-row" style="margin-bottom: 18px">
+      <label class="modal-field-label">Status</label>
+      <select id="editEnabled" class="sync-select">
+        <option value="1">Enabled</option>
+        <option value="0">Disabled</option>
+      </select>
+    </div>
+    <div class="modal-inline-actions">
+      <button onclick="closeEditModal()" class="btn-secondary">Cancel</button>
+      <button onclick="saveEdit()" class="btn-primary">Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='autosync.js') }}"></script>
+{% endblock %}

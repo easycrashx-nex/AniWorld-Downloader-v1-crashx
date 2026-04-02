@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Stats - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container insight-shell">
+  <div class="page-header">
+    <span class="eyebrow">Stats</span>
+    <h1>Stats</h1>
+    <p class="page-description">
+      Track downloads, storage usage, queue pressure, and provider stability
+      from one cleaner dashboard.
+    </p>
+  </div>
+
+  <section class="stats-panel">
+    <div class="section-heading section-heading-stack">
+      <div>
+        <span class="section-kicker">Overview</span>
+        <h2 class="browse-heading">Download Health</h2>
+      </div>
+      <p class="section-description">
+        High-level performance, queue pressure, and storage footprint.
+      </p>
+    </div>
+    <div class="stats-grid" id="statsGrid">
+      <div class="stats-card stats-card-loading">Loading stats...</div>
+      <div class="stats-card stats-card-loading">Loading stats...</div>
+      <div class="stats-card stats-card-loading">Loading stats...</div>
+      <div class="stats-card stats-card-loading">Loading stats...</div>
+    </div>
+    <div class="stats-detail-grid" id="statsDetailGrid"></div>
+  </section>
+
+  <section class="dashboard-panel">
+    <div class="section-heading">
+      <div>
+        <span class="section-kicker">Performance</span>
+        <h2 class="browse-heading">Quality</h2>
+      </div>
+    </div>
+    <div class="insight-stack">
+      <div class="chart-card">
+        <span class="stats-detail-title">Completed In The Last 7 Days</span>
+        <div class="chart-bars" id="activityChart">
+          <div class="stats-empty">No chart data yet.</div>
+        </div>
+      </div>
+      <div class="provider-quality-list" id="providerQualityList">
+        <div class="stats-empty">No provider data yet.</div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Radar - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container insight-shell">
+  <div class="page-header">
+    <span class="eyebrow">Updates</span>
+    <h1>Radar</h1>
+    <p class="page-description">
+      Keep an eye on newly released episodes and mark your latest findings as
+      seen.
+    </p>
+  </div>
+
+  <section class="dashboard-panel">
+    <div class="section-heading">
+      <div>
+        <span class="section-kicker">Updates</span>
+        <h2 class="browse-heading">New Episodes</h2>
+      </div>
+      <button class="btn-secondary btn-small" onclick="markReleasesSeen()">
+        Mark Seen
+      </button>
+    </div>
+    <div class="release-list" id="releaseList">
+      <div class="stats-empty">Loading latest episodes...</div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}
