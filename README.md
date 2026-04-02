@@ -41,7 +41,7 @@ aniworld -w
 If you are working from this source tree instead of a PyPI release, start it from the project folder:
 
 ```powershell
-cd C:\Users\ginow\Desktop\EasyCrashX\AniWorld-Downloader-models
+cd <project-folder>
 py -m pip install -e .
 py -m aniworld -w
 ```
