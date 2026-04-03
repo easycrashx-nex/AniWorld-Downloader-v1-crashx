@@ -7,16 +7,41 @@
       <span class="eyebrow">Stream Browser</span>
       <h1 id="pageHeading">AniWorld Downloader</h1>
       <p class="hero-subtitle" id="pageSubheading">
-        Search titles, inspect seasons, and queue downloads with a cleaner
-        control surface.
+        {% if experimental_flags.filmpalast %}
+        Search AniWorld titles, inspect seasons, and queue downloads. FilmPalast
+        movie links can be pasted directly into search.
+        {% else %}
+        Search AniWorld titles, inspect seasons, and queue downloads from a
+        cleaner control surface.
+        {% endif %}
       </p>
       <div class="site-switch">
-        <span class="site-label active" id="labelAniworld">AniWorld</span>
-        <label class="switch">
-          <input type="checkbox" id="siteToggle" onchange="toggleSite()" />
-          <span class="slider"></span>
-        </label>
-        <span class="site-label" id="labelSto">S.TO</span>
+        <button
+          class="site-switch-btn active"
+          type="button"
+          data-site="aniworld"
+          onclick="setSite('aniworld')"
+        >
+          AniWorld
+        </button>
+        <button
+          class="site-switch-btn"
+          type="button"
+          data-site="sto"
+          onclick="setSite('sto')"
+        >
+          S.TO
+        </button>
+        {% if experimental_flags.filmpalast %}
+        <button
+          class="site-switch-btn"
+          type="button"
+          data-site="filmpalast"
+          onclick="setSite('filmpalast')"
+        >
+          FilmPalast
+        </button>
+        {% endif %}
       </div>
     </div>
   </section>
@@ -38,7 +63,7 @@
       <input
         type="text"
         id="searchInput"
-        placeholder="Search for anime..."
+        placeholder="{% if experimental_flags.filmpalast %}Search for anime or paste a FilmPalast movie URL...{% else %}Search for anime...{% endif %}"
         autofocus
       />
       <button id="searchBtn" onclick="doSearch()">Search</button>
@@ -120,6 +145,7 @@
         <option value="">Default</option>
       </select>
     </div>
+    <div class="provider-availability" id="providerAvailability"></div>
     <script>
       window.ANIWORLD_LANGS = {{ lang_labels | tojson }};
       window.STO_LANGS = {{ sto_lang_labels | tojson }};

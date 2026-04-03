@@ -103,6 +103,9 @@ def extract_voe_source_from_html(html):
 # -----------------------------
 def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, timeout=30):
     """Get direct VOE video URL with improved retry logic."""
+    if not (embeded_voe_link or "").strip():
+        raise ValueError("No VOE link provided.")
+
     if headers is None:
         headers = PROVIDER_HEADERS_D.get("VOE", {"User-Agent": DEFAULT_USER_AGENT})
 

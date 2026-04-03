@@ -1,95 +1,104 @@
 import os
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urljoin
+from urllib.request import Request, urlopen
 
 try:
-    from ...config import (
-        GLOBAL_SESSION,
-        NAMING_TEMPLATE,
-        logger,
-    )
+    from ...config import Audio, GLOBAL_SESSION, NAMING_TEMPLATE, Subtitles, logger
     from ...extractors import provider_functions
-    from ..common import check_downloaded
-    from ..common.common import (
+    from ..common import (
+        ProviderData,
+        check_downloaded,
+        clean_title,
         download as episode_download,
-    )
-    from ..common.common import (
         syncplay as episode_syncplay,
-    )
-    from ..common.common import (
         watch as episode_watch,
     )
 except ImportError:
     from aniworld.config import (
+        Audio,
         GLOBAL_SESSION,
         NAMING_TEMPLATE,
+        Subtitles,
         logger,
     )
     from aniworld.extractors import provider_functions
-    from aniworld.models.common import check_downloaded
     from aniworld.models.common import (
+        ProviderData,
+        check_downloaded,
+        clean_title,
         download as episode_download,
-    )
-    from aniworld.models.common import (
         syncplay as episode_syncplay,
-    )
-    from aniworld.models.common import (
         watch as episode_watch,
     )
 
-FILMPALAST_EPISODE_PATTERN = re.compile(r"^https?://filmpalast\.to/stream/.+")
+FILMPALAST_EPISODE_PATTERN = re.compile(
+    r"^https?://(?:www\.)?filmpalast\.to/stream/[A-Za-z0-9\-]+/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+
+_PROVIDER_NAME_MAP = {
+    "voe": "VOE",
+    "voe hd": "VOE",
+    "voe.sx": "VOE",
+    "veev": "Veev",
+    "veev hd": "Veev",
+    "vidhide": "Vidhide",
+    "vidhide hd": "Vidhide",
+    "vidara": "Vidara",
+    "vidara hd": "Vidara",
+    "vidoza": "Vidoza",
+    "vidmoly": "Vidmoly",
+    "vidsonic": "Vidsonic",
+    "vidsonic hd": "Vidsonic",
+    "doodstream": "Doodstream",
+    "dood": "Doodstream",
+    "filemoon": "Filemoon",
+    "streamtape": "Streamtape",
+    "loadx": "LoadX",
+    "luluvdo": "Luluvdo",
+}
+
+_LANGUAGE_KEY_MAP = {
+    "German Dub": (Audio.GERMAN, Subtitles.NONE),
+    "English Dub": (Audio.ENGLISH, Subtitles.NONE),
+}
+
+_FILMPALAST_PROVIDER_PREFERENCE = (
+    "Vidhide",
+    "Vidara",
+    "Vidoza",
+    "Vidmoly",
+    "VOE",
+)
+
+_FILMPALAST_REQUEST_HEADERS = {
+    "User-Agent": os.getenv(
+        "ANIWORLD_FILMPALAST_UA",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    ),
+    "Referer": "https://filmpalast.to/",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.7,en;q=0.6",
+}
 
 
-# TODO: update docstring with actual properties and methods of this class, and example values
+def _fetch_filmpalast_text(url):
+    request = Request(url, headers=_FILMPALAST_REQUEST_HEADERS)
+    with urlopen(request, timeout=20) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def _resolve_filmpalast_redirect(url):
+    request = Request(url, headers=_FILMPALAST_REQUEST_HEADERS)
+    with urlopen(request, timeout=20) as response:
+        return response.geturl()
+
+
 class FilmPalastEpisode:
-    """
-    Represents a single episode of an FilmPalast series.
-
-    Parameters:
-        url:                Required. The FilmPalast URL for this episode, e.g.,
-                            https://filmpalast.to/stream/scream-7
-        selected_path:      Optional. The chosen path; provided in cases such as using a menu.
-        selected_language:  Optional. The chosen language; provided in cases such as using a menu.
-        selected_provider:  Optional. The chosen provider; provided in cases such as using a menu.
-
-    Attributes (Example):
-        url:                    "https://filmpalast.to/stream/scream-7"
-        title_de:               "Scream 7"
-        user_watched:           4006
-        release_year:           2026
-        runtime_min:            114
-        genres:                 ["Horror", "Mystery"]
-        description:            "Als in der beschaulichen Stadt, in der sich Sidney Prescott ein neues Leben aufgebaut hat, ein neuer Ghostface-Killer auftaucht, werden ihre schlimmsten Befürchtungen wahr: Ihre Tochter gerät ins Visier der Ermordung. Entschlossen, ihre Familie zu schützen, muss Sidney sich den Schrecken ihrer Vergangenheit stellen, um dem Blutvergießen ein für alle Mal ein Ende zu setzen."
-        image_url:              "/files/movies/240/scream-7.jpg"
-        director:               "Kevin Williamson"
-        actors:                 ["Neve Campbell", "Courteney Cox", "Isabel May", "Jasmin Savoy Brown", "Mason Gooding", "Roger L. Jackson"]
-        imdb_rating:            7.3
-
-        provider_data:          {('German', 'None'): {'VOE': 'https://serienstream.to/r?t=eyJpdiI6IkdVR2hyQjFXOUVLUGRqRGd1Ylo3cUE9PSIsInZhbHVlIjoiRDVIOEdHb2xOcGk3MmsrTVB2Yk9lakZoYS9YVXFsNlJ0SVJwYTNXZTM1bmQvOFpQaFJ4TWdoSHRzUEhzRTZoQVg1Zkx1OFVxZjhpNWYyR3VUd1U0SVE9PSIsIm1hYyI6IjAzOTAxNjA1YTFkMmM0OWI0MDEzNGE3NzQ5YzI0NWZmYTRiZDgxZDRiMDg0ZGYzOGE2M2JiZDQyMjgyZGE4YjMiLCJ0YWciOiIifQ%3D%3D'}, ('English', 'None'): {'VOE': 'https://serienstream.to/r?t=eyJpdiI6IitKSjl2K1EwOGcyZjNHS1VrRW0yQ0E9PSIsInZhbHVlIjoiVDRSQ01RMnpUdFZLblpLb1BGSm1LdE5RQ0U2b2h0cmdDRGRlTi82Q1VPMWJGellGQjhGZE45TldoeE9ESWNxWEhNNDBPQWl0OHM1MjJlaDNRdVY3Z0E9PSIsIm1hYyI6IjUyYjNkZjIwZGMwZWFlZjA1ZTgzNzIzNWI0M2FmZDI3NDcxNmY3OTQ3YTMxNGE0ZjFkNjcyYzFiZWM0MWE2YWUiLCJ0YWciOiIifQ%3D%3D'}}
-
-        redirect_url:           https://serienstream.to/r?t=eyJpdiI6IlNvVkFWOURJTklBT05wTiszQkF5VVE9PSIsInZhbHVlIjoiUCtoM3JETHQxbUZVMThkY1RuT2p6TTd1aXdnYW9LNzNOb2t3QU5DV2RzUGxJWFA0WUxBaUpZd0Y4dGhJazhrRjFzT1dWVTlISFRpWTE5N0t2dWFtUEE9PSIsIm1hYyI6IjhiMzIxOTljMThlN2ZiYmZlNjJmMjYxYmE5YjhhMjY1NjI0YzM4NThhYzUzMTg3YzdiZjg5Y2U0ZmRhYjU5YmYiLCJ0YWciOiIifQ%3D%3D
-        provider_url:           https://voe.sx/e/2gevxuvhffzd
-        stream_url:             https://cdn-ybrlgbugcqvfwfxm.edgeon-bandwidth.com/engine/hls2-c/01/12274/32xqoasasgio_,n,.urlset/master.m3u8?t=AyZvb2TAsfUJASynb8yS1VVvV9VLR4L6iELp5QnC5NY&s=1769786403&e=14400&f=69846104&node=5oVG/75jdb0Y5X40bYOVrWQ5Z8VHd1xf5E7nxyia+5E=&i=185.213&sp=2500&asn=39351&q=n&rq=pSN9X93FqA34kNMYDUcS0wTzZ2nLYuaQH60wgnXd
-
-        selected_path:          "Downloads"
-        selected_language:      "German Dub"
-        selected_provider:      "VOE"
-
-        self._base_folder:      Downloads/American Horror Story (2011) [imdbid-tt1844624]
-        self._folder_path:      Downloads/American Horror Story (2011) [imdbid-tt1844624]/Season 1
-        self._file_name:        American Horror Story S1E1
-        self._file_extension:   mkv
-        self._episode_path:     Downloads/American Horror Story (2011) [imdbid-tt1844624]/Season 1/American Horror Story S1E1.mkv
-
-        is_downloaded:          {'exists': False, 'video_langs': set(), 'audio_langs': set()}
-
-        _html:                  "<!doctype html>[...]"
-
-    Methods:
-        download()
-        watch()
-        syncplay()
-    """
+    """Movie-like episode wrapper for direct filmpalast.to stream URLs."""
 
     def __init__(
         self,
@@ -98,122 +107,195 @@ class FilmPalastEpisode:
         selected_language: str = None,
         selected_provider: str = None,
     ):
-        if not self.__is_valid_filmpalast_episode_url(url):
-            raise ValueError(f"Invalid FilmPalast episode URL: {url}")
+        if not self.is_valid_filmpalast_episode_url(url):
+            raise ValueError(f"Invalid FilmPalast URL: {url}")
 
-        self.url = url
-        self.__title_de = None
-        self.__user_watched = None
-        self.__release_year = None
-        self.__runtime_min = None
-        self.__genres = None
-        self.__description = None
-        self.__image_url = None
-        self.__director = None
-        self.__actors = None
-        self.__imdb_rating = None
-
+        self.url = url.rstrip("/")
         self.__selected_path_param = selected_path
         self.__selected_language_param = selected_language
         self.__selected_provider_param = selected_provider
 
+        self.__html = None
+        self.__title_de = None
+        self.__description = None
+        self.__genres = None
+        self.__release_year = None
+        self.__runtime_min = None
+        self.__image_url = None
         self.__provider_data = None
-
+        self.__provider_availability = None
         self.__selected_path = None
         self.__selected_language = None
         self.__selected_provider = None
-
         self.__redirect_url = None
         self.__provider_url = None
-
-        # https://jellyfin.org/docs/general/server/media/shows/#organization
         self.__base_folder = None
         self.__folder_path = None
         self.__file_name = None
         self.__file_extension = None
         self.__episode_path = None
-
         self.__is_downloaded = None
 
-        self.__html = None
-
-    # -----------------------------
-    # STATIC METHODS
-    # -----------------------------
-
     @staticmethod
-    def __is_valid_filmpalast_episode_url(url):
-        return bool(FILMPALAST_EPISODE_PATTERN.match(url))
+    def is_valid_filmpalast_episode_url(url):
+        return bool(FILMPALAST_EPISODE_PATTERN.match((url or "").strip()))
 
-    # -----------------------------
-    # PUBLIC PROPERTIES (lazy load)
-    # -----------------------------
+    @property
+    def _html(self):
+        if self.__html is None:
+            logger.debug("fetching (%s)...", self.url)
+            self.__html = _fetch_filmpalast_text(self.url)
+        return self.__html
 
     @property
     def title_de(self):
         if self.__title_de is None:
-            self.__extract_title_de()
+            match = re.search(r'<em itemprop="name">(.*?)</em>', self._html)
+            if match:
+                self.__title_de = re.sub(r"\s+", " ", match.group(1)).strip()
+            else:
+                slug = self.url.rstrip("/").rsplit("/", 1)[-1]
+                self.__title_de = slug.replace("-", " ").title()
         return self.__title_de
 
     @property
-    def user_watched(self):
-        if self.__user_watched is None:
-            self.__extract_user_watched()
-        return self.__user_watched
+    def title(self):
+        return self.title_de
+
+    @property
+    def title_cleaned(self):
+        return clean_title(self.title_de)
+
+    @property
+    def description(self):
+        if self.__description is None:
+            match = re.search(
+                r'<span itemprop="description">(.*?)</span>', self._html, re.DOTALL
+            )
+            if match:
+                self.__description = re.sub(r"\s+", " ", match.group(1)).strip()
+            else:
+                self.__description = ""
+        return self.__description
+
+    @property
+    def genres(self):
+        if self.__genres is None:
+            self.__genres = [
+                re.sub(r"\s+", " ", item).strip()
+                for item in re.findall(
+                    r'href="https://filmpalast.to/search/genre/.*?">(.*?)</a>',
+                    self._html,
+                )
+                if item.strip()
+            ]
+        return self.__genres
 
     @property
     def release_year(self):
         if self.__release_year is None:
-            self.__extract_release_year()
+            match = re.search(r"Ver&ouml;ffentlicht:\s*(\d{4})", self._html)
+            self.__release_year = int(match.group(1)) if match else ""
         return self.__release_year
 
     @property
     def runtime_min(self):
         if self.__runtime_min is None:
-            self.__extract_runtime_min()
+            match = re.search(r"Spielzeit:\s*<em>(.*?)</em>", self._html)
+            if match:
+                digits = re.sub(r"[^0-9]", "", match.group(1))
+                self.__runtime_min = int(digits) if digits else None
+            else:
+                self.__runtime_min = None
         return self.__runtime_min
-
-    @property
-    def genres(self):
-        if self.__genres is None:
-            self.__extract_genres()
-        return self.__genres
-
-    @property
-    def description(self):
-        if self.__description is None:
-            self.__extract_description()
-        return self.__description
 
     @property
     def image_url(self):
         if self.__image_url is None:
-            self.__extract_image_url()
+            match = re.search(r'itemprop="image"\s+src="(.*?)"', self._html)
+            if match:
+                self.__image_url = urljoin(self.url, match.group(1).strip())
+            else:
+                self.__image_url = None
         return self.__image_url
 
     @property
-    def director(self):
-        if self.__director is None:
-            self.__extract_director()
-        return self.__director
+    def poster_url(self):
+        return self.image_url
 
-    @property
-    def actors(self):
-        if self.__actors is None:
-            self.__extract_actors()
-        return self.__actors
-
-    @property
-    def imdb_rating(self):
-        if self.__imdb_rating is None:
-            self.__extract_imdb_rating()
-        return self.__imdb_rating
+    def _normalize_provider_name(self, raw_name):
+        if not raw_name:
+            return None
+        key = raw_name.strip().lower()
+        return _PROVIDER_NAME_MAP.get(key)
 
     @property
     def provider_data(self):
         if self.__provider_data is None:
-            self.__provider_data = self.__extract_provider_data()
+            providers = {
+                entry["name"]: entry["url"]
+                for entry in self.provider_availability
+                if entry.get("supported")
+            }
+
+            if not providers:
+                raise ValueError("No supported stream providers found on FilmPalast")
+
+            self.__provider_data = ProviderData(
+                {(Audio.GERMAN, Subtitles.NONE): providers}
+            )
         return self.__provider_data
+
+    @property
+    def provider_availability(self):
+        if self.__provider_availability is None:
+            entries = []
+            blocks = re.findall(
+                r'<ul class="currentStreamLinks">(.*?)</ul>', self._html, re.DOTALL
+            )
+
+            for block in blocks:
+                name_match = re.search(r'<p class="hostName">(.*?)</p>', block)
+                url_match = re.search(
+                    r'<a [^>]*?(?:data-player-url|href)="([^"]+)"', block
+                )
+                provider_name = self._normalize_provider_name(
+                    name_match.group(1) if name_match else ""
+                )
+                provider_url = (
+                    urljoin(self.url, url_match.group(1).strip()) if url_match else None
+                )
+
+                if not provider_name or not provider_url:
+                    continue
+                if any(
+                    existing["name"] == provider_name and existing["url"] == provider_url
+                    for existing in entries
+                ):
+                    continue
+
+                entries.append(
+                    {
+                        "name": provider_name,
+                        "url": provider_url,
+                        "supported": f"get_direct_link_from_{provider_name.lower()}"
+                        in provider_functions,
+                    }
+                )
+
+            self.__provider_availability = entries
+        return self.__provider_availability
+
+    def _available_language_labels(self):
+        labels = []
+        for (audio, subtitles), providers in self.provider_data._data.items():
+            if not providers:
+                continue
+            if audio == Audio.GERMAN and subtitles == Subtitles.NONE:
+                labels.append("German Dub")
+            elif audio == Audio.ENGLISH and subtitles == Subtitles.NONE:
+                labels.append("English Dub")
+        return labels or ["German Dub"]
 
     @property
     def selected_path(self):
@@ -221,12 +303,9 @@ class FilmPalastEpisode:
             raw_path = self.__selected_path_param or os.getenv(
                 "ANIWORLD_DOWNLOAD_PATH", str(Path.home() / "Downloads")
             )
-
             path = Path(raw_path).expanduser()
-
             if not path.is_absolute():
                 path = Path.home() / path
-
             self.__selected_path = str(path)
         return self.__selected_path
 
@@ -241,8 +320,12 @@ class FilmPalastEpisode:
     @property
     def selected_language(self):
         if self.__selected_language is None:
-            self.__selected_language = self.__selected_language_param or os.getenv(
-                "ANIWORLD_LANGUAGE", "German"
+            preferred = self.__selected_language_param or os.getenv(
+                "ANIWORLD_LANGUAGE", "German Dub"
+            )
+            available = self._available_language_labels()
+            self.__selected_language = (
+                preferred if preferred in available else available[0]
             )
         return self.__selected_language
 
@@ -250,31 +333,41 @@ class FilmPalastEpisode:
     def selected_language(self, value):
         self.__selected_language_param = value
         self.__selected_language = None
+        self.__selected_provider = None
         self.__redirect_url = None
         self.__provider_url = None
-        self.__is_downloaded = None
-        self.__base_folder = None
-        self.__folder_path = None
-        self.__episode_path = None
-        self.__file_name = None
 
     @property
     def selected_provider(self):
         if self.__selected_provider is None:
-            self.__selected_provider = self.__selected_provider_param or os.getenv(
-                "ANIWORLD_PROVIDER", "VOE"
+            preferred = self.__selected_provider_param or os.getenv("ANIWORLD_PROVIDER")
+            providers = self.provider_data.get(
+                _LANGUAGE_KEY_MAP.get(
+                    self.selected_language, (Audio.GERMAN, Subtitles.NONE)
+                )
             )
+            if not providers:
+                providers = next(iter(self.provider_data._data.values()))
+            if preferred and preferred in providers:
+                self.__selected_provider = preferred
+            else:
+                self.__selected_provider = next(
+                    (
+                        provider_name
+                        for provider_name in _FILMPALAST_PROVIDER_PREFERENCE
+                        if provider_name in providers
+                    ),
+                    next(iter(providers)),
+                )
         return self.__selected_provider
 
     @property
     def redirect_url(self):
         if self.__redirect_url is None:
             link = self.provider_link(self.selected_language, self.selected_provider)
-            if link is None:
+            if not link:
                 raise ValueError(
-                    f"Language '{self.selected_language}' with provider "
-                    f"'{self.selected_provider}' is not available for "
-                    f"episode: {self.url}"
+                    f"Provider '{self.selected_provider}' is not available for {self.url}"
                 )
             self.__redirect_url = link
         return self.__redirect_url
@@ -282,105 +375,81 @@ class FilmPalastEpisode:
     @property
     def provider_url(self):
         if self.__provider_url is None:
-            self.__provider_url = GLOBAL_SESSION.get(self.redirect_url).url
+            self.__provider_url = _resolve_filmpalast_redirect(self.redirect_url)
         return self.__provider_url
 
     @property
     def stream_url(self):
-        try:
-            stream_url = provider_functions[
-                f"get_direct_link_from_{self.selected_provider.lower()}"
-            ](self.provider_url)
-        except KeyError:
+        extractor = provider_functions.get(
+            f"get_direct_link_from_{self.selected_provider.lower()}"
+        )
+        if not extractor:
             raise ValueError(
                 f"The provider '{self.selected_provider}' is not yet implemented."
             )
+        return extractor(self.provider_url)
 
-        return stream_url
-
-    # TODO: add this into a common base class
     @property
     def _base_folder(self):
         if self.__base_folder is None:
-            naming_template = os.getenv("ANIWORLD_NAMING_TEMPLATE", NAMING_TEMPLATE)
-            parts = naming_template.split("/")
-            if len(parts) <= 1:
-                self.__base_folder = Path(self.selected_path)
-            else:
-                folder_str = parts[0].format(
-                    title=self.series.title_cleaned,
-                    year=self.series.release_year,
-                    imdbid=self.series.imdb,
-                    season=f"{self.season.season_number:02d}",
-                    episode=f"{self.episode_number:03d}",
-                    language=self.selected_language,
-                )
-                self.__base_folder = Path(self.selected_path) / folder_str
+            folder_name = self.title_cleaned
+            if self.release_year:
+                folder_name = f"{folder_name} ({self.release_year})"
+            self.__base_folder = Path(self.selected_path) / folder_name
         return self.__base_folder
 
     @property
     def _folder_path(self):
         if self.__folder_path is None:
-            naming_template = os.getenv("ANIWORLD_NAMING_TEMPLATE", NAMING_TEMPLATE)
-            parts = naming_template.split("/")
-            if len(parts) <= 2:
-                self.__folder_path = self._base_folder
-            else:
-                folder_str = parts[1].format(
-                    title=self.series.title_cleaned,
-                    year=self.series.release_year,
-                    imdbid=self.series.imdb,
-                    season=f"{self.season.season_number:02d}",
-                    episode=f"{self.episode_number:03d}",
-                    language=self.selected_language,
-                )
-                self.__folder_path = self._base_folder / folder_str
+            self.__folder_path = self._base_folder
         return self.__folder_path
 
     @property
     def _file_name(self):
         if self.__file_name is None:
             naming_template = os.getenv("ANIWORLD_NAMING_TEMPLATE", NAMING_TEMPLATE)
+            fallback_name = self.title_cleaned
             try:
                 file_template = naming_template.split("/")[-1]
             except IndexError:
-                file_template = f"{self.series.title_cleaned} S{self.season.season_number:02d}E{self.episode_number:03d}.mkv"
+                file_template = fallback_name + ".mkv"
 
-            # Remove extension
             if "." in file_template:
                 file_template = ".".join(file_template.split(".")[:-1])
 
-            # Replace %style% with {style} for compatibility
-            file_template = file_template.replace("%title%", "{title}")
-            file_template = file_template.replace("%year%", "{year}")
-            file_template = file_template.replace("%imdbid%", "{imdbid}")
-            file_template = file_template.replace("%season%", "{season}")
-            file_template = file_template.replace("%episode%", "{episode}")
-            file_template = file_template.replace("%language%", "{language}")
-
-            self.__file_name = file_template.format(
-                title=self.series.title_cleaned,
-                year=self.series.release_year,
-                imdbid=self.series.imdb,
-                season=f"{self.season.season_number:02d}",
-                episode=f"{self.episode_number:03d}",
-                language=self.selected_language,
+            file_template = (
+                file_template.replace("%title%", "{title}")
+                .replace("%year%", "{year}")
+                .replace("%imdbid%", "{imdbid}")
+                .replace("%season%", "{season}")
+                .replace("%episode%", "{episode}")
+                .replace("%language%", "{language}")
             )
+
+            try:
+                rendered = file_template.format(
+                    title=self.title_cleaned,
+                    year=self.release_year or "",
+                    imdbid="",
+                    season="01",
+                    episode="001",
+                    language=self.selected_language,
+                )
+                rendered = clean_title(rendered) or fallback_name
+            except Exception:
+                rendered = fallback_name
+
+            self.__file_name = rendered
         return self.__file_name
 
     @property
     def _file_extension(self):
         if self.__file_extension is None:
             naming_template = os.getenv("ANIWORLD_NAMING_TEMPLATE", NAMING_TEMPLATE)
-            try:
-                file_part = naming_template.split("/")[-1]
-                if "." in file_part:
-                    ext = file_part.rsplit(".", 1)[-1]
-                    self.__file_extension = ext if ext else "mkv"
-                else:
-                    self.__file_extension = "mkv"
-            except IndexError:
-                self.__file_extension = "mkv"
+            file_part = naming_template.split("/")[-1] if naming_template else ""
+            self.__file_extension = (
+                file_part.rsplit(".", 1)[-1] if "." in file_part else "mkv"
+            )
         return self.__file_extension
 
     @property
@@ -391,8 +460,6 @@ class FilmPalastEpisode:
             )
         return self.__episode_path
 
-    # END
-
     @property
     def is_downloaded(self):
         if self.__is_downloaded is None:
@@ -400,113 +467,19 @@ class FilmPalastEpisode:
         return self.__is_downloaded
 
     @property
-    def _html(self):
-        if self.__html is None:
-            if not self.url:
-                raise ValueError("Episode URL is missing for HTML fetch.")
-            logger.debug(f"fetching ({self.url})...")
-            resp = GLOBAL_SESSION.get(self.url)
-            self.__html = resp.text
-        return self.__html
+    def episode_number(self):
+        return 1
 
-    # -----------------------------
-    # PRIVATE EXTRACTION FUNCTIONS
-    # -----------------------------
-
-    def __extract_title_de(self):
-        match = re.search(r'<em itemprop="name">(.*?)</em>', self._html)
-        if match:
-            self.__title_de = match.group(1).strip()
-
-    def __extract_user_watched(self):
-        match = re.search(r"<strong>(\d+)</strong> Nutzer", self._html)
-        if match:
-            self.__user_watched = int(match.group(1))
-
-    def __extract_release_year(self):
-        match = re.search(r"Ver&ouml;ffentlicht: (\d+)", self._html)
-        if match:
-            self.__release_year = int(match.group(1))
-
-    def __extract_runtime_min(self):
-        match = re.search(r"Spielzeit: <em>(.*?)</em>", self._html)
-        if match:
-            self.__runtime_min = int(re.sub(r"[^0-9]", "", match.group(1)))
-
-    def __extract_genres(self):
-        self.__genres = re.findall(
-            r'href="https://filmpalast.to/search/genre/.*?">(.*?)</a>', self._html
-        )
-
-    def __extract_description(self):
-        match = re.search(
-            r'<span itemprop="description">(.*?)</span>', self._html, re.DOTALL
-        )
-        if match:
-            self.__description = match.group(1).strip()
-
-    def __extract_image_url(self):
-        match = re.search(r'itemprop="image" src="(.*?)"', self._html)
-        if match:
-            self.__image_url = match.group(1)
-
-    def __extract_director(self):
-        match = re.search(r'href="/search/director/.*?">(.*?)</a>', self._html)
-        if match:
-            self.__director = match.group(1).strip()
-
-    def __extract_actors(self):
-        actors = re.findall(r'href="/search/title/.*?>(.*?)</a>', self._html)
-        self.__actors = [a.strip() for a in actors if a.strip()]
-
-    def __extract_imdb_rating(self):
-        match = re.search(r"Imdb:\s*([\d.]+)/10", self._html)
-        if match:
-            self.__imdb_rating = float(match.group(1))
-
-    def __extract_provider_data(self):
-        providers = []
-        blocks = re.findall(
-            r'<ul class="currentStreamLinks">(.*?)</ul>', self._html, re.DOTALL
-        )
-
-        for block in blocks:
-            # provider name
-            name = re.search(r'<p class="hostName">(.*?)</p>', block)
-            provider = name.group(1).strip() if name else None
-
-            # redirect url
-            url = re.search(r'<a [^>]*?(?:data-player-url|href)="([^"]+)"', block)
-            redirect = url.group(1).strip() if url else None
-
-            if provider and redirect:
-                providers.append({"name": provider, "url": redirect})
-
-        return providers
+    @property
+    def season(self):
+        return SimpleNamespace(season_number=1)
 
     def provider_link(self, language, provider):
-        pass
-
-    # -----------------------------
-    # PUBLIC METHODS
-    # -----------------------------
+        language_key = _LANGUAGE_KEY_MAP.get(
+            language, (Audio.GERMAN, Subtitles.NONE)
+        )
+        return self.provider_data.get(language_key).get(provider)
 
     download = episode_download
     watch = episode_watch
     syncplay = episode_syncplay
-
-
-if __name__ == "__main__":
-    episode = FilmPalastEpisode("https://filmpalast.to/stream/scream-7")
-    print(episode.url)
-    print(episode.title_de)
-    print(episode.user_watched)
-    print(episode.release_year)
-    print(episode.runtime_min)
-    print(episode.genres)
-    print(episode.description)
-    print(episode.image_url)
-    print(episode.director)
-    print(episode.actors)
-    print(episode.imdb_rating)
-    print(episode.provider_data)

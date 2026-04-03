@@ -8,6 +8,7 @@ from .config import (
     ANIWORLD_EPISODE_PATTERN,
     ANIWORLD_SEASON_PATTERN,
     ANIWORLD_SERIES_PATTERN,
+    FILMPALAST_EPISODE_PATTERN,
     HANIME_TV_SERIES_PATTERN,
     HIANIME_EPISODE_PATTERN,
     HIANIME_SEASON_PATTERN,
@@ -20,6 +21,7 @@ from .models import (
     AniworldEpisode,
     AniworldSeason,
     AniworldSeries,
+    FilmPalastEpisode,
     HanimeTVEpisode,
     HiAnimeEpisode,
     HiAnimeSeason,
@@ -56,6 +58,11 @@ PROVIDERS = [
         name="HanimeTV",
         episode_pattern=HANIME_TV_SERIES_PATTERN,
         episode_cls=HanimeTVEpisode,
+    ),
+    Provider(
+        name="Filmpalast",
+        episode_pattern=FILMPALAST_EPISODE_PATTERN,
+        episode_cls=FilmPalastEpisode,
     ),
     Provider(
         name="SerienStream",

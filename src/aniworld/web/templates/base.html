@@ -221,6 +221,9 @@
     </div>
 
     <div class="toast" id="toast"></div>
+    <script>
+      window.ANIWORLD_EXPERIMENTAL = {{ experimental_flags|tojson }};
+    </script>
     <script src="{{ url_for('static', filename='live-updates.js') }}"></script>
     <script src="{{ url_for('static', filename='queue.js') }}"></script>
 

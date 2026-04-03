@@ -115,16 +115,28 @@ logger.debug("Config initialized successfully")
 # -----------------------------
 SUPPORTED_PROVIDERS = (
     "VOE",
+    "Vidhide",
+    "Vidara",
+    "Filemoon",
     "Vidmoly",
     "Vidoza",
-    # "Doodstream",
-    # "Filemoon",
+    "Doodstream",
     # "LoadX",
     # "Luluvdo",
     # "Streamtape",
 )
 
 PROVIDER_HEADERS_D = {
+    "Vidhide": {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Referer": "https://dhtpre.com/",
+        "Origin": "https://dhtpre.com",
+    },
+    "Vidara": {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Referer": "https://vidara.to/",
+        "Origin": "https://vidara.to",
+    },
     "Vidmoly": {"Referer": "https://vidmoly.biz"},
     "Doodstream": {"Referer": "https://dood.li/"},
     "VOE": {
@@ -147,6 +159,16 @@ PROVIDER_HEADERS_D = {
 }
 
 PROVIDER_HEADERS_W = {
+    "Vidhide": {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Referer": "https://dhtpre.com/",
+        "Origin": "https://dhtpre.com",
+    },
+    "Vidara": {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "Referer": "https://vidara.to/",
+        "Origin": "https://vidara.to",
+    },
     "Vidmoly": {"Referer": "https://vidmoly.biz"},
     "Doodstream": {"Referer": "https://dood.li/"},
     "VOE": {"User-Agent": DEFAULT_USER_AGENT},
@@ -254,6 +276,11 @@ ANIWORLD_EPISODE_PATTERN = re.compile(
 
 HANIME_TV_SERIES_PATTERN = re.compile(
     r"^https?://(?:www\.)?hanime\.tv/videos/hentai/[A-Za-z0-9\-]+/?$",
+    re.IGNORECASE,
+)
+
+FILMPALAST_EPISODE_PATTERN = re.compile(
+    r"^https?://(?:www\.)?filmpalast\.to/stream/[A-Za-z0-9\-]+/?(?:[?#].*)?$",
     re.IGNORECASE,
 )
 

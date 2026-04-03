@@ -49,9 +49,9 @@
     <div class="settings-row" style="margin-bottom: 12px">
       <label class="modal-field-label">Provider</label>
       <select id="editProvider" class="sync-select">
-        <option>VOE</option>
-        <option>Vidmoly</option>
-        <option>Vidoza</option>
+        {% for p in supported_providers %}
+        <option>{{ p }}</option>
+        {% endfor %}
       </select>
     </div>
     <div class="settings-row" style="margin-bottom: 12px">

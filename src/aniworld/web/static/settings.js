@@ -2,11 +2,35 @@
 const downloadPathInput = document.getElementById("downloadPath");
 const langSeparationCb = document.getElementById("langSeparation");
 const disableEnglishSubCb = document.getElementById("disableEnglishSub");
+const experimentalFilmpalastCb = document.getElementById(
+  "experimentalFilmpalast",
+);
 const syncScheduleSelect = document.getElementById("syncSchedule");
 const syncLanguageSelect = document.getElementById("syncLanguage");
 const syncProviderSelect = document.getElementById("syncProvider");
 let settingsRequest = null;
 let customPathsRequest = null;
+const SYNC_LANGUAGE_OPTIONS = ["German Dub", "English Sub", "German Sub"];
+
+async function updateSettings(body) {
+  const resp = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (data.error) {
+    throw new Error(data.error);
+  }
+  return data;
+}
+
+function refreshSettingsSelects() {
+  if (!window.refreshCustomSelect) return;
+  if (syncScheduleSelect) window.refreshCustomSelect(syncScheduleSelect);
+  if (syncLanguageSelect) window.refreshCustomSelect(syncLanguageSelect);
+  if (syncProviderSelect) window.refreshCustomSelect(syncProviderSelect);
+}
 
 async function loadSettings() {
   if (settingsRequest) return settingsRequest;
@@ -19,6 +43,8 @@ async function loadSettings() {
         langSeparationCb.checked = data.lang_separation === "1";
       if (disableEnglishSubCb)
         disableEnglishSubCb.checked = data.disable_english_sub === "1";
+      if (experimentalFilmpalastCb)
+        experimentalFilmpalastCb.checked = data.experimental_filmpalast === "1";
       if (syncScheduleSelect && data.sync_schedule)
         syncScheduleSelect.value = data.sync_schedule;
 
@@ -31,11 +57,7 @@ async function loadSettings() {
 
       if (syncProviderSelect && data.sync_provider)
         syncProviderSelect.value = data.sync_provider;
-      if (window.refreshCustomSelect) {
-        if (syncScheduleSelect) window.refreshCustomSelect(syncScheduleSelect);
-        if (syncLanguageSelect) window.refreshCustomSelect(syncLanguageSelect);
-        if (syncProviderSelect) window.refreshCustomSelect(syncProviderSelect);
-      }
+      refreshSettingsSelects();
     } catch (e) {
       showToast("Failed to load settings: " + e.message);
     } finally {
@@ -47,19 +69,10 @@ async function loadSettings() {
 
 async function saveLangSeparation() {
   try {
-    const resp = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        download_path: downloadPathInput.value.trim(),
-        lang_separation: langSeparationCb.checked,
-      }),
+    await updateSettings({
+      download_path: downloadPathInput.value.trim(),
+      lang_separation: langSeparationCb.checked,
     });
-    const data = await resp.json();
-    if (data.error) {
-      showToast(data.error);
-      return;
-    }
     showToast(
       "Language separation " +
         (langSeparationCb.checked ? "enabled" : "disabled"),
@@ -87,31 +100,21 @@ function updateSyncLanguageDropdown(isLangSep, currentValue) {
     opt.textContent = "All Languages";
     syncLanguageSelect.appendChild(opt);
   }
-  const langs = ["German Dub", "English Sub", "German Sub"];
-  langs.forEach((l) => {
+  SYNC_LANGUAGE_OPTIONS.forEach((l) => {
     const opt = document.createElement("option");
     opt.value = l;
     opt.textContent = l;
     syncLanguageSelect.appendChild(opt);
   });
   if (currentValue) syncLanguageSelect.value = currentValue;
-  if (window.refreshCustomSelect) window.refreshCustomSelect(syncLanguageSelect);
+  refreshSettingsSelects();
 }
 
 async function saveDisableEnglishSub() {
   try {
-    const resp = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        disable_english_sub: disableEnglishSubCb.checked,
-      }),
+    await updateSettings({
+      disable_english_sub: disableEnglishSubCb.checked,
     });
-    const data = await resp.json();
-    if (data.error) {
-      showToast(data.error);
-      return;
-    }
     showToast(
       "English Sub downloads " +
         (disableEnglishSubCb.checked ? "disabled" : "enabled"),
@@ -121,19 +124,25 @@ async function saveDisableEnglishSub() {
   }
 }
 
+async function saveExperimentalFilmpalast() {
+  if (!experimentalFilmpalastCb) return;
+  try {
+    await updateSettings({
+      experimental_filmpalast: experimentalFilmpalastCb.checked,
+    });
+    showToast(
+      "FilmPalast " +
+        (experimentalFilmpalastCb.checked ? "eingeblendet" : "ausgeblendet"),
+    );
+  } catch (e) {
+    showToast("Failed to save development setting: " + e.message);
+  }
+}
+
 async function saveDownloadPath() {
   const download_path = downloadPathInput.value.trim();
   try {
-    const resp = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ download_path }),
-    });
-    const data = await resp.json();
-    if (data.error) {
-      showToast(data.error);
-      return;
-    }
+    await updateSettings({ download_path });
     showToast("Download path saved");
   } catch (e) {
     showToast("Failed to save settings: " + e.message);
@@ -145,14 +154,8 @@ loadSettings();
 async function saveSyncSchedule() {
   if (!syncScheduleSelect) return;
   try {
-    const resp = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sync_schedule: syncScheduleSelect.value }),
-    });
-    const data = await resp.json();
-    if (data.ok) showToast("Auto-Sync schedule saved");
-    else showToast("Failed to save schedule");
+    await updateSettings({ sync_schedule: syncScheduleSelect.value });
+    showToast("Auto-Sync schedule saved");
   } catch (e) {
     showToast("Failed to save schedule: " + e.message);
   }
@@ -163,14 +166,8 @@ async function saveSyncDefaults() {
   if (syncLanguageSelect) body.sync_language = syncLanguageSelect.value;
   if (syncProviderSelect) body.sync_provider = syncProviderSelect.value;
   try {
-    const resp = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json();
-    if (data.ok) showToast("Auto-Sync defaults saved");
-    else showToast("Failed to save defaults");
+    await updateSettings(body);
+    showToast("Auto-Sync defaults saved");
   } catch (e) {
     showToast("Failed to save defaults: " + e.message);
   }

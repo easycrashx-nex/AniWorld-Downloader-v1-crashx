@@ -25,8 +25,13 @@ class ColorFormatter(logging.Formatter):
     """Formatter for colored stdout logs."""
 
     def format(self, record):
+        original_levelname = record.levelname
+        original_msg = record.msg
+        original_args = record.args
+        original_func_info = getattr(record, "func_info", None)
+
         level_color = COLORS.get(record.levelno, RESET)
-        record.levelname = f"{level_color}{record.levelname}{RESET}"
+        record.levelname = f"{level_color}{original_levelname}{RESET}"
 
         cwd = os.getcwd()
         rel_path = os.path.relpath(record.pathname, cwd)
@@ -35,8 +40,17 @@ class ColorFormatter(logging.Formatter):
         )
 
         record.msg = f"{MSG_COLOR}{record.getMessage()}{RESET}"
+        record.args = ()
 
         formatted = super().format(record)
+
+        record.levelname = original_levelname
+        record.msg = original_msg
+        record.args = original_args
+        if original_func_info is None:
+            del record.func_info
+        else:
+            record.func_info = original_func_info
 
         # Color timestamp
         parts = formatted.split(" - ", 1)

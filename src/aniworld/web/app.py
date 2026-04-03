@@ -28,6 +28,7 @@ from ..search import (
     fetch_new_series,
     fetch_popular_animes,
     fetch_popular_series,
+    query_filmpalast,
     query_s_to,
     random_anime,
 )
@@ -90,6 +91,50 @@ from .db import (
 
 logger = get_logger(__name__)
 
+_ENV_DOWNLOAD_PATH = "ANIWORLD_DOWNLOAD_PATH"
+_ENV_LANG_SEPARATION = "ANIWORLD_LANG_SEPARATION"
+_ENV_DISABLE_ENGLISH_SUB = "ANIWORLD_DISABLE_ENGLISH_SUB"
+_ENV_SYNC_SCHEDULE = "ANIWORLD_SYNC_SCHEDULE"
+_ENV_SYNC_LANGUAGE = "ANIWORLD_SYNC_LANGUAGE"
+_ENV_SYNC_PROVIDER = "ANIWORLD_SYNC_PROVIDER"
+_ENV_EXPERIMENTAL_FILMPALAST = "ANIWORLD_EXPERIMENTAL_FILMPALAST"
+
+
+def _experimental_flags():
+    return {
+        "filmpalast": os.environ.get(_ENV_EXPERIMENTAL_FILMPALAST, "0") == "1"
+    }
+
+
+def _set_bool_env(name, enabled):
+    os.environ[name] = "1" if enabled else "0"
+
+
+def _resolved_download_path_value():
+    from pathlib import Path
+
+    raw = os.environ.get(_ENV_DOWNLOAD_PATH, "")
+    if raw:
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = Path.home() / path
+        return str(path)
+    return str(Path.home() / "Downloads")
+
+
+def _settings_payload():
+    return {
+        "download_path": _resolved_download_path_value(),
+        "lang_separation": os.environ.get(_ENV_LANG_SEPARATION, "0"),
+        "disable_english_sub": os.environ.get(_ENV_DISABLE_ENGLISH_SUB, "0"),
+        "experimental_filmpalast": os.environ.get(
+            _ENV_EXPERIMENTAL_FILMPALAST, "0"
+        ),
+        "sync_schedule": os.environ.get(_ENV_SYNC_SCHEDULE, "0"),
+        "sync_language": os.environ.get(_ENV_SYNC_LANGUAGE, "German Dub"),
+        "sync_provider": os.environ.get(_ENV_SYNC_PROVIDER, "VOE"),
+    }
+
 
 def _get_working_providers():
     """Return only providers whose extractors are actually implemented."""
@@ -108,6 +153,15 @@ def _get_working_providers():
 
 
 WORKING_PROVIDERS = _get_working_providers()
+_WORKING_PROVIDER_PREFERENCE = (
+    "VOE",
+    "Vidhide",
+    "Vidara",
+    "Filemoon",
+    "Vidmoly",
+    "Vidoza",
+    "Doodstream",
+)
 
 # Only match series-level links: /anime/stream/<slug> (no season/episode)
 _SERIES_LINK_PATTERN = re.compile(r"^/anime/stream/[a-zA-Z0-9\-]+/?$", re.IGNORECASE)
@@ -118,8 +172,39 @@ _STO_SERIES_LINK_PATTERN = re.compile(
 )
 
 
+def _ordered_working_providers():
+    ordered = []
+    seen = set()
+    for provider_name in _WORKING_PROVIDER_PREFERENCE:
+        if provider_name in WORKING_PROVIDERS and provider_name not in seen:
+            ordered.append(provider_name)
+            seen.add(provider_name)
+    for provider_name in WORKING_PROVIDERS:
+        if provider_name not in seen:
+            ordered.append(provider_name)
+            seen.add(provider_name)
+    return tuple(ordered)
+
+
 def _normalize_title_key(value):
     return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+
+
+def _detect_site(series_url):
+    url = (series_url or "").lower()
+    if "filmpalast.to" in url:
+        return "filmpalast"
+    if "s.to" in url or "serienstream.to" in url:
+        return "sto"
+    return "aniworld"
+
+
+def _absolute_asset_url(source_url, asset_url):
+    if not asset_url:
+        return None
+    from urllib.parse import urljoin
+
+    return urljoin(source_url, asset_url)
 
 
 def _resolve_base_path(raw_value):
@@ -149,20 +234,19 @@ def _fetch_and_cache_series_meta(series_url):
 
     try:
         prov = resolve_provider(series_url)
-        series = prov.series_cls(url=series_url)
-        poster = getattr(series, "poster_url", None)
-        if poster and poster.startswith("/"):
-            from urllib.parse import urlparse
-
-            parsed = urlparse(series_url)
-            poster = f"{parsed.scheme}://{parsed.netloc}{poster}"
+        target = prov.series_cls(url=series_url) if prov.series_cls else prov.episode_cls(url=series_url)
+        poster = _absolute_asset_url(
+            series_url,
+            getattr(target, "poster_url", None) or getattr(target, "image_url", None),
+        )
         data = {
             "series_url": series_url,
-            "title": getattr(series, "title", None),
+            "title": getattr(target, "title", None)
+            or getattr(target, "title_de", None),
             "poster_url": poster,
-            "description": getattr(series, "description", None),
-            "release_year": str(getattr(series, "release_year", "") or ""),
-            "genres": getattr(series, "genres", []) or [],
+            "description": getattr(target, "description", None),
+            "release_year": str(getattr(target, "release_year", "") or ""),
+            "genres": getattr(target, "genres", []) or [],
         }
         upsert_series_meta(
             series_url=series_url,
@@ -207,7 +291,7 @@ def _build_series_reference_index():
         )
     for ref in get_recent_series_references():
         meta = meta_by_url.get(ref["series_url"], {})
-        site = "sto" if "s.to" in ref["series_url"] else "aniworld"
+        site = _detect_site(ref["series_url"])
         _store(
             ref["title"],
             ref["series_url"],
@@ -854,6 +938,17 @@ def _run_autosync_for_job(job):
 
     try:
         prov = resolve_provider(job["series_url"])
+        if not prov.series_cls or not prov.season_cls:
+            logger.warning(
+                "Auto-sync skipped job %d for episode-only source: %s",
+                job_id,
+                job["series_url"],
+            )
+            update_autosync_job(
+                job_id,
+                last_check=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            return
         series = prov.series_cls(url=job["series_url"])
 
         lang_sep = os.environ.get("ANIWORLD_LANG_SEPARATION", "0") == "1"
@@ -1152,6 +1247,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "oidc_display_name": app.config.get("OIDC_DISPLAY_NAME", "SSO"),
                 "force_sso": app.config.get("FORCE_SSO", False),
                 "app_version": app_version,
+                "experimental_flags": _experimental_flags(),
             }
     else:
 
@@ -1164,6 +1260,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "oidc_display_name": "SSO",
                 "force_sso": False,
                 "app_version": app_version,
+                "experimental_flags": _experimental_flags(),
             }
 
     # Initialize download queue, custom paths and autosync (works with or without auth)
@@ -1216,7 +1313,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             "index.html",
             lang_labels=LANG_LABELS,
             sto_lang_labels=sto_lang_labels,
-            supported_providers=WORKING_PROVIDERS,
+            supported_providers=_ordered_working_providers(),
         )
 
     @app.route("/stats")
@@ -1245,7 +1342,28 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         results = []
 
-        if site == "sto":
+        if site == "filmpalast":
+            filmpalast_results = query_filmpalast(keyword) or []
+            if isinstance(filmpalast_results, dict):
+                filmpalast_results = [filmpalast_results]
+            for item in filmpalast_results:
+                link = (item.get("link") or "").strip()
+                if not link:
+                    continue
+                if link.startswith("/"):
+                    url = f"https://filmpalast.to{link}"
+                elif link.startswith("http"):
+                    url = link
+                else:
+                    url = f"https://filmpalast.to/{link.lstrip('/')}"
+                results.append(
+                    {
+                        "title": item.get("title", "Unknown"),
+                        "url": url,
+                        "poster_url": item.get("poster_url") or "",
+                    }
+                )
+        elif site == "sto":
             # s.to search
             sto_results = query_s_to(keyword) or []
             if isinstance(sto_results, dict):
@@ -1304,31 +1422,30 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         try:
             prov = resolve_provider(url)
-            series = prov.series_cls(url=url)
-            poster = getattr(series, "poster_url", None)
-            # s.to returns relative poster paths - make them absolute
-            if poster and poster.startswith("/"):
-                from urllib.parse import urlparse
-
-                parsed = urlparse(url)
-                poster = f"{parsed.scheme}://{parsed.netloc}{poster}"
+            target = prov.series_cls(url=url) if prov.series_cls else prov.episode_cls(url=url)
+            poster = _absolute_asset_url(
+                url,
+                getattr(target, "poster_url", None) or getattr(target, "image_url", None),
+            )
+            title = getattr(target, "title", None) or getattr(target, "title_de", None)
             upsert_series_meta(
                 series_url=url,
-                title=series.title,
+                title=title,
                 poster_url=poster,
-                description=getattr(series, "description", ""),
-                release_year=str(getattr(series, "release_year", "") or ""),
-                genres=getattr(series, "genres", []) or [],
+                description=getattr(target, "description", ""),
+                release_year=str(getattr(target, "release_year", "") or ""),
+                genres=getattr(target, "genres", []) or [],
             )
             touch_favorite(url)
             return jsonify(
                 {
-                    "title": series.title,
+                    "title": title,
                     "poster_url": poster,
-                    "description": getattr(series, "description", ""),
-                    "genres": getattr(series, "genres", []),
-                    "release_year": getattr(series, "release_year", ""),
+                    "description": getattr(target, "description", ""),
+                    "genres": getattr(target, "genres", []),
+                    "release_year": getattr(target, "release_year", ""),
                     "is_favorite": bool(get_favorite(url)),
+                    "auto_sync_supported": bool(prov.series_cls),
                 }
             )
         except Exception as e:
@@ -1343,6 +1460,19 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         try:
             prov = resolve_provider(url)
+            if not prov.series_cls or not prov.season_cls:
+                return jsonify(
+                    {
+                        "seasons": [
+                            {
+                                "url": url,
+                                "season_number": 1,
+                                "episode_count": 1,
+                                "are_movies": True,
+                            }
+                        ]
+                    }
+                )
             series = prov.series_cls(url=url)
             seasons_data = []
             for season in series.seasons:
@@ -1367,6 +1497,34 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         try:
             prov = resolve_provider(url)
+            if not prov.series_cls or not prov.season_cls:
+                episode = prov.episode_cls(url=url)
+                downloaded = bool(getattr(episode, "is_downloaded", {}).get("exists"))
+                if not downloaded:
+                    for custom_path in get_custom_paths():
+                        episode.selected_path = str(
+                            _resolve_base_path(custom_path.get("path"))
+                        )
+                        downloaded = bool(
+                            getattr(episode, "is_downloaded", {}).get("exists")
+                        )
+                        if downloaded:
+                            break
+                return jsonify(
+                    {
+                        "episodes": [
+                            {
+                                "url": episode.url,
+                                "episode_number": 1,
+                                "title_de": getattr(episode, "title", None)
+                                or getattr(episode, "title_de", "")
+                                or "",
+                                "title_en": "",
+                                "downloaded": downloaded,
+                            }
+                        ]
+                    }
+                )
             # Pass series to avoid broken series URL reconstruction in s.to
             # season model (its fallback splits on "-" which fails)
             series_url = re.sub(r"/staffel-\d+/?$", "", url)
@@ -1468,8 +1626,39 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             prov = resolve_provider(url)
             episode = prov.episode_cls(url=url)
             provider_info = _extract_provider_info(episode.provider_data)
+            default_language = next(iter(provider_info.keys()), None)
+            availability = []
 
-            return jsonify({"providers": provider_info})
+            if hasattr(episode, "provider_availability"):
+                availability = list(getattr(episode, "provider_availability") or [])
+            else:
+                seen_names = set()
+                for language, providers in provider_info.items():
+                    for provider_name in providers:
+                        if provider_name in seen_names:
+                            continue
+                        seen_names.add(provider_name)
+                        availability.append(
+                            {
+                                "name": provider_name,
+                                "supported": True,
+                                "languages": [
+                                    lang_name
+                                    for lang_name, items in provider_info.items()
+                                    if provider_name in items
+                                ],
+                            }
+                        )
+
+            return jsonify(
+                {
+                    "providers": provider_info,
+                    "languages": list(provider_info.keys()),
+                    "default_language": default_language,
+                    "episode_only": not bool(prov.series_cls),
+                    "availability": availability,
+                }
+            )
         except Exception as e:
             logger.error(f"Providers fetch failed: {e}", exc_info=True)
             return jsonify({"error": str(e)}), 500
@@ -1655,7 +1844,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             display = "~/.aniworld/.env"
         else:
             display = str(env_path)
-        return render_template("settings.html", env_path=display)
+        return render_template(
+            "settings.html",
+            env_path=display,
+            supported_providers=_ordered_working_providers(),
+        )
 
     @app.route("/api/random")
     def api_random():
@@ -1758,61 +1951,37 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
     @app.route("/api/settings", methods=["GET"])
     def api_settings():
-        from pathlib import Path
-
-        raw = os.environ.get("ANIWORLD_DOWNLOAD_PATH", "")
-        if raw:
-            p = Path(raw).expanduser()
-            if not p.is_absolute():
-                p = Path.home() / p
-            resolved = str(p)
-        else:
-            resolved = str(Path.home() / "Downloads")
-        lang_separation = os.environ.get("ANIWORLD_LANG_SEPARATION", "0")
-        disable_english_sub = os.environ.get("ANIWORLD_DISABLE_ENGLISH_SUB", "0")
-        sync_schedule = os.environ.get("ANIWORLD_SYNC_SCHEDULE", "0")
-        sync_language = os.environ.get("ANIWORLD_SYNC_LANGUAGE", "German Dub")
-        sync_provider = os.environ.get("ANIWORLD_SYNC_PROVIDER", "VOE")
-        return jsonify(
-            {
-                "download_path": resolved,
-                "lang_separation": lang_separation,
-                "disable_english_sub": disable_english_sub,
-                "sync_schedule": sync_schedule,
-                "sync_language": sync_language,
-                "sync_provider": sync_provider,
-            }
-        )
+        return jsonify(_settings_payload())
 
     @app.route("/api/settings", methods=["PUT"])
     def api_settings_update():
         data = request.get_json(silent=True) or {}
         if "download_path" in data:
-            os.environ["ANIWORLD_DOWNLOAD_PATH"] = str(data["download_path"]).strip()
+            os.environ[_ENV_DOWNLOAD_PATH] = str(data["download_path"]).strip()
         if "lang_separation" in data:
-            os.environ["ANIWORLD_LANG_SEPARATION"] = (
-                "1" if data["lang_separation"] else "0"
-            )
+            _set_bool_env(_ENV_LANG_SEPARATION, data["lang_separation"])
         if "disable_english_sub" in data:
-            os.environ["ANIWORLD_DISABLE_ENGLISH_SUB"] = (
-                "1" if data["disable_english_sub"] else "0"
+            _set_bool_env(_ENV_DISABLE_ENGLISH_SUB, data["disable_english_sub"])
+        if "experimental_filmpalast" in data:
+            _set_bool_env(
+                _ENV_EXPERIMENTAL_FILMPALAST, data["experimental_filmpalast"]
             )
         if "sync_schedule" in data:
             sched = str(data["sync_schedule"])
             if sched != "0" and sched not in SYNC_SCHEDULE_MAP:
                 return jsonify({"error": f"Invalid sync_schedule: {sched}"}), 400
-            os.environ["ANIWORLD_SYNC_SCHEDULE"] = sched
+            os.environ[_ENV_SYNC_SCHEDULE] = sched
         if "sync_language" in data:
             lang = str(data["sync_language"])
             valid_langs = set(LANG_LABELS.values()) | {"All Languages"}
             if lang not in valid_langs:
                 return jsonify({"error": f"Invalid sync_language: {lang}"}), 400
-            os.environ["ANIWORLD_SYNC_LANGUAGE"] = lang
+            os.environ[_ENV_SYNC_LANGUAGE] = lang
         if "sync_provider" in data:
             prov = str(data["sync_provider"])
             if prov not in WORKING_PROVIDERS:
                 return jsonify({"error": f"Invalid sync_provider: {prov}"}), 400
-            os.environ["ANIWORLD_SYNC_PROVIDER"] = prov
+            os.environ[_ENV_SYNC_PROVIDER] = prov
         _emit_ui_event("settings", "autosync", "dashboard", "library", "nav")
         return jsonify({"ok": True})
 
@@ -1842,7 +2011,9 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
     @app.route("/autosync")
     def autosync_page():
-        return render_template("autosync.html")
+        return render_template(
+            "autosync.html", supported_providers=_ordered_working_providers()
+        )
 
     # ===== Auto-Sync API =====
 
@@ -1883,6 +2054,21 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         if not title or not series_url:
             return jsonify({"error": "title and series_url are required"}), 400
+
+        try:
+            prov = resolve_provider(series_url)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        if not prov.series_cls or not prov.season_cls:
+            return (
+                jsonify(
+                    {
+                        "error": "Auto-Sync is only supported for series sources, not direct movie links."
+                    }
+                ),
+                400,
+            )
 
         existing = find_autosync_by_url(series_url)
         if existing:

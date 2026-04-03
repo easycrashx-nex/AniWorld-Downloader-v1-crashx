@@ -34,6 +34,10 @@ const providerQualityList = document.getElementById("providerQualityList");
 const activityChart = document.getElementById("activityChart");
 const releaseList = document.getElementById("releaseList");
 const favoriteToggleBtn = document.getElementById("favoriteToggleBtn");
+const providerAvailability = document.getElementById("providerAvailability");
+const autoSyncLabel = autoSyncCheck
+  ? autoSyncCheck.closest(".select-all-label") || autoSyncCheck.closest("label")
+  : null;
 const isHomePage = Boolean(
   searchInput &&
     searchBtn &&
@@ -75,6 +79,9 @@ const staticProviders = providerSelect
 
 // Site toggle state
 let currentSite = "aniworld";
+let currentModalSite = null;
+let modalLanguageOptions = null;
+let autoSyncSupported = true;
 
 // Downloaded folders cache
 let downloadedFolders = [];
@@ -91,6 +98,89 @@ let radarRequest = null;
 
 // Custom paths select
 const customPathSelect = document.getElementById("customPathSelect");
+const experimentalConfig = window.ANIWORLD_EXPERIMENTAL || {};
+const SITE_CONFIG = {
+  aniworld: {
+    label: "AniWorld",
+    heading: "AniWorld Downloader",
+    placeholder: {
+      default: "Search for anime...",
+      extended: "Search for anime or paste a FilmPalast movie URL...",
+    },
+    subheading: {
+      default:
+        "Search AniWorld titles, inspect seasons, and queue downloads from a cleaner control surface.",
+      extended:
+        "Search AniWorld titles, inspect seasons, and queue downloads. FilmPalast movie links can be pasted directly into search.",
+    },
+    providerPreference: ["VOE"],
+    showRandom: true,
+  },
+  sto: {
+    label: "SerienStream",
+    heading: "SerienStream Downloader",
+    placeholder: {
+      default: "Search for series...",
+      extended: "Search for series or paste a FilmPalast movie URL...",
+    },
+    subheading: {
+      default:
+        "Browse SerienStream titles, inspect seasons, and queue episodes from the same control surface.",
+      extended:
+        "Browse SerienStream titles, inspect seasons, and queue episodes. FilmPalast movie links can be pasted directly into search.",
+    },
+    providerPreference: ["VOE"],
+    showRandom: false,
+  },
+  filmpalast: {
+    label: "FilmPalast",
+    heading: "FilmPalast Movie Downloader",
+    placeholder: {
+      default: "Search for movies on FilmPalast...",
+      extended: "Search for movies on FilmPalast...",
+    },
+    subheading: {
+      default:
+        "Search FilmPalast movie titles and open them as direct movie downloads with the same queue workflow.",
+      extended:
+        "Search FilmPalast movie titles and open them as direct movie downloads with the same queue workflow.",
+    },
+    providerPreference: ["Vidhide", "Vidara", "VOE"],
+    modalLanguages: ["German Dub"],
+    showRandom: false,
+    experimental: true,
+  },
+};
+const DIRECT_URL_PATTERN = /^https?:\/\/(?:www\.)?(?:aniworld\.to\/anime\/stream\/|s\.to\/(?:serie\/)?(?:stream\/)?|serienstream\.to\/(?:serie\/)?(?:stream\/)?|filmpalast\.to\/stream\/)/i;
+const DIRECT_URL_PATTERN_NO_FILMPALAST = /^https?:\/\/(?:www\.)?(?:aniworld\.to\/anime\/stream\/|s\.to\/(?:serie\/)?(?:stream\/)?|serienstream\.to\/(?:serie\/)?(?:stream\/)?)/i;
+
+function isFilmPalastEnabled() {
+  return experimentalConfig.filmpalast === true;
+}
+
+function normalizeSite(site) {
+  if (site === "sto") return "sto";
+  if (site === "filmpalast" && isFilmPalastEnabled()) return "filmpalast";
+  return "aniworld";
+}
+
+function getSiteConfig(site) {
+  const normalized = normalizeSite(site);
+  return SITE_CONFIG[normalized] || SITE_CONFIG.aniworld;
+}
+
+function getSiteText(site, key) {
+  const config = getSiteConfig(site);
+  const entry = config[key];
+  if (!entry || typeof entry !== "object") {
+    return entry;
+  }
+  return isFilmPalastEnabled() ? entry.extended : entry.default;
+}
+
+function getPreferredProviders(site) {
+  return getSiteConfig(site).providerPreference || ["VOE"];
+}
 
 async function loadCustomPaths() {
   if (!customPathSelect) return;
@@ -191,10 +281,92 @@ function debounce(fn, delay) {
   };
 }
 
+function getSiteKeyFromUrl(url) {
+  const value = (url || "").toLowerCase();
+  if (value.includes("filmpalast.to")) return "filmpalast";
+  if (value.includes("s.to") || value.includes("serienstream.to")) return "sto";
+  return "aniworld";
+}
+
+function getSiteLabel(site) {
+  return getSiteConfig(site).label;
+}
+
+function getSearchPlaceholder(site) {
+  return getSiteText(site, "placeholder");
+}
+
+function getPageHeading(site) {
+  return getSiteConfig(site).heading;
+}
+
+function getPageSubheading(site) {
+  return getSiteText(site, "subheading");
+}
+
+function updateSiteButtons() {
+  document.querySelectorAll(".site-switch-btn").forEach((button) => {
+    button.classList.toggle("active", button.dataset.site === currentSite);
+  });
+}
+
+function syncDownloadAllLangsVisibility() {
+  if (!downloadAllLangsBtn) return;
+  const languageCount = availableProviders
+    ? Object.keys(availableProviders).length
+    : 0;
+  downloadAllLangsBtn.style.display =
+    langSeparationEnabled && languageCount > 1 ? "" : "none";
+}
+
+function renderProviderAvailability(items) {
+  if (!providerAvailability) return;
+  if (!items || !items.length) {
+    providerAvailability.innerHTML = "";
+    providerAvailability.classList.remove("is-visible");
+    return;
+  }
+
+  providerAvailability.innerHTML = `
+    <span class="provider-availability-title">Available For This Source</span>
+    <div class="provider-availability-list">
+      ${items
+        .map((item) => {
+          const ready = item.supported !== false;
+          return `
+            <div class="provider-chip ${ready ? "provider-chip-ready" : "provider-chip-detected"}">
+              <span class="provider-chip-name">${esc(item.name || "Unknown")}</span>
+              <span class="provider-chip-state">${ready ? "Ready" : "Detected"}</span>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+  providerAvailability.classList.add("is-visible");
+}
+
+function syncAutoSyncAvailability() {
+  if (!autoSyncCheck) return;
+  autoSyncCheck.disabled = !autoSyncSupported;
+  if (!autoSyncSupported) {
+    autoSyncCheck.checked = false;
+  }
+  if (autoSyncLabel) {
+    autoSyncLabel.style.display = autoSyncSupported ? "" : "none";
+  }
+}
+
+function syncHomeSiteFromSource(site) {
+  if (!isHomePage) return;
+  setSite(normalizeSite(site), false);
+}
+
 function isDirectSeriesUrl(keyword) {
-  return /^https?:\/\/(?:www\.)?(?:aniworld\.to\/anime\/stream\/|s\.to\/(?:serie\/)?(?:stream\/)?)/i.test(
-    keyword,
-  );
+  const pattern = isFilmPalastEnabled()
+    ? DIRECT_URL_PATTERN
+    : DIRECT_URL_PATTERN_NO_FILMPALAST;
+  return pattern.test(keyword);
 }
 
 function releaseKey(item) {
@@ -320,13 +492,9 @@ function renderFavorites(items) {
   }
   favoritesList.innerHTML = items
     .map((item) => {
-      const siteLabel = item.site
-        ? item.site === "sto"
-          ? "SerienStream"
-          : "AniWorld"
-        : (item.series_url || "").includes("s.to")
-          ? "SerienStream"
-          : "AniWorld";
+      const siteLabel = getSiteLabel(
+        item.site || getSiteKeyFromUrl(item.series_url),
+      );
       return `
         <div class="favorite-card">
           ${getFavoritePosterHtml(item)}
@@ -739,12 +907,7 @@ async function openFavoriteSeries(url) {
     window.location.href = target.toString();
     return;
   }
-  currentSite = url.includes("s.to") ? "sto" : "aniworld";
-  const toggle = document.getElementById("siteToggle");
-  if (toggle) {
-    toggle.checked = currentSite === "sto";
-    toggleSite();
-  }
+  syncHomeSiteFromSource(getSiteKeyFromUrl(url));
   await openSeries(url);
 }
 
@@ -784,7 +947,7 @@ async function toggleFavorite() {
           title: currentSeriesTitle,
           series_url: currentSeriesUrl,
           poster_url: document.getElementById("modalPoster").src || "",
-          site: currentSite,
+          site: getSiteKeyFromUrl(currentSeriesUrl),
         }),
       });
       showToast("Added to favorites");
@@ -842,12 +1005,7 @@ async function autoOpenSeriesFromQuery() {
   cleanUrl.searchParams.delete("openSeries");
   window.history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
 
-  currentSite = url.includes("s.to") ? "sto" : "aniworld";
-  const toggle = document.getElementById("siteToggle");
-  if (toggle) {
-    toggle.checked = currentSite === "sto";
-    toggleSite();
-  }
+  syncHomeSiteFromSource(getSiteKeyFromUrl(url));
   await openSeries(url);
 }
 
@@ -872,6 +1030,14 @@ async function loadStoBrowse() {
 
 function showBrowseSections() {
   if (!isHomePage) return;
+  if (currentSite === "filmpalast") {
+    browseDiv.style.display = "none";
+    newAnimesSection.style.display = "none";
+    popularAnimesSection.style.display = "none";
+    newSeriesSection.style.display = "none";
+    popularSeriesSection.style.display = "none";
+    return;
+  }
   const isAniworld = currentSite === "aniworld";
   browseDiv.style.display = "";
   newAnimesSection.style.display = isAniworld ? "" : "none";
@@ -910,36 +1076,29 @@ function addDownloadedBadge(card, title) {
   }
 }
 
-function toggleSite() {
+function setSite(site, persist = true) {
   if (!isHomePage) return;
-  const toggle = document.getElementById("siteToggle");
-  currentSite = toggle.checked ? "sto" : "aniworld";
-  localStorage.setItem("selectedSite", currentSite);
-
-  // Update labels
-  document
-    .getElementById("labelAniworld")
-    .classList.toggle("active", !toggle.checked);
-  document
-    .getElementById("labelSto")
-    .classList.toggle("active", toggle.checked);
+  const nextSite = normalizeSite(site);
+  const nextSiteConfig = getSiteConfig(nextSite);
+  currentSite = nextSite;
+  currentModalSite = null;
+  modalLanguageOptions = null;
+  if (persist) {
+    localStorage.setItem("selectedSite", currentSite);
+  }
+  updateSiteButtons();
 
   // Update heading
   const heading = document.getElementById("pageHeading");
-  if (heading)
-    heading.textContent = toggle.checked
-      ? "SerienStream Downloader"
-      : "AniWorld Downloader";
+  if (heading) {
+    heading.textContent = getPageHeading(currentSite);
+  }
   if (pageSubheading) {
-    pageSubheading.textContent = toggle.checked
-      ? "Browse SerienStream titles, inspect seasons, and queue episodes with the same streamlined workflow."
-      : "Search AniWorld titles, inspect seasons, and queue downloads with a cleaner control surface.";
+    pageSubheading.textContent = getPageSubheading(currentSite);
   }
 
   // Update search placeholder
-  searchInput.placeholder = toggle.checked
-    ? "Search for series..."
-    : "Search for anime...";
+  searchInput.placeholder = getSearchPlaceholder(currentSite);
 
   // Clear search results
   resultsDiv.innerHTML = "";
@@ -949,7 +1108,7 @@ function toggleSite() {
   showBrowseSections();
 
   // Toggle Random button
-  randomBtn.style.display = toggle.checked ? "none" : "";
+  randomBtn.style.display = nextSiteConfig.showRandom ? "" : "none";
 
   // Update language dropdown
   rebuildLanguageSelect();
@@ -959,26 +1118,49 @@ function toggleSite() {
   loadSearchSuggestions("");
 }
 
+window.setSite = setSite;
+
 function rebuildLanguageSelect() {
   if (!languageSelect) return;
+  const activeSite = currentModalSite || currentSite;
+  const activeSiteConfig = getSiteConfig(activeSite);
+  const isFilmPalast = activeSite === "filmpalast";
   const langs =
-    currentSite === "sto"
+    activeSite === "sto"
       ? window.STO_LANGS || {}
-      : window.ANIWORLD_LANGS || {};
+      : isFilmPalast
+        ? { german_dub: "German Dub" }
+        : window.ANIWORLD_LANGS || {};
+  const allowAllLanguages = langSeparationEnabled && !isFilmPalast;
   languageSelect.innerHTML = "";
 
-  if (langSeparationEnabled) {
+  if (allowAllLanguages) {
     const opt = document.createElement("option");
     opt.value = "All Languages";
     opt.textContent = "All Languages";
     languageSelect.appendChild(opt);
   }
 
-  for (const [key, label] of Object.entries(langs)) {
-    const opt = document.createElement("option");
-    opt.value = label;
-    opt.textContent = label;
-    languageSelect.appendChild(opt);
+  const preferredModalLanguages =
+    modalLanguageOptions ||
+    (activeSiteConfig.modalLanguages && activeSiteConfig.modalLanguages.length
+      ? activeSiteConfig.modalLanguages
+      : null);
+
+  if (preferredModalLanguages && preferredModalLanguages.length) {
+    preferredModalLanguages.forEach((label) => {
+      const opt = document.createElement("option");
+      opt.value = label;
+      opt.textContent = label;
+      languageSelect.appendChild(opt);
+    });
+  } else {
+    for (const label of Object.values(langs)) {
+      const opt = document.createElement("option");
+      opt.value = label;
+      opt.textContent = label;
+      languageSelect.appendChild(opt);
+    }
   }
   if (window.refreshCustomSelect) window.refreshCustomSelect(languageSelect);
 }
@@ -986,23 +1168,8 @@ function rebuildLanguageSelect() {
 // Restore site toggle state from localStorage
 (function syncSiteToggle() {
   if (!isHomePage) return;
-  const toggle = document.getElementById("siteToggle");
   const saved = localStorage.getItem("selectedSite");
-  if (saved === "sto") toggle.checked = true;
-  if (toggle && toggle.checked) {
-    currentSite = "sto";
-    document.getElementById("labelAniworld").classList.remove("active");
-    document.getElementById("labelSto").classList.add("active");
-    const heading = document.getElementById("pageHeading");
-    if (heading) heading.textContent = "SerienStream Downloader";
-    if (pageSubheading) {
-      pageSubheading.textContent =
-        "Browse SerienStream titles, inspect seasons, and queue episodes with the same streamlined workflow.";
-    }
-    searchInput.placeholder = "Search for series...";
-    randomBtn.style.display = "none";
-    rebuildLanguageSelect();
-  }
+  setSite(normalizeSite(saved || "aniworld"), false);
 })();
 
 if (searchInput) {
@@ -1153,8 +1320,8 @@ async function doSearch() {
 }
 
 async function doRandom() {
-  if (currentSite === "sto") {
-    showToast("Random is not available for S.TO");
+  if (currentSite !== "aniworld") {
+    showToast("Random is only available for AniWorld");
     return;
   }
   randomBtn.disabled = true;
@@ -1184,10 +1351,13 @@ function renderResults(results) {
     const card = document.createElement("div");
     card.className = "card";
     card.onclick = () => openSeries(r.url);
-    card.innerHTML = `<img src="" alt="" data-url="${esc(r.url)}"><div class="info"><div class="title">${esc(r.title)}</div></div>`;
+    const posterUrl = r.poster_url ? esc(r.poster_url) : "";
+    card.innerHTML = `<img src="${posterUrl}" alt="" data-url="${esc(r.url)}"><div class="info"><div class="title">${esc(r.title)}</div></div>`;
     addDownloadedBadge(card, r.title);
     resultsDiv.appendChild(card);
-    loadPoster(r.url, card.querySelector("img"));
+    if (!r.poster_url) {
+      loadPoster(r.url, card.querySelector("img"));
+    }
   });
 }
 
@@ -1203,6 +1373,14 @@ async function loadPoster(url, imgEl) {
 
 async function openSeries(url) {
   if (!isHomePage) return;
+  const sourceSite = getSiteKeyFromUrl(url);
+  const sourceSiteConfig = getSiteConfig(sourceSite);
+  if (sourceSite === "filmpalast" && !isFilmPalastEnabled()) {
+    showToast(
+      "FilmPalast ist aktuell ausgeblendet. Du kannst es unter Settings > Entwicklungsumgebung wieder aktivieren.",
+    );
+    return;
+  }
   overlay.style.display = "block";
   document.getElementById("modalPoster").src = "";
   document.getElementById("modalTitle").textContent = "Loading...";
@@ -1212,9 +1390,14 @@ async function openSeries(url) {
   seasonAccordion.innerHTML = "";
   statusBar.classList.remove("active");
   availableProviders = null;
+  currentModalSite = sourceSite;
+  modalLanguageOptions = sourceSiteConfig.modalLanguages || null;
+  autoSyncSupported = currentModalSite !== "filmpalast";
   currentSeriesUrl = url;
   currentSeriesTitle = "";
   updateFavoriteButton(false);
+  renderProviderAvailability([]);
+  syncAutoSyncAvailability();
   await checkLangSeparation();
   rebuildLanguageSelect();
   resetProviderDropdown();
@@ -1240,12 +1423,14 @@ async function openSeries(url) {
     document.getElementById("modalDesc").textContent =
       seriesData.description || "";
     updateFavoriteButton(!!seriesData.is_favorite);
+    autoSyncSupported = seriesData.auto_sync_supported !== false;
+    syncAutoSyncAvailability();
 
     currentSeasons = seasonsData.seasons || [];
     buildAccordion(currentSeasons);
 
     // Check if auto-sync exists for this series
-    if (autoSyncCheck) {
+    if (autoSyncCheck && autoSyncSupported) {
       autoSyncCheck.checked = false;
       try {
         const syncResp = await fetch(
@@ -1287,7 +1472,9 @@ function buildAccordion(seasons) {
       section.dataset.seasonIndex = index;
 
       const label = season.are_movies
-        ? `Movies (${episodes.length} episodes)`
+        ? episodes.length === 1
+          ? "Movie"
+          : `Movies (${episodes.length} entries)`
         : `Season ${season.season_number} (${episodes.length} episodes)`;
 
       // Header
@@ -1394,7 +1581,38 @@ async function fetchProviders(episodeUrl) {
     const data = await resp.json();
     if (data.providers) {
       availableProviders = data.providers;
-      updateProviderDropdown();
+      renderProviderAvailability(data.availability || []);
+      const hasSupportedProviders = Object.values(availableProviders).some(
+        (providers) => Array.isArray(providers) && providers.length,
+      );
+      if (Array.isArray(data.languages) && data.languages.length) {
+        modalLanguageOptions = data.languages;
+        rebuildLanguageSelect();
+      }
+      if (
+        data.default_language &&
+        Array.from(languageSelect.options).some(
+          (option) => option.value === data.default_language,
+        )
+      ) {
+        languageSelect.value = data.default_language;
+        if (window.refreshCustomSelect) window.refreshCustomSelect(languageSelect);
+      }
+      syncDownloadAllLangsVisibility();
+      if (hasSupportedProviders) {
+        providerSelect.disabled = false;
+        downloadAllBtn.disabled = false;
+        downloadSelectedBtn.disabled = false;
+        updateProviderDropdown();
+      } else {
+        providerSelect.disabled = true;
+        providerSelect.innerHTML =
+          '<option value="">No supported providers available</option>';
+        if (window.refreshCustomSelect) window.refreshCustomSelect(providerSelect);
+        downloadAllBtn.disabled = true;
+        downloadSelectedBtn.disabled = true;
+        if (downloadAllLangsBtn) downloadAllLangsBtn.disabled = true;
+      }
     }
   } catch (e) {
     // If provider fetch fails, keep the static list
@@ -1402,6 +1620,10 @@ async function fetchProviders(episodeUrl) {
 }
 
 function resetProviderDropdown() {
+  providerSelect.disabled = false;
+  downloadAllBtn.disabled = false;
+  downloadSelectedBtn.disabled = false;
+  if (downloadAllLangsBtn) downloadAllLangsBtn.disabled = false;
   providerSelect.innerHTML = "";
   staticProviders.forEach((p) => {
     const opt = document.createElement("option");
@@ -1410,6 +1632,7 @@ function resetProviderDropdown() {
     providerSelect.appendChild(opt);
   });
   selectDefaultProvider();
+  syncDownloadAllLangsVisibility();
   if (window.refreshCustomSelect) window.refreshCustomSelect(providerSelect);
 }
 
@@ -1440,12 +1663,36 @@ function updateProviderDropdown() {
 }
 
 function selectDefaultProvider() {
-  for (const opt of providerSelect.options) {
-    if (opt.value === "VOE") {
-      providerSelect.value = "VOE";
-      return;
+  const preferredProviders = getPreferredProviders(currentModalSite || currentSite);
+
+  for (const preferred of preferredProviders) {
+    for (const opt of providerSelect.options) {
+      if (opt.value === preferred) {
+        providerSelect.value = preferred;
+        return;
+      }
     }
   }
+
+  if (providerSelect.options.length) {
+    providerSelect.selectedIndex = 0;
+  }
+}
+
+function pickBatchProvider(providers) {
+  const preferredProviders = getPreferredProviders(currentModalSite || currentSite);
+
+  for (const preferred of preferredProviders) {
+    if (providers.includes(preferred)) {
+      return preferred;
+    }
+  }
+
+  if (providers.length) {
+    return providers[0];
+  }
+
+  return "";
 }
 
 async function startDownload(all) {
@@ -1496,6 +1743,13 @@ async function startDownload(all) {
 function closeModal() {
   if (!overlay) return;
   overlay.style.display = "none";
+  currentModalSite = null;
+  modalLanguageOptions = null;
+  availableProviders = null;
+  autoSyncSupported = true;
+  renderProviderAvailability([]);
+  syncDownloadAllLangsVisibility();
+  syncAutoSyncAvailability();
   if (autoSyncCheck) autoSyncCheck.checked = false;
 }
 function closeModalOutside(e) {
@@ -1505,6 +1759,11 @@ function closeModalOutside(e) {
 // Auto-Sync toggle from modal checkbox
 async function toggleAutoSync() {
   if (!autoSyncCheck) return;
+  if (!autoSyncSupported) {
+    autoSyncCheck.checked = false;
+    showToast("Auto-Sync is not available for direct movie sources.");
+    return;
+  }
   if (autoSyncCheck.checked) {
     // Select all episodes
     selectAllCb.checked = true;
@@ -1612,9 +1871,7 @@ async function checkLangSeparation() {
     if (data.sync_language) {
       defaultSyncLanguage = data.sync_language;
     }
-    if (downloadAllLangsBtn) {
-      downloadAllLangsBtn.style.display = langSeparationEnabled ? "" : "none";
-    }
+    syncDownloadAllLangsVisibility();
     if (window.refreshCustomSelect) window.refreshCustomSelect(languageSelect);
   } catch (e) {
     /* ignore */
@@ -1640,7 +1897,7 @@ async function startDownloadAllLangs() {
   try {
     for (const [lang, providers] of Object.entries(availableProviders)) {
       if (!providers.length) continue;
-      const provider = providers.includes("VOE") ? "VOE" : providers[0];
+      const provider = pickBatchProvider(providers);
       const dlBody = {
         episodes,
         language: lang,

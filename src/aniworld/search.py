@@ -2,21 +2,40 @@ import html as html_module
 import os
 import random
 import re
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
 try:
     from .ascii import display_ascii_art
-    from .config import GLOBAL_SESSION, logger
+    from .config import DEFAULT_USER_AGENT, GLOBAL_SESSION, logger
 except ImportError:
     from aniworld.ascii import display_ascii_art
-    from aniworld.config import GLOBAL_SESSION, logger
+    from aniworld.config import DEFAULT_USER_AGENT, GLOBAL_SESSION, logger
 
 SEARCH_URL = "https://aniworld.to/ajax/search"
+FILMPALAST_SEARCH_URL = "https://filmpalast.to/search/title/{}"
+FILMPALAST_FORM_SEARCH_URL = "https://filmpalast.to/search"
 RANDOM_URL = "https://aniworld.to/ajax/randomGeneratorSeries"
 NEW_EPISODES_URL = "https://aniworld.to/neue-episoden"
 HOME_URL = "https://aniworld.to"
 
 _homepage_cache = None
 _series_html_content = None
+_FILMPALAST_REQUEST_HEADERS = {
+    "User-Agent": DEFAULT_USER_AGENT,
+    "Referer": "https://filmpalast.to/",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.7,en;q=0.6",
+}
+
+
+def _fetch_filmpalast_html(url, data=None):
+    payload = None
+    if data is not None:
+        payload = urlencode(data).encode("utf-8")
+    request = Request(url, data=payload, headers=_FILMPALAST_REQUEST_HEADERS)
+    with urlopen(request, timeout=20) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 def random_anime():
@@ -53,6 +72,104 @@ def query(keyword):
         return response.json()  # Returns a list of dicts
     except ValueError:
         return None
+
+
+def _parse_filmpalast_search_results(html):
+    article_pattern = re.compile(
+        r"<article\b[^>]*class=\"[^\"]*\bliste\b[^\"]*\"[^>]*>(.*?)</article>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    title_pattern = re.compile(
+        r'<h2[^>]*>\s*<a[^>]+href="(?:(?:https?:)?//filmpalast\.to)?(/stream/[^"]+)"[^>]*>(.*?)</a>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    cover_pattern = re.compile(
+        r'<img[^>]+src="([^"]*/files/movies/[^"]+)"',
+        re.IGNORECASE,
+    )
+    generic_image_pattern = re.compile(
+        r'<img[^>]+src="([^"]+)"[^>]+(?:class="[^"]*\bcover(?:-opacity)?\b[^"]*"|alt="[^"]*stream)',
+        re.IGNORECASE,
+    )
+
+    results = []
+    seen = set()
+
+    for article_match in article_pattern.finditer(html):
+        block = article_match.group(1)
+        title_match = title_pattern.search(block)
+        if not title_match:
+            continue
+
+        link = title_match.group(1).strip()
+        if not link or link in seen:
+            continue
+        seen.add(link)
+
+        title = html_module.unescape(
+            re.sub(r"<[^>]+>", "", title_match.group(2) or "").strip()
+        )
+        image_match = cover_pattern.search(block) or generic_image_pattern.search(block)
+        poster_url = ""
+        if image_match:
+            raw_image = image_match.group(1).strip()
+            if raw_image.startswith("//"):
+                poster_url = f"https:{raw_image}"
+            elif raw_image.startswith("http"):
+                poster_url = raw_image
+            else:
+                poster_url = f"https://filmpalast.to{raw_image}"
+
+        results.append(
+            {
+                "title": title or link.rsplit("/", 1)[-1].replace("-", " ").title(),
+                "link": link,
+                "poster_url": poster_url,
+            }
+        )
+
+    if results:
+        return results
+
+    # Fallback parser: FilmPalast occasionally changes article wrappers, so
+    # also scan standalone title anchors on the page.
+    fallback_pattern = re.compile(
+        r'<a[^>]+href="(?:(?:https?:)?//filmpalast\.to)?(/stream/[^"]+)"[^>]*title="([^"]+)"',
+        re.IGNORECASE,
+    )
+    for match in fallback_pattern.finditer(html):
+        link = match.group(1).strip()
+        if not link or link in seen:
+            continue
+        seen.add(link)
+        results.append(
+            {
+                "title": html_module.unescape(match.group(2).strip()),
+                "link": link,
+                "poster_url": "",
+            }
+        )
+
+    return results
+
+
+def query_filmpalast(keyword):
+    """Search filmpalast.to movies and return matching stream entries."""
+    query_value = (keyword or "").strip()
+    if not query_value:
+        return []
+
+    html = _fetch_filmpalast_html(FILMPALAST_SEARCH_URL.format(quote(query_value)))
+    results = _parse_filmpalast_search_results(html)
+    if results:
+        return results
+
+    # Fallback to the site's original search form flow.
+    fallback_html = _fetch_filmpalast_html(
+        FILMPALAST_FORM_SEARCH_URL,
+        data={"headerSearchText": query_value, "t1": "tags"},
+    )
+    return _parse_filmpalast_search_results(fallback_html)
 
 
 def fetch_new_episodes():
