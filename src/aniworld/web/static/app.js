@@ -65,11 +65,16 @@ const isHomePage = Boolean(
   searchInput &&
     searchBtn &&
     resultsDiv &&
-    overlay &&
+    browseDiv,
+);
+const hasSeriesModalSurface = Boolean(
+  overlay &&
     languageSelect &&
     providerSelect &&
     seasonAccordion &&
-    browseDiv,
+    statusBar &&
+    downloadAllBtn &&
+    downloadSelectedBtn,
 );
 const isStatsPage = Boolean(
   statsGrid || statsDetailGrid || providerQualityList || activityChart,
@@ -973,6 +978,20 @@ function updateFavoriteButton(forceFavoriteState) {
     : "Add To Favorites";
 }
 
+function syncSearchResultFavoriteState(seriesUrl, isFavorite) {
+  if (!seriesUrl) return;
+  const result = currentSearchResults.find((entry) => entry.url === seriesUrl);
+  if (!result) return;
+  const meta = {
+    ...(getSearchResultMeta(result) || {}),
+    is_favorite: Boolean(isFavorite),
+  };
+  result.meta = meta;
+  searchResultMetaCache.set(seriesUrl, meta);
+  renderSearchResultMeta(result);
+  applySearchFilters();
+}
+
 function renderDashboardStats(general, queue, sync, storage) {
   if (!statsGrid || !statsDetailGrid) return;
 
@@ -1495,7 +1514,7 @@ const scheduleSearchSuggestions = debounce(() => {
 
 async function openFavoriteSeries(url) {
   if (!url) return;
-  if (!isHomePage) {
+  if (!hasSeriesModalSurface) {
     const target = new URL("/", window.location.href);
     target.searchParams.set("openSeries", url);
     window.location.href = target.toString();
@@ -1532,6 +1551,7 @@ async function toggleFavorite() {
         body: JSON.stringify({ series_url: currentSeriesUrl }),
       });
       favoriteMap.delete(currentSeriesUrl);
+      syncSearchResultFavoriteState(currentSeriesUrl, false);
       showToast("Removed from favorites");
     } else {
       await fetch("/api/favorites", {
@@ -1544,6 +1564,13 @@ async function toggleFavorite() {
           site: getSiteKeyFromUrl(currentSeriesUrl),
         }),
       });
+      favoriteMap.set(currentSeriesUrl, {
+        title: currentSeriesTitle,
+        series_url: currentSeriesUrl,
+        poster_url: modalPoster?.src || "",
+        site: getSiteKeyFromUrl(currentSeriesUrl),
+      });
+      syncSearchResultFavoriteState(currentSeriesUrl, true);
       showToast("Added to favorites");
     }
     updateFavoriteButton(!isFavorite);
@@ -1591,7 +1618,7 @@ function markReleasesSeen() {
 }
 
 async function autoOpenSeriesFromQuery() {
-  if (!isHomePage) return;
+  if (!hasSeriesModalSurface) return;
   const params = new URLSearchParams(window.location.search);
   const url = params.get("openSeries");
   if (!url) return;
@@ -1880,8 +1907,10 @@ async function loadAniworldBrowse() {
 window.loadDashboardStats = loadDashboardStats;
 if (isHomePage) {
   showBrowseSections();
-  autoOpenSeriesFromQuery();
   loadSearchSuggestions("");
+}
+if (hasSeriesModalSurface) {
+  autoOpenSeriesFromQuery();
 }
 
 if (hasFavoritesSurface || isStatsPage || isTimelinePage || isRadarPage) {
@@ -2093,7 +2122,7 @@ async function hydrateSearchResultMeta(result) {
 }
 
 async function openSeries(url) {
-  if (!isHomePage) return;
+  if (!hasSeriesModalSurface) return;
   const sourceSite = getSiteKeyFromUrl(url);
   const sourceSiteConfig = getSiteConfig(sourceSite);
   if (sourceSite === "filmpalast" && !isFilmPalastEnabled()) {
@@ -2145,6 +2174,17 @@ async function openSeries(url) {
     if (modalYear) modalYear.textContent = seriesData.release_year || "";
     if (modalDetailsYear) modalDetailsYear.textContent = seriesData.release_year || "Unknown";
     renderModalDescription(seriesData.description || "");
+    if (seriesData.is_favorite) {
+      favoriteMap.set(currentSeriesUrl, {
+        title: currentSeriesTitle,
+        series_url: currentSeriesUrl,
+        poster_url: seriesData.poster_url || "",
+        site: sourceSite,
+      });
+    } else {
+      favoriteMap.delete(currentSeriesUrl);
+    }
+    syncSearchResultFavoriteState(currentSeriesUrl, !!seriesData.is_favorite);
     updateFavoriteButton(!!seriesData.is_favorite);
     autoSyncSupported = seriesData.auto_sync_supported !== false;
     syncAutoSyncAvailability();

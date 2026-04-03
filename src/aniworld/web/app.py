@@ -135,7 +135,29 @@ def _resolved_download_path_value():
     return str(Path.home() / "Downloads")
 
 
-def _settings_payload(ui_mode="cozy"):
+def _normalize_ui_scale(value):
+    scale = str(value or "100").strip()
+    return scale if scale in {"90", "95", "100", "105", "110"} else "100"
+
+
+def _normalize_ui_width(value):
+    width = str(value or "standard").strip().lower()
+    return width if width in {"standard", "wide"} else "standard"
+
+
+def _normalize_ui_background(value):
+    background = str(value or "dynamic").strip().lower()
+    return (
+        background if background in {"dynamic", "subtle", "off"} else "dynamic"
+    )
+
+
+def _settings_payload(
+    ui_mode="cozy",
+    ui_scale="100",
+    ui_width="standard",
+    ui_background="dynamic",
+):
     return {
         "download_path": _resolved_download_path_value(),
         "lang_separation": os.environ.get(_ENV_LANG_SEPARATION, "0"),
@@ -147,6 +169,9 @@ def _settings_payload(ui_mode="cozy"):
         "sync_language": os.environ.get(_ENV_SYNC_LANGUAGE, "German Dub"),
         "sync_provider": os.environ.get(_ENV_SYNC_PROVIDER, "VOE"),
         "ui_mode": ui_mode or "cozy",
+        "ui_scale": _normalize_ui_scale(ui_scale),
+        "ui_width": _normalize_ui_width(ui_width),
+        "ui_background": _normalize_ui_background(ui_background),
     }
 
 
@@ -1320,6 +1345,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "app_version": app_version,
                 "experimental_flags": _experimental_flags(),
                 "ui_mode": get_user_preference(username, "ui_mode", "cozy"),
+                "ui_scale": get_user_preference(username, "ui_scale", "100"),
+                "ui_width": get_user_preference(username, "ui_width", "standard"),
+                "ui_background": get_user_preference(
+                    username, "ui_background", "dynamic"
+                ),
             }
     else:
 
@@ -1334,6 +1364,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "app_version": app_version,
                 "experimental_flags": _experimental_flags(),
                 "ui_mode": get_user_preference(None, "ui_mode", "cozy"),
+                "ui_scale": get_user_preference(None, "ui_scale", "100"),
+                "ui_width": get_user_preference(None, "ui_width", "standard"),
+                "ui_background": get_user_preference(
+                    None, "ui_background", "dynamic"
+                ),
             }
 
     # Initialize download queue, custom paths and autosync (works with or without auth)
@@ -1381,15 +1416,16 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                         {"error": "Content-Type must be application/json"}
                     ), 415
 
+    def _series_modal_template_context():
+        return {
+            "lang_labels": LANG_LABELS,
+            "sto_lang_labels": {"1": "German Dub", "2": "English Dub"},
+            "supported_providers": _ordered_working_providers(),
+        }
+
     @app.route("/")
     def index():
-        sto_lang_labels = {"1": "German Dub", "2": "English Dub"}
-        return render_template(
-            "index.html",
-            lang_labels=LANG_LABELS,
-            sto_lang_labels=sto_lang_labels,
-            supported_providers=_ordered_working_providers(),
-        )
+        return render_template("index.html", **_series_modal_template_context())
 
     @app.route("/stats")
     def stats_page():
@@ -1397,7 +1433,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
     @app.route("/favorites")
     def favorites_page():
-        return render_template("favorites.html")
+        return render_template("favorites.html", **_series_modal_template_context())
 
     @app.route("/timeline")
     def timeline_page():
@@ -2098,7 +2134,19 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     def api_settings():
         username, _ = _get_current_user_info()
         ui_mode = get_user_preference(username, "ui_mode", "cozy")
-        return jsonify(_settings_payload(ui_mode=ui_mode))
+        ui_scale = get_user_preference(username, "ui_scale", "100")
+        ui_width = get_user_preference(username, "ui_width", "standard")
+        ui_background = get_user_preference(
+            username, "ui_background", "dynamic"
+        )
+        return jsonify(
+            _settings_payload(
+                ui_mode=ui_mode,
+                ui_scale=ui_scale,
+                ui_width=ui_width,
+                ui_background=ui_background,
+            )
+        )
 
     @app.route("/api/settings", methods=["PUT"])
     def api_settings_update():
@@ -2135,6 +2183,20 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             if ui_mode not in ("compact", "cozy"):
                 return jsonify({"error": f"Invalid ui_mode: {ui_mode}"}), 400
             set_user_preference(username, "ui_mode", ui_mode)
+        if "ui_scale" in data:
+            set_user_preference(
+                username, "ui_scale", _normalize_ui_scale(data["ui_scale"])
+            )
+        if "ui_width" in data:
+            set_user_preference(
+                username, "ui_width", _normalize_ui_width(data["ui_width"])
+            )
+        if "ui_background" in data:
+            set_user_preference(
+                username,
+                "ui_background",
+                _normalize_ui_background(data["ui_background"]),
+            )
         _record_user_event(
             "settings.updated",
             subject_type="settings",
@@ -2152,6 +2214,9 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "sync_language",
                     "sync_provider",
                     "ui_mode",
+                    "ui_scale",
+                    "ui_width",
+                    "ui_background",
                 }
             },
         )

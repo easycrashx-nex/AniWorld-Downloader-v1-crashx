@@ -80,6 +80,33 @@ function computeNextCheck(lastCheck) {
   );
 }
 
+function detectAutosyncSource(seriesUrl) {
+  const value = String(seriesUrl || "").toLowerCase();
+  if (value.includes("aniworld.to")) return "AniWorld";
+  if (value.includes("s.to") || value.includes("serienstream")) {
+    return "SerienStream";
+  }
+  if (value.includes("filmpalast.to")) return "FilmPalast";
+  return "Source";
+}
+
+function renderAutosyncMetaPill(label, value, modifier = "") {
+  if (!value || value === "-") return "";
+  const nextModifier = modifier ? " queue-meta-pill-" + modifier : "";
+  return (
+    '<span class="queue-meta-pill autosync-meta-pill' +
+    nextModifier +
+    '">' +
+    '<span class="queue-meta-label">' +
+    esc(label) +
+    "</span>" +
+    '<span class="queue-meta-value">' +
+    esc(value) +
+    "</span>" +
+    "</span>"
+  );
+}
+
 function renderJobs(jobs) {
   if (!jobs.length) {
     autosyncList.innerHTML =
@@ -87,11 +114,7 @@ function renderJobs(jobs) {
     return;
   }
 
-  let html =
-    '<table class="user-table" style="table-layout:auto"><thead><tr>' +
-    "<th>Title</th><th>Last Check</th><th>Re-Check at</th><th>Last New Found</th><th>Episodes</th>" +
-    "<th>Download Path</th><th>Status</th><th>Added By</th><th>Actions</th>" +
-    "</tr></thead><tbody>";
+  let html = '<div class="autosync-grid">';
 
   for (const job of jobs) {
     const statusClass = job.enabled
@@ -108,51 +131,78 @@ function renderJobs(jobs) {
       dlPath = cp ? cp.name : "Custom #" + job.custom_path_id;
     }
 
+    const sourceLabel = detectAutosyncSource(job.series_url);
+    const sourceMeta = renderAutosyncMetaPill("Source", sourceLabel, "sync");
+    const languageMeta = renderAutosyncMetaPill(
+      "Lang",
+      job.language || "German Dub",
+      "language",
+    );
+    const providerMeta = renderAutosyncMetaPill(
+      "Provider",
+      job.provider || "VOE",
+      "provider",
+    );
+    const pathMeta = renderAutosyncMetaPill("Path", dlPath, "path");
+    const userMeta = renderAutosyncMetaPill("User", job.added_by || "-", "user");
+
     html +=
-      "<tr>" +
-      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:#e2e4e9" title="' +
+      '<article class="autosync-card">' +
+      '<div class="autosync-card-head">' +
+      '<div class="autosync-card-copy">' +
+      '<div class="autosync-card-title" title="' +
       esc(job.series_url) +
       '">' +
       esc(job.title) +
-      "</td>" +
-      "<td>" +
-      lastCheck +
-      "</td>" +
-      "<td>" +
-      nextCheck +
-      "</td>" +
-      "<td>" +
-      lastNew +
-      "</td>" +
-      "<td>" +
-      job.episodes_found +
-      "</td>" +
-      "<td>" +
-      esc(dlPath) +
-      "</td>" +
-      '<td><span class="queue-status ' +
+      "</div>" +
+      '<div class="autosync-card-subline">' +
+      '<span class="queue-status ' +
       statusClass +
       '">' +
       statusLabel +
-      "</span></td>" +
-      "<td>" +
-      esc(job.added_by || "-") +
-      "</td>" +
-      '<td><div class="queue-item-right">' +
-      '<button class="queue-move" onclick="openEditModal(' +
+      "</span>" +
+      '<span class="autosync-card-series-url">' +
+      esc(sourceLabel) +
+      "</span>" +
+      "</div>" +
+      "</div>" +
+      '<div class="autosync-card-actions">' +
+      '<button class="btn-secondary btn-small autosync-action-btn" onclick="openEditModal(' +
       job.id +
-      ')" title="Edit" style="font-size:.85rem">Edit</button>' +
-      '<button class="queue-move" onclick="syncNow(' +
+      ')" title="Edit" type="button">Edit</button>' +
+      '<button class="btn-secondary btn-small autosync-action-btn autosync-action-sync" onclick="syncNow(' +
       job.id +
-      ')" title="Sync Now" style="font-size:.85rem;color:#6ea8fe">Sync</button>' +
-      '<button class="queue-remove" onclick="removeJob(' +
+      ')" title="Sync Now" type="button">Sync Now</button>' +
+      '<button class="btn-secondary btn-small autosync-action-btn autosync-action-remove" onclick="removeJob(' +
       job.id +
-      ')" title="Remove" style="font-size:.85rem">Remove</button>' +
-      "</div></td>" +
-      "</tr>";
+      ')" title="Remove" type="button">Remove</button>' +
+      "</div>" +
+      "</div>" +
+      '<div class="autosync-card-stats">' +
+      '<div class="autosync-stat"><span>Last Check</span><strong>' +
+      lastCheck +
+      "</strong></div>" +
+      '<div class="autosync-stat"><span>Next Check</span><strong>' +
+      nextCheck +
+      "</strong></div>" +
+      '<div class="autosync-stat"><span>Last New</span><strong>' +
+      lastNew +
+      "</strong></div>" +
+      '<div class="autosync-stat"><span>Episodes Found</span><strong>' +
+      job.episodes_found +
+      "</strong></div>" +
+      "</div>" +
+      '<div class="autosync-card-meta">' +
+      sourceMeta +
+      languageMeta +
+      providerMeta +
+      pathMeta +
+      userMeta +
+      "</div>" +
+      "</article>";
   }
 
-  html += "</tbody></table>";
+  html += "</div>";
   autosyncList.innerHTML = html;
 }
 

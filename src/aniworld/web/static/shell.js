@@ -13,6 +13,34 @@
     document.body.setAttribute("data-ui-density", nextMode);
   }
 
+  function applyUiScale(scale) {
+    const nextScale =
+      scale === "90" ||
+      scale === "95" ||
+      scale === "100" ||
+      scale === "105" ||
+      scale === "110"
+        ? scale
+        : "100";
+    document.body.setAttribute("data-ui-scale", nextScale);
+  }
+
+  function applyUiWidth(width) {
+    const nextWidth = width === "wide" ? "wide" : "standard";
+    document.body.setAttribute("data-ui-width", nextWidth);
+  }
+
+  function applyUiBackground(mode) {
+    const nextMode =
+      mode === "subtle" || mode === "off" ? mode : "dynamic";
+    document.body.setAttribute("data-ui-background", nextMode);
+    document.dispatchEvent(
+      new CustomEvent("aniworld:ui-background", {
+        detail: { mode: nextMode },
+      }),
+    );
+  }
+
   async function loadShellSettings() {
     if (shellSettingsRequest) return shellSettingsRequest;
     shellSettingsRequest = (async () => {
@@ -20,6 +48,11 @@
         const resp = await fetch("/api/settings");
         const data = await resp.json();
         applyUiDensity(data.ui_mode || document.body.dataset.uiDensity);
+        applyUiScale(data.ui_scale || document.body.dataset.uiScale);
+        applyUiWidth(data.ui_width || document.body.dataset.uiWidth);
+        applyUiBackground(
+          data.ui_background || document.body.dataset.uiBackground,
+        );
       } catch (e) {
         /* ignore */
       } finally {
@@ -93,6 +126,9 @@
 
   window.loadNavState = loadNavState;
   window.applyUiDensity = applyUiDensity;
+  window.applyUiScale = applyUiScale;
+  window.applyUiWidth = applyUiWidth;
+  window.applyUiBackground = applyUiBackground;
   loadNavState();
   loadShellSettings();
 

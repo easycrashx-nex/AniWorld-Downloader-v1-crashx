@@ -122,6 +122,50 @@ function formatEta(seconds) {
   return `${rounded}s remaining`;
 }
 
+function queueActionButton(className, label, onClick, title, iconOnly = false) {
+  return (
+    '<button class="' +
+    className +
+    '" onclick="' +
+    onClick +
+    '" title="' +
+    escQ(title || label) +
+    '" type="button"' +
+    (iconOnly ? ' aria-label="' + escQ(title || label) + '"' : "") +
+    ">" +
+    label +
+    "</button>"
+  );
+}
+
+function queueMetaPill(label, value, modifier = "") {
+  if (!value) return "";
+  const nextModifier = modifier ? " queue-meta-pill-" + modifier : "";
+  return (
+    '<span class="queue-meta-pill' +
+    nextModifier +
+    '">' +
+    '<span class="queue-meta-label">' +
+    escQ(label) +
+    "</span>" +
+    '<span class="queue-meta-value">' +
+    escQ(value) +
+    "</span>" +
+    "</span>"
+  );
+}
+
+function getQueueEpisodeMarker(item) {
+  const parsed = parseSeasonEpisode(item.current_url || "");
+  if (parsed) return parsed;
+  if (item.total_episodes === 1) return "Movie";
+  if (item.current_episode && item.total_episodes) {
+    return item.current_episode + "/" + item.total_episodes;
+  }
+  if (item.total_episodes) return item.total_episodes + " total";
+  return "";
+}
+
 function toggleQueueErrorsOnly() {
   queueErrorsOnly = !queueErrorsOnly;
   const btn = document.getElementById("queueErrorsToggleBtn");
@@ -327,49 +371,86 @@ function renderQueue(items) {
       }
     }
 
-    let actionBtn = "";
+    const actionButtons = [];
     if (item.status === "queued") {
-      actionBtn =
-        '<button class="queue-move" onclick="moveQueueItem(' +
-        item.id +
-        ',\'up\')" title="Move up">&#9650;</button>' +
-        '<button class="queue-move" onclick="moveQueueItem(' +
-        item.id +
-        ',\'down\')" title="Move down">&#9660;</button>' +
-        '<button class="queue-remove" onclick="removeQueueItem(' +
-        item.id +
-        ')" title="Remove">&times;</button>';
+      actionButtons.push(
+        queueActionButton(
+          "queue-icon-btn queue-icon-btn-neutral",
+          "▲",
+          "moveQueueItem(" + item.id + ",'up')",
+          "Move up",
+          true,
+        ),
+      );
+      actionButtons.push(
+        queueActionButton(
+          "queue-icon-btn queue-icon-btn-neutral",
+          "▼",
+          "moveQueueItem(" + item.id + ",'down')",
+          "Move down",
+          true,
+        ),
+      );
+      actionButtons.push(
+        queueActionButton(
+          "queue-action-btn queue-action-danger",
+          "Remove",
+          "removeQueueItem(" + item.id + ")",
+          "Remove",
+        ),
+      );
     } else if (item.status === "running") {
-      const captchaBtn = item.captcha_url
-        ? '<button class="queue-captcha-btn" onclick="openCaptchaModal(' +
-          item.id +
-          ')" title="Solve captcha">&#128274; Solve</button>'
-        : '';
-      actionBtn =
-        captchaBtn +
-        '<button class="queue-cancel" onclick="cancelQueueItem(' +
-        item.id +
-        ')" title="Cancel after current episode">Cancel</button>';
+      if (item.captcha_url) {
+        actionButtons.push(
+          queueActionButton(
+            "queue-action-btn queue-action-secondary",
+            "Solve Captcha",
+            "openCaptchaModal(" + item.id + ")",
+            "Solve captcha",
+          ),
+        );
+      }
+      actionButtons.push(
+        queueActionButton(
+          "queue-action-btn queue-action-warning",
+          "Cancel",
+          "cancelQueueItem(" + item.id + ")",
+          "Cancel after current episode",
+        ),
+      );
     } else if (item.status === "failed" || item.status === "cancelled") {
-      actionBtn =
-        '<button class="queue-cancel" onclick="retryQueueItem(' +
-        item.id +
-        ')" title="Retry">Retry</button>';
+      actionButtons.push(
+        queueActionButton(
+          "queue-action-btn queue-action-primary queue-action-retry",
+          "Retry Now",
+          "retryQueueItem(" + item.id + ")",
+          "Retry",
+        ),
+      );
     }
-
-    const userHtml = item.username
-      ? '<span class="queue-user">' + escQ(item.username) + "</span>"
-      : "";
 
     let pathHtml = "";
     if (item.custom_path_id) {
       const cp = queueCustomPaths.find((p) => p.id === item.custom_path_id);
       const pathName = cp ? cp.name : "Custom #" + item.custom_path_id;
-      pathHtml = '<span class="queue-path">' + escQ(pathName) + "</span>";
+      pathHtml = queueMetaPill("Path", pathName, "path");
     }
 
-    const syncBadge = (item.source || "").startsWith("sync")
-      ? '<span class="queue-sync-badge">[Sync]</span> '
+    const syncMeta = (item.source || "").startsWith("sync")
+      ? queueMetaPill("Source", "Auto-Sync", "sync")
+      : "";
+    const episodeMeta = queueMetaPill(
+      "Episode",
+      getQueueEpisodeMarker(item),
+      "episode",
+    );
+    const languageMeta = queueMetaPill("Lang", item.language, "language");
+    const providerMeta = queueMetaPill("Provider", item.provider, "provider");
+    const userMeta = item.username
+      ? queueMetaPill("User", item.username, "user")
+      : "";
+    const actionsHtml = actionButtons.length
+      ? '<div class="queue-actions">' + actionButtons.join("") + "</div>"
       : "";
 
     html +=
@@ -378,27 +459,21 @@ function renderQueue(items) {
       '">' +
       '<div class="queue-item-header">' +
       '<div class="queue-item-title">' +
-      syncBadge +
       escQ(item.title) +
       "</div>" +
       '<div class="queue-item-right">' +
       statusBadge +
       captchaBadge +
-      actionBtn +
+      actionsHtml +
       "</div>" +
       "</div>" +
       '<div class="queue-item-meta">' +
-      "<span>" +
-      item.total_episodes +
-      " episode(s)</span>" +
-      "<span>" +
-      escQ(item.language) +
-      "</span>" +
-      "<span>" +
-      escQ(item.provider) +
-      "</span>" +
+      episodeMeta +
+      languageMeta +
+      providerMeta +
       pathHtml +
-      userHtml +
+      userMeta +
+      syncMeta +
       "</div>" +
       progressHtml +
       errorsHtml +

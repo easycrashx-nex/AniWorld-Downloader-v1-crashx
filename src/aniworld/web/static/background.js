@@ -20,15 +20,30 @@
   let pointerX = null;
   let pointerY = null;
 
+  function getBackgroundMode() {
+    const mode = document.body?.dataset?.uiBackground || "dynamic";
+    return mode === "subtle" || mode === "off" ? mode : "dynamic";
+  }
+
+  function getMotionFactor() {
+    const mode = getBackgroundMode();
+    if (prefersReducedMotion || mode === "off") return 0;
+    return mode === "subtle" ? 0.07 : 0.18;
+  }
+
   function pointCountForViewport() {
+    const mode = getBackgroundMode();
+    const areaFactor = mode === "subtle" ? 34000 : 26000;
+    const minPoints = mode === "subtle" ? 20 : 36;
+    const maxPoints = mode === "subtle" ? 54 : 96;
     return Math.max(
-      36,
-      Math.min(96, Math.round((width * height) / 26000)),
+      minPoints,
+      Math.min(maxPoints, Math.round((width * height) / areaFactor)),
     );
   }
 
   function createPoint() {
-    const speedFactor = prefersReducedMotion ? 0 : 0.18;
+    const speedFactor = getMotionFactor();
     return {
       x: Math.random() * width,
       y: Math.random() * height,
@@ -55,7 +70,8 @@
   }
 
   function updatePoints() {
-    if (prefersReducedMotion) return;
+    const mode = getBackgroundMode();
+    if (prefersReducedMotion || mode === "off") return;
 
     for (const point of points) {
       point.x += point.vx;
@@ -82,7 +98,8 @@
 
   function nearestConnections(index) {
     const current = points[index];
-    const maxDistance = 165;
+    const mode = getBackgroundMode();
+    const maxDistance = mode === "subtle" ? 138 : 165;
     const neighbors = [];
 
     for (let otherIndex = 0; otherIndex < points.length; otherIndex += 1) {
@@ -101,7 +118,10 @@
   }
 
   function drawFrame() {
+    const mode = getBackgroundMode();
+    canvas.style.opacity = mode === "off" ? "0" : mode === "subtle" ? "0.46" : "0.85";
     ctx.clearRect(0, 0, width, height);
+    if (mode === "off") return;
 
     const renderedEdges = new Set();
 
@@ -119,7 +139,8 @@
         renderedEdges.add(edgeKey);
 
         const target = points[neighbor.index];
-        const alpha = Math.max(0.06, 1 - neighbor.distance / 165) * 0.42;
+        const alphaBase = mode === "subtle" ? 0.22 : 0.42;
+        const alpha = Math.max(0.04, 1 - neighbor.distance / 165) * alphaBase;
 
         ctx.beginPath();
         ctx.moveTo(point.x, point.y);
@@ -137,10 +158,12 @@
         Math.hypot(point.x - pointerX, point.y - pointerY) < 120;
 
       ctx.beginPath();
-      ctx.arc(point.x, point.y, highlight ? 2.4 : 1.8, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, highlight ? 2.2 : mode === "subtle" ? 1.4 : 1.8, 0, Math.PI * 2);
       ctx.fillStyle = highlight
         ? "rgba(120, 235, 220, 0.95)"
-        : "rgba(166, 223, 255, 0.9)";
+        : mode === "subtle"
+          ? "rgba(166, 223, 255, 0.62)"
+          : "rgba(166, 223, 255, 0.9)";
       ctx.fill();
     }
   }
@@ -148,8 +171,23 @@
   function tick() {
     updatePoints();
     drawFrame();
-    if (!prefersReducedMotion) {
+    if (!prefersReducedMotion && getBackgroundMode() !== "off") {
       animationFrame = window.requestAnimationFrame(tick);
+    } else {
+      animationFrame = null;
+    }
+  }
+
+  function refreshBackgroundMode() {
+    resizeCanvas();
+    if (animationFrame) {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    }
+    if (!prefersReducedMotion && getBackgroundMode() !== "off") {
+      animationFrame = window.requestAnimationFrame(tick);
+    } else {
+      drawFrame();
     }
   }
 
@@ -186,10 +224,15 @@
     },
     { passive: true },
   );
+  document.addEventListener("aniworld:ui-background", refreshBackgroundMode, {
+    passive: true,
+  });
 
   resizeCanvas();
 
-  if (!prefersReducedMotion) {
+  if (!prefersReducedMotion && getBackgroundMode() !== "off") {
     animationFrame = window.requestAnimationFrame(tick);
+  } else {
+    drawFrame();
   }
 })();

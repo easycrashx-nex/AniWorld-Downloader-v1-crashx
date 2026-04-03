@@ -6,6 +6,9 @@ const experimentalFilmpalastCb = document.getElementById(
   "experimentalFilmpalast",
 );
 const uiModeSelect = document.getElementById("uiMode");
+const uiScaleSelect = document.getElementById("uiScale");
+const uiWidthSelect = document.getElementById("uiWidth");
+const uiBackgroundSelect = document.getElementById("uiBackground");
 const syncScheduleSelect = document.getElementById("syncSchedule");
 const syncLanguageSelect = document.getElementById("syncLanguage");
 const syncProviderSelect = document.getElementById("syncProvider");
@@ -32,6 +35,9 @@ function refreshSettingsSelects() {
   if (syncLanguageSelect) window.refreshCustomSelect(syncLanguageSelect);
   if (syncProviderSelect) window.refreshCustomSelect(syncProviderSelect);
   if (uiModeSelect) window.refreshCustomSelect(uiModeSelect);
+  if (uiScaleSelect) window.refreshCustomSelect(uiScaleSelect);
+  if (uiWidthSelect) window.refreshCustomSelect(uiWidthSelect);
+  if (uiBackgroundSelect) window.refreshCustomSelect(uiBackgroundSelect);
 }
 
 async function loadSettings() {
@@ -48,6 +54,11 @@ async function loadSettings() {
       if (experimentalFilmpalastCb)
         experimentalFilmpalastCb.checked = data.experimental_filmpalast === "1";
       if (uiModeSelect) uiModeSelect.value = data.ui_mode || "cozy";
+      if (uiScaleSelect) uiScaleSelect.value = data.ui_scale || "100";
+      if (uiWidthSelect) uiWidthSelect.value = data.ui_width || "standard";
+      if (uiBackgroundSelect) {
+        uiBackgroundSelect.value = data.ui_background || "dynamic";
+      }
       if (syncScheduleSelect && data.sync_schedule)
         syncScheduleSelect.value = data.sync_schedule;
 
@@ -152,6 +163,45 @@ async function saveUiMode() {
     showToast("UI mode saved");
   } catch (e) {
     showToast("Failed to save UI mode: " + e.message);
+  }
+}
+
+async function saveUiScale() {
+  if (!uiScaleSelect) return;
+  try {
+    await updateSettings({ ui_scale: uiScaleSelect.value });
+    if (typeof window.applyUiScale === "function") {
+      window.applyUiScale(uiScaleSelect.value);
+    }
+    showToast("UI scale saved");
+  } catch (e) {
+    showToast("Failed to save UI scale: " + e.message);
+  }
+}
+
+async function saveUiWidth() {
+  if (!uiWidthSelect) return;
+  try {
+    await updateSettings({ ui_width: uiWidthSelect.value });
+    if (typeof window.applyUiWidth === "function") {
+      window.applyUiWidth(uiWidthSelect.value);
+    }
+    showToast("Content width saved");
+  } catch (e) {
+    showToast("Failed to save content width: " + e.message);
+  }
+}
+
+async function saveUiBackground() {
+  if (!uiBackgroundSelect) return;
+  try {
+    await updateSettings({ ui_background: uiBackgroundSelect.value });
+    if (typeof window.applyUiBackground === "function") {
+      window.applyUiBackground(uiBackgroundSelect.value);
+    }
+    showToast("Background effects saved");
+  } catch (e) {
+    showToast("Failed to save background effects: " + e.message);
   }
 }
 

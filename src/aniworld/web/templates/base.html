@@ -22,7 +22,12 @@
     {% block styles %}{% endblock %}
   </head>
 
-  <body data-ui-density="{{ ui_mode|default('cozy') }}">
+  <body
+    data-ui-density="{{ ui_mode|default('cozy') }}"
+    data-ui-scale="{{ ui_scale|default('100') }}"
+    data-ui-width="{{ ui_width|default('standard') }}"
+    data-ui-background="{{ ui_background|default('dynamic') }}"
+  >
     <div class="app-background">
       <canvas
         class="network-canvas"
@@ -224,31 +229,41 @@
       onclick="if (event.target === this) closeQueueModal();"
     >
       <div class="queue-modal">
-        <button class="close" onclick="closeQueueModal()">&times;</button>
         <div class="section-heading">
           <div>
             <span class="section-kicker">Transfers</span>
             <h2 class="queue-modal-title">Download Queue</h2>
           </div>
-          <div class="dashboard-inline-actions">
+          <div class="dashboard-inline-actions queue-toolbar">
             <button
               class="btn-secondary btn-small"
               id="queueErrorsToggleBtn"
               onclick="toggleQueueErrorsOnly()"
+              type="button"
             >
               Errors Only
             </button>
             <button
               class="btn-secondary btn-small"
               onclick="retryFailedQueueItems()"
+              type="button"
             >
               Retry Failed
             </button>
             <button
               class="btn-secondary btn-small"
               onclick="clearFinishedQueueItems()"
+              type="button"
             >
               Clear Finished
+            </button>
+            <button
+              class="btn-secondary btn-small queue-close-btn"
+              onclick="closeQueueModal()"
+              type="button"
+              aria-label="Close queue"
+            >
+              &times;
             </button>
           </div>
         </div>
