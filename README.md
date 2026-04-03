@@ -14,7 +14,7 @@ AniWorld Downloader is a cross-platform tool for streaming and downloading anime
 
 Menu | WebUI (AniWorld) | WebUI (SerienStream)
 :-------------------------:|:-------------------------:|:-------------------------:
-![AniWorld Downloader - Demo](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/demo.png?raw=true) | ![AniWorld Downloader - Demo](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/demo-aniworld.png?raw=true) | ![AniWorld Downloader - Demo](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/demo-serienstream.png?raw=true)
+![AniWorld Downloader - Demo](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/demo.png?raw=true) | ![AniWorld Downloader - Demo](https://github.com/easycrashx-nex/AniworldDownloader-Update/blob/c60b332db99193424b7a21f406c068bed8c72c3d/.github/assets/demo-aniworld.png) | ![AniWorld Downloader - Demo](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/demo-serienstream.png?raw=true)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
