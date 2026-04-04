@@ -12,6 +12,8 @@ English is the default documentation language for this repository.
 
 - English docs: [docs/WIKI.md](docs/WIKI.md)
 - German docs: [docs/de/WIKI.md](docs/de/WIKI.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security policy: [SECURITY.md](SECURITY.md)
 
 ## What This Build Includes
 
