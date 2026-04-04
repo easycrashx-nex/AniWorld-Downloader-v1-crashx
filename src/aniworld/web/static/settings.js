@@ -27,8 +27,14 @@ const backupImportFileInput = document.getElementById("backupImportFile");
 const serverBindHostValue = document.getElementById("serverBindHost");
 const serverPortValue = document.getElementById("serverPort");
 const serverScopeValue = document.getElementById("serverScope");
+const serverVpnModeValue = document.getElementById("serverVpnMode");
+const serverVpnProviderValue = document.getElementById("serverVpnProvider");
+const serverPublicIpValue = document.getElementById("serverPublicIp");
 const serverIpsWrap = document.getElementById("serverIps");
 const serverAccessUrlsWrap = document.getElementById("serverAccessUrls");
+const serverVpnIpsWrap = document.getElementById("serverVpnIps");
+const serverVpnClientsWrap = document.getElementById("serverVpnClients");
+const serverVpnInterfaces = document.getElementById("serverVpnInterfaces");
 const diskGuardList = document.getElementById("diskGuardList");
 const browserNotificationsEnabledCb = document.getElementById(
   "browserNotificationsEnabled",
@@ -278,6 +284,27 @@ function renderDiskGuard(data) {
     .join("");
 }
 
+function renderVpnInterfaces(data) {
+  if (!serverVpnInterfaces) return;
+  const items = Array.isArray(data) ? data : [];
+  if (!items.length) {
+    serverVpnInterfaces.innerHTML =
+      '<div class="settings-disk-card"><strong>No tunnel interface detected</strong><span>The downloader currently looks like it is using a direct network path.</span></div>';
+    return;
+  }
+  serverVpnInterfaces.innerHTML = items
+    .map(
+      (item) => `
+        <div class="settings-disk-card">
+          <strong>${escapeSettingsHtml(item.name || "Unknown interface")}</strong>
+          <span class="settings-disk-meta">${escapeSettingsHtml(
+            item.ip || "No IP detected",
+          )}</span>
+        </div>`,
+    )
+    .join("");
+}
+
 function browserNotificationsSupported() {
   return typeof window !== "undefined" && "Notification" in window;
 }
@@ -407,8 +434,23 @@ async function loadSettings() {
       if (serverScopeValue) {
         serverScopeValue.textContent = data.server_scope || "-";
       }
+      if (serverVpnModeValue) {
+        serverVpnModeValue.textContent = data.vpn?.mode || "Direct / local";
+      }
+      if (serverVpnProviderValue) {
+        serverVpnProviderValue.textContent = data.vpn?.provider || "Direct";
+      }
+      if (serverPublicIpValue) {
+        serverPublicIpValue.textContent = data.vpn?.public_ip || "Unavailable";
+        serverPublicIpValue.title = data.vpn?.public_ip_source
+          ? "Source: " + data.vpn.public_ip_source
+          : "";
+      }
       renderSettingsChipList(serverIpsWrap, data.server_ips || []);
       renderSettingsChipList(serverAccessUrlsWrap, data.server_access_urls || []);
+      renderSettingsChipList(serverVpnIpsWrap, data.vpn?.ips || []);
+      renderSettingsChipList(serverVpnClientsWrap, data.vpn?.clients || []);
+      renderVpnInterfaces(data.vpn?.interfaces || []);
       renderDiskGuard(data.disk_guard || null);
       applyBrowserNotificationPrefsClient(data);
       if (searchDefaultSortSelect) {

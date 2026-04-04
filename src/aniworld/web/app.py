@@ -1,13 +1,16 @@
 import copy
 import json
 import os
+import platform
 import re
 import shutil
 import socket
+import subprocess
 import threading
 import time
 from collections import deque
 from io import BytesIO
+from urllib.request import Request, urlopen
 
 from flask import (
     Flask,
@@ -181,6 +184,167 @@ def _discover_local_ipv4_addresses():
     return sorted(addresses)
 
 
+def _run_network_command(*commands):
+    for command in commands:
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+        except Exception:
+            continue
+        output = (completed.stdout or "").strip()
+        if output:
+            return output
+    return ""
+
+
+def _discover_interface_addresses():
+    interfaces = []
+    seen = set()
+    system = platform.system().lower()
+
+    def _store(name, address):
+        interface = str(name or "").strip()
+        ip = str(address or "").strip()
+        if not interface or not ip or ip.startswith("127.") or ip.startswith("169.254."):
+            return
+        key = (interface.lower(), ip)
+        if key in seen:
+            return
+        seen.add(key)
+        interfaces.append({"name": interface, "ip": ip})
+
+    if system in {"linux", "darwin"}:
+        output = _run_network_command(
+            ["ip", "-o", "-4", "addr", "show", "up"],
+            ["ifconfig"],
+        )
+        for line in output.splitlines():
+            if " inet " in line and system == "linux":
+                parts = line.split()
+                if len(parts) >= 4:
+                    _store(parts[1], parts[3].split("/")[0])
+            elif system == "darwin":
+                match = re.search(r"^([A-Za-z0-9_.:-]+):", line)
+                inet = re.search(r"\binet\s+(\d+\.\d+\.\d+\.\d+)", line)
+                if match and inet:
+                    _store(match.group(1), inet.group(1))
+    elif system == "windows":
+        output = _run_network_command(["ipconfig"])
+        current_name = None
+        for line in output.splitlines():
+            adapter = re.match(r"^[A-Za-z].*adapter (.+):$", line.strip())
+            if adapter:
+                current_name = adapter.group(1)
+                continue
+            inet = re.search(r"IPv4[^:]*:\s*(\d+\.\d+\.\d+\.\d+)", line)
+            if current_name and inet:
+                _store(current_name, inet.group(1))
+    return interfaces
+
+
+def _discover_public_ip():
+    cached = _cache_get("network:public_ip", 300)
+    if cached is not None:
+        return cached
+
+    providers = [
+        ("https://api.ipify.org?format=json", "ipify"),
+        ("https://ifconfig.me/all.json", "ifconfig.me"),
+    ]
+    for url, source in providers:
+        try:
+            request = Request(url, headers={"User-Agent": "AniWorldDownloader/5.0"})
+            with urlopen(request, timeout=3) as response:
+                body = response.read().decode("utf-8", errors="ignore")
+            payload = json.loads(body)
+            ip = str(payload.get("ip") or payload.get("ip_addr") or "").strip()
+            if ip:
+                value = {"ip": ip, "source": source}
+                _cache_set("network:public_ip", value)
+                return value
+        except Exception:
+            continue
+
+    fallback = {"ip": None, "source": None}
+    _cache_set("network:public_ip", fallback)
+    return fallback
+
+
+def _detect_vpn_status():
+    cached = _cache_get("network:vpn_status", 120)
+    if cached is not None:
+        return cached
+
+    interfaces = _discover_interface_addresses()
+    vpn_markers = {
+        "gluetun": "Gluetun",
+        "wg": "WireGuard",
+        "wireguard": "WireGuard",
+        "tun": "OpenVPN / Tunnel",
+        "tap": "OpenVPN / Tunnel",
+        "tailscale": "Tailscale",
+        "ts": "Tailscale",
+        "nordlynx": "NordLynx",
+        "mullvad": "Mullvad",
+        "proton": "Proton VPN",
+        "ivpn": "IVPN",
+        "ppp": "PPP VPN",
+    }
+    vpn_interfaces = []
+    vpn_clients = set()
+    for item in interfaces:
+        name_lower = item["name"].lower()
+        for marker, client_name in vpn_markers.items():
+            if name_lower.startswith(marker) or marker in name_lower:
+                vpn_interfaces.append(item)
+                vpn_clients.add(client_name)
+                break
+
+    env = os.environ
+    gluetun_keys = [
+        "VPN_SERVICE_PROVIDER",
+        "VPN_TYPE",
+        "SERVER_COUNTRIES",
+        "GLUETUN_HTTP_CONTROL_SERVER_ADDRESS",
+        "DOT",
+    ]
+    gluetun_present = any(key in env for key in gluetun_keys) or "gluetun" in str(
+        env.get("HOSTNAME", "")
+    ).lower()
+    provider_label = None
+    if gluetun_present:
+        vpn_clients.add("Gluetun")
+        service_provider = str(env.get("VPN_SERVICE_PROVIDER") or "").strip()
+        vpn_type = str(env.get("VPN_TYPE") or "").strip()
+        provider_label = "Gluetun"
+        if service_provider and vpn_type:
+            provider_label = f"Gluetun · {service_provider} ({vpn_type})"
+        elif service_provider:
+            provider_label = f"Gluetun · {service_provider}"
+        elif vpn_type:
+            provider_label = f"Gluetun · {vpn_type}"
+
+    public_ip = _discover_public_ip()
+    detected = bool(vpn_interfaces) or gluetun_present
+    result = {
+        "detected": detected,
+        "mode": "VPN / tunnel" if detected else "Direct / local",
+        "provider": provider_label or (sorted(vpn_clients)[0] if vpn_clients else "Direct"),
+        "clients": sorted(vpn_clients),
+        "interfaces": vpn_interfaces,
+        "ips": [item["ip"] for item in vpn_interfaces],
+        "public_ip": public_ip.get("ip"),
+        "public_ip_source": public_ip.get("source"),
+    }
+    _cache_set("network:vpn_status", result)
+    return result
+
+
 def _server_network_info(app):
     host = str(app.config.get("WEB_HOST", "127.0.0.1")).strip() or "127.0.0.1"
     port = int(app.config.get("WEB_PORT", 8080))
@@ -203,6 +367,7 @@ def _server_network_info(app):
         "server_ips": ip_addresses,
         "server_access_urls": access_urls,
         "server_scope": "Local only" if is_local_only else "LAN / exposed",
+        "vpn": _detect_vpn_status(),
     }
 
 
@@ -1181,17 +1346,58 @@ def _diagnostics_cache_snapshot():
 
 
 def _build_diagnostics_payload():
+    def _safe(factory, fallback, label):
+        try:
+            return factory()
+        except Exception as exc:
+            logger.warning("Diagnostics payload section '%s' failed: %s", label, exc)
+            return fallback
+
     try:
         db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
     except OSError:
         db_size = 0
     return {
-        "server": _server_network_info(app),
-        "cache": _diagnostics_cache_snapshot(),
-        "queue": get_queue_stats(),
-        "sync": get_sync_stats(),
-        "disk_guard": _disk_guard_snapshot(),
-        "provider_health": get_provider_health()[:6],
+        "server": _safe(
+            lambda: _server_network_info(app),
+            {
+                "server_bind_host": "127.0.0.1",
+                "server_port": 8080,
+                "server_ips": ["127.0.0.1"],
+                "server_access_urls": [],
+                "server_scope": "Unavailable",
+            },
+            "server",
+        ),
+        "cache": _safe(
+            _diagnostics_cache_snapshot,
+            {"entries": [], "count": 0, "warmer_started": False},
+            "cache",
+        ),
+        "queue": _safe(
+            get_queue_stats,
+            {"total": 0, "by_status": {}, "currently_running": None},
+            "queue",
+        ),
+        "sync": _safe(
+            get_sync_stats,
+            {
+                "total_jobs": 0,
+                "enabled": 0,
+                "disabled": 0,
+                "last_check": None,
+                "last_new_found": None,
+                "total_episodes_found": 0,
+                "jobs": [],
+            },
+            "sync",
+        ),
+        "disk_guard": _safe(
+            _disk_guard_snapshot,
+            {"status": "unknown", "warn_free_gb": 0, "warn_free_percent": 0, "paths": []},
+            "disk_guard",
+        ),
+        "provider_health": _safe(get_provider_health, [], "provider_health")[:6],
         "provider_history_hours": 168,
         "database": {
             "path": str(DB_PATH),

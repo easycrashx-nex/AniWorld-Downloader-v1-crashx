@@ -59,11 +59,11 @@ function renderDiagnosticsSummary(data) {
   diagnosticsSummary.innerHTML = `
     <div class="diagnostics-card">
       <span class="library-summary-label">Server</span>
-      <strong>${escDiagnostics(data.server?.bind_host || "Unknown")}:${escDiagnostics(
-        data.server?.port || "-",
+      <strong>${escDiagnostics(data.server?.server_bind_host || "Unknown")}:${escDiagnostics(
+        data.server?.server_port || "-",
       )}</strong>
       <span class="library-summary-note">${escDiagnostics(
-        data.server?.scope || "local",
+        data.server?.server_scope || "local",
       )}</span>
     </div>
     <div class="diagnostics-card">

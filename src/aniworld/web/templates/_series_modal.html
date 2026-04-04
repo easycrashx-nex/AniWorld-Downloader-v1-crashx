@@ -142,6 +142,14 @@
         <div class="modal-selection-summary" id="modalSelectionSummary"></div>
         <div class="modal-action-buttons">
           <button
+            class="btn-download-smart"
+            id="selectUndownloadedBtn"
+            type="button"
+            onclick="selectUndownloadedForCurrentSetup()"
+          >
+            Select Undownloaded
+          </button>
+          <button
             class="btn-download-selected"
             id="downloadSelectedBtn"
             onclick="startDownload(false)"

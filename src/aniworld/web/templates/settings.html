@@ -87,6 +87,18 @@
         <span class="field-label">Scope</span>
         <strong id="serverScope" class="settings-static-value">-</strong>
       </div>
+      <div class="settings-info-card">
+        <span class="field-label">Connection</span>
+        <strong id="serverVpnMode" class="settings-static-value">-</strong>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">VPN / Tunnel</span>
+        <strong id="serverVpnProvider" class="settings-static-value">-</strong>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">Public IP</span>
+        <strong id="serverPublicIp" class="settings-static-value">-</strong>
+      </div>
     </div>
     <div class="settings-stack">
       <div class="settings-info-card">
@@ -102,6 +114,26 @@
         </div>
       </div>
       <div class="settings-info-card">
+        <span class="field-label">Tunnel IPs</span>
+        <div id="serverVpnIps" class="settings-chip-list">
+          <span class="settings-chip">-</span>
+        </div>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">Detected Clients</span>
+        <div id="serverVpnClients" class="settings-chip-list">
+          <span class="settings-chip">-</span>
+        </div>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">Tunnel Interfaces</span>
+        <div id="serverVpnInterfaces" class="settings-disk-list">
+          <div class="settings-disk-card">
+            <strong>Loading...</strong>
+          </div>
+        </div>
+      </div>
+      <div class="settings-info-card">
         <span class="field-label">Disk Space Guard</span>
         <div id="diskGuardList" class="settings-disk-list">
           <div class="settings-disk-card">
@@ -113,6 +145,8 @@
     <div class="settings-hint">
       Shows the current address of the running web server. If you start with
       <code>--web-expose</code>, your local network IPs will also appear here.
+      VPN detection is best-effort and recognizes common tunnel setups like
+      WireGuard, OpenVPN, Tailscale, and Gluetun-style environments.
     </div>
   </div>
 

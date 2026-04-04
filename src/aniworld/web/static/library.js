@@ -6,6 +6,10 @@ let libraryCompareRequest = null;
 let libraryCompareLoaded = false;
 let libraryCompareMap = new Map();
 let libraryCompareSummary = null;
+let libraryAutosyncRequest = null;
+let libraryAutosyncUrls = new Set();
+let librarySelectedSeries = new Set();
+let librarySeriesMeta = new Map();
 
 const librarySearchInput = document.getElementById("librarySearchInput");
 const libraryLocationFilter = document.getElementById("libraryLocationFilter");
@@ -16,6 +20,216 @@ const librarySummary = document.getElementById("librarySummary");
 const libraryCompareStatus = document.getElementById("libraryCompareStatus");
 const libraryCompareBtn = document.getElementById("libraryCompareBtn");
 const libraryRepairBtn = document.getElementById("libraryRepairBtn");
+const librarySelectionBadge = document.getElementById("librarySelectionBadge");
+const libraryAddToAutosyncBtn = document.getElementById("libraryAddToAutosyncBtn");
+const librarySelectVisibleBtn = document.getElementById("librarySelectVisibleBtn");
+const libraryClearSelectionBtn = document.getElementById("libraryClearSelectionBtn");
+
+function rebuildLibrarySeriesMeta() {
+  const nextMeta = new Map();
+  libraryAllLocations.forEach(function (loc) {
+    const pushMeta = function (title, langFolder) {
+      if (!title || !title.series_url || nextMeta.has(title.series_url)) return;
+      nextMeta.set(title.series_url, {
+        title: title.folder || "Unknown Title",
+        series_url: title.series_url,
+        language: getLibraryLanguageLabel(langFolder),
+        custom_path_id: loc.custom_path_id ?? null,
+      });
+    };
+
+    if (libraryLangSep && Array.isArray(loc.lang_folders)) {
+      loc.lang_folders.forEach(function (lf) {
+        (lf.titles || []).forEach(function (title) {
+          pushMeta(title, lf.name);
+        });
+      });
+      return;
+    }
+
+    (loc.titles || []).forEach(function (title) {
+      pushMeta(title, null);
+    });
+  });
+  librarySeriesMeta = nextMeta;
+}
+
+async function loadLibraryAutosyncState(forceRefresh) {
+  if (libraryAutosyncRequest && !forceRefresh) return libraryAutosyncRequest;
+  libraryAutosyncRequest = (async function () {
+    try {
+      const resp = await fetch("/api/autosync");
+      const data = await resp.json();
+      const nextUrls = new Set(
+        (Array.isArray(data.jobs) ? data.jobs : [])
+          .map(function (job) {
+            return (job && job.series_url) || "";
+          })
+          .filter(Boolean),
+      );
+      libraryAutosyncUrls = nextUrls;
+      Array.from(librarySelectedSeries).forEach(function (seriesUrl) {
+        if (libraryAutosyncUrls.has(seriesUrl)) {
+          librarySelectedSeries.delete(seriesUrl);
+        }
+      });
+      syncLibrarySelectionUi();
+    } catch (e) {
+      libraryAutosyncUrls = new Set();
+      syncLibrarySelectionUi();
+    } finally {
+      libraryAutosyncRequest = null;
+    }
+  })();
+  return libraryAutosyncRequest;
+}
+
+function getVisibleSelectableSeriesUrls() {
+  return Array.from(document.querySelectorAll(".library-series-checkbox"))
+    .filter(function (checkbox) {
+      return checkbox && !checkbox.disabled && checkbox.dataset.seriesUrl;
+    })
+    .map(function (checkbox) {
+      return checkbox.dataset.seriesUrl;
+    });
+}
+
+function syncLibrarySelectionUi() {
+  Array.from(librarySelectedSeries).forEach(function (seriesUrl) {
+    if (libraryAutosyncUrls.has(seriesUrl)) {
+      librarySelectedSeries.delete(seriesUrl);
+    }
+  });
+
+  const selectedCount = librarySelectedSeries.size;
+  if (librarySelectionBadge) {
+    librarySelectionBadge.textContent =
+      selectedCount === 1 ? "1 selected" : selectedCount + " selected";
+  }
+  if (libraryAddToAutosyncBtn) {
+    libraryAddToAutosyncBtn.disabled = selectedCount === 0;
+    libraryAddToAutosyncBtn.textContent =
+      selectedCount > 0
+        ? "Add " + selectedCount + " To Auto-Sync"
+        : "Add Selected To Auto-Sync";
+  }
+
+  document.querySelectorAll(".library-series-checkbox").forEach(function (input) {
+    const seriesUrl = input.dataset.seriesUrl || "";
+    const tracked = libraryAutosyncUrls.has(seriesUrl);
+    input.disabled = tracked;
+    input.checked = !tracked && librarySelectedSeries.has(seriesUrl);
+    const row = input.closest(".library-title-header");
+    if (row) row.classList.toggle("selected", input.checked);
+  });
+}
+
+function toggleLibrarySeriesSelection(input) {
+  if (!input) return;
+  const seriesUrl = input.dataset.seriesUrl || "";
+  if (!seriesUrl || libraryAutosyncUrls.has(seriesUrl)) return;
+  if (input.checked) {
+    librarySelectedSeries.add(seriesUrl);
+  } else {
+    librarySelectedSeries.delete(seriesUrl);
+  }
+  syncLibrarySelectionUi();
+}
+
+function selectVisibleLibrarySeries() {
+  getVisibleSelectableSeriesUrls().forEach(function (seriesUrl) {
+    librarySelectedSeries.add(seriesUrl);
+  });
+  syncLibrarySelectionUi();
+}
+
+function clearLibrarySeriesSelection() {
+  librarySelectedSeries.clear();
+  syncLibrarySelectionUi();
+}
+
+async function addSelectedLibrarySeriesToAutosync() {
+  const seriesUrls = Array.from(librarySelectedSeries).filter(function (seriesUrl) {
+    return !libraryAutosyncUrls.has(seriesUrl);
+  });
+  if (!seriesUrls.length) {
+    showToast("No selectable series are currently selected");
+    syncLibrarySelectionUi();
+    return;
+  }
+
+  if (libraryAddToAutosyncBtn) {
+    libraryAddToAutosyncBtn.disabled = true;
+  }
+
+  let added = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  try {
+    for (const seriesUrl of seriesUrls) {
+      const meta = librarySeriesMeta.get(seriesUrl);
+      if (!meta) {
+        failed += 1;
+        continue;
+      }
+      try {
+        const resp = await fetch("/api/autosync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: meta.title,
+            series_url: meta.series_url,
+            language: meta.language,
+            custom_path_id: meta.custom_path_id,
+          }),
+        });
+        const data = await resp.json();
+        if (resp.ok && !data.error) {
+          added += 1;
+          libraryAutosyncUrls.add(seriesUrl);
+          librarySelectedSeries.delete(seriesUrl);
+        } else if (resp.status === 409) {
+          skipped += 1;
+          libraryAutosyncUrls.add(seriesUrl);
+          librarySelectedSeries.delete(seriesUrl);
+        } else {
+          failed += 1;
+        }
+      } catch (e) {
+        failed += 1;
+      }
+    }
+
+    if (added > 0 || skipped > 0) {
+      if (window.LiveUpdates && typeof window.LiveUpdates.refresh === "function") {
+        window.LiveUpdates.refresh(["autosync", "library", "dashboard", "nav", "settings"]);
+      }
+    }
+    if (added > 0) {
+      showToast(
+        failed > 0
+          ? "Added " +
+              added +
+              " series to Auto-Sync, skipped " +
+              skipped +
+              ", failed " +
+              failed
+          : skipped > 0
+            ? "Added " + added + " series to Auto-Sync, skipped " + skipped
+            : "Added " + added + " series to Auto-Sync",
+      );
+    } else if (skipped > 0 && failed === 0) {
+      showToast("Selected series were already tracked");
+    } else {
+      showToast("Selected series could not be added to Auto-Sync");
+    }
+  } finally {
+    syncLibrarySelectionUi();
+    await loadLibraryAutosyncState(true);
+    applyLibraryFilters();
+  }
+}
 
 function formatLibraryRelativeDate(value) {
   if (!value) return "Never";
@@ -164,9 +378,11 @@ async function loadLibrary() {
       var data = await resp.json();
       libraryAllLocations = data.locations || [];
       libraryLangSep = !!data.lang_sep;
+      rebuildLibrarySeriesMeta();
       populateLibraryFilters();
       applyLibraryFilters();
       loadLibraryCompare();
+      loadLibraryAutosyncState();
     } catch (e) {
       renderLibrarySummary([]);
       list.innerHTML = '<div class="library-empty">Failed to load library</div>';
@@ -684,6 +900,12 @@ function renderTitles(html, titles, idPrefix, padLeft, locIndex, langFolder) {
     var seasonKeys = Object.keys(title.seasons).sort(function (a, b) {
       return parseInt(a) - parseInt(b);
     });
+    var trackedInAutosync = !!(
+      title.series_url && libraryAutosyncUrls.has(title.series_url)
+    );
+    var selectedForAutosync = !!(
+      title.series_url && librarySelectedSeries.has(title.series_url)
+    );
 
     html.push('<div class="library-title-section">');
     html.push(
@@ -763,6 +985,24 @@ function renderTitles(html, titles, idPrefix, padLeft, locIndex, langFolder) {
         formatSize(title.total_size) +
         "</span>",
     );
+    if (title.series_url) {
+      if (trackedInAutosync) {
+        html.push(
+          '<span class="library-meta library-meta-autosync">Tracked</span>',
+        );
+      } else {
+        html.push(
+          '<label class="library-title-select" onclick="event.stopPropagation()">' +
+            '<input type="checkbox" class="library-series-checkbox" data-series-url="' +
+            escLib(title.series_url) +
+            '"' +
+            (selectedForAutosync ? " checked" : "") +
+            ' onchange="toggleLibrarySeriesSelection(this)">' +
+            "<span>Select</span>" +
+            "</label>",
+        );
+      }
+    }
     if (title.series_url) {
       html.push(
         '<button class="queue-move" data-series-url="' +
@@ -981,6 +1221,7 @@ function renderLibrary(locations) {
   if (!locations.length) {
     list.innerHTML =
       '<div class="library-empty">No downloaded content found</div>';
+    syncLibrarySelectionUi();
     return;
   }
 
@@ -1082,6 +1323,7 @@ function renderLibrary(locations) {
   });
 
   list.innerHTML = html.join("");
+  syncLibrarySelectionUi();
 }
 
 function toggleLibraryLocation(index) {
@@ -1238,13 +1480,29 @@ if (libraryRepairBtn) {
     repairMissingLibraryEpisodes();
   });
 }
+if (librarySelectVisibleBtn) {
+  librarySelectVisibleBtn.addEventListener("click", function () {
+    selectVisibleLibrarySeries();
+  });
+}
+if (libraryClearSelectionBtn) {
+  libraryClearSelectionBtn.addEventListener("click", function () {
+    clearLibrarySeriesSelection();
+  });
+}
+if (libraryAddToAutosyncBtn) {
+  libraryAddToAutosyncBtn.addEventListener("click", function () {
+    addSelectedLibrarySeriesToAutosync();
+  });
+}
 
 loadLibrary();
 
 if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
-  window.LiveUpdates.subscribe(["library", "settings"], function () {
+  window.LiveUpdates.subscribe(["library", "settings", "autosync"], function () {
     loadLibrary();
     loadLibraryCompare();
+    loadLibraryAutosyncState(true);
   });
 }
 

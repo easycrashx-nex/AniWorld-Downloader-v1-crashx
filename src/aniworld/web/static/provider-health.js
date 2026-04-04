@@ -59,14 +59,19 @@ function renderProviderHealth(items) {
 
 function renderProviderHistory(items) {
   if (!providerHistoryList) return;
-  if (!items.length) {
+  const flatItems = Array.isArray(items)
+    ? items
+    : Object.entries(items || {}).flatMap(([provider, entries]) =>
+        (entries || []).map((entry) => Object.assign({ provider }, entry)),
+      );
+  if (!flatItems.length) {
     providerHistoryList.innerHTML =
       '<div class="stats-empty">No provider score history has been collected yet.</div>';
     return;
   }
 
   const grouped = new Map();
-  items.forEach((item) => {
+  flatItems.forEach((item) => {
     const key = item.provider || "Unknown";
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(item);

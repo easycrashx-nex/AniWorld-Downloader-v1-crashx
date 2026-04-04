@@ -13,6 +13,7 @@ const statusBar = document.getElementById("statusBar");
 const statusText = document.getElementById("statusText");
 const downloadAllBtn = document.getElementById("downloadAllBtn");
 const downloadSelectedBtn = document.getElementById("downloadSelectedBtn");
+const selectUndownloadedBtn = document.getElementById("selectUndownloadedBtn");
 const randomBtn = document.getElementById("randomBtn");
 const browseDiv = document.getElementById("browse");
 const newAnimesGrid = document.getElementById("newAnimesGrid");
@@ -711,24 +712,24 @@ function getPageSubheading(site) {
 
 const MODAL_LANGUAGE_FLAGS = {
   "German Dub": {
-    icon: "🇩🇪",
+    variant: "DUB",
     shortLabel: "German Dub",
     className: "flag-de",
   },
   "German Sub": {
-    icon: "🇯🇵🇩🇪",
+    variant: "SUB",
     shortLabel: "German Sub",
-    className: "flag-de-sub",
+    className: "flag-de",
   },
   "English Dub": {
-    icon: "🇬🇧",
+    variant: "DUB",
     shortLabel: "English Dub",
-    className: "flag-en",
+    className: "flag-gb",
   },
   "English Sub": {
-    icon: "🇯🇵🇬🇧",
+    variant: "SUB",
     shortLabel: "English Sub",
-    className: "flag-en-sub",
+    className: "flag-gb",
   },
 };
 
@@ -853,7 +854,7 @@ function renderEpisodeLanguageFlags(labels) {
       ${Array.from(new Set(labels))
         .map((label) => {
           const meta = MODAL_LANGUAGE_FLAGS[label] || {
-            icon: "🌐",
+            variant: "ALT",
             shortLabel: label,
             className: "flag-generic",
           };
@@ -863,7 +864,10 @@ function renderEpisodeLanguageFlags(labels) {
               title="${esc(label)}"
               aria-label="${esc(label)}"
             >
-              <span class="episode-language-icon">${meta.icon}</span>
+              <span class="episode-language-flag-art" aria-hidden="true">
+                <span class="episode-language-flag-inner"></span>
+              </span>
+              <span class="episode-language-badge">${esc(meta.variant)}</span>
             </span>
           `;
         })
@@ -895,6 +899,15 @@ function updateSeasonSelectionState() {
 function updateModalSelectionState() {
   const all = getModalEpisodeCheckboxes();
   const checked = all.filter((checkbox) => checkbox.checked);
+  const selectableUndownloaded = all.filter((checkbox) => {
+    if (checkbox.dataset.downloaded === "1") return false;
+    const selectedLanguage = languageSelect?.value || "";
+    if (!selectedLanguage || selectedLanguage === "All Languages") return true;
+    const episodeLanguages = String(checkbox.dataset.languages || "")
+      .split("|")
+      .filter(Boolean);
+    return episodeLanguages.includes(selectedLanguage);
+  });
   if (selectAllCb) {
     selectAllCb.checked = all.length > 0 && all.length === checked.length;
   }
@@ -904,6 +917,10 @@ function updateModalSelectionState() {
 
   if (downloadSelectedBtn && !downloadSelectedBtn.dataset.busy) {
     downloadSelectedBtn.disabled = checked.length === 0 || providerSelect.disabled;
+  }
+  if (selectUndownloadedBtn && !selectUndownloadedBtn.dataset.busy) {
+    selectUndownloadedBtn.disabled =
+      selectableUndownloaded.length === 0 || providerSelect.disabled;
   }
   if (downloadAllBtn && !downloadAllBtn.dataset.busy) {
     downloadAllBtn.disabled = all.length === 0 || providerSelect.disabled;
@@ -2423,6 +2440,8 @@ function buildAccordion(seasons) {
               type="checkbox"
               value="${esc(ep.url)}"
               data-season="${index}"
+              data-downloaded="${ep.downloaded ? "1" : "0"}"
+              data-languages="${esc((ep.languages || []).join("|"))}"
               onchange="syncSelectAll()"
             >
           </label>
@@ -2507,6 +2526,28 @@ function toggleSelectAll() {
 
 function syncSelectAll() {
   updateModalSelectionState();
+}
+
+function selectUndownloadedForCurrentSetup() {
+  const selectedLanguage = languageSelect?.value || "";
+  let matched = 0;
+  getModalEpisodeCheckboxes().forEach((checkbox) => {
+    const isDownloaded = checkbox.dataset.downloaded === "1";
+    const episodeLanguages = String(checkbox.dataset.languages || "")
+      .split("|")
+      .filter(Boolean);
+    const languageMatches =
+      !selectedLanguage ||
+      selectedLanguage === "All Languages" ||
+      episodeLanguages.includes(selectedLanguage);
+    const shouldSelect = !isDownloaded && languageMatches;
+    checkbox.checked = shouldSelect;
+    if (shouldSelect) matched += 1;
+  });
+  updateModalSelectionState();
+  if (!matched) {
+    showToast("No undownloaded episodes match the current setup.");
+  }
 }
 
 function getAllEpisodeUrls() {
@@ -2654,6 +2695,10 @@ async function startDownload(all) {
   const language = languageSelect.value;
   const provider = providerSelect.value;
 
+  if (selectUndownloadedBtn) {
+    selectUndownloadedBtn.dataset.busy = "1";
+    selectUndownloadedBtn.disabled = true;
+  }
   downloadAllBtn.dataset.busy = "1";
   downloadSelectedBtn.dataset.busy = "1";
   downloadAllBtn.disabled = true;
@@ -2694,10 +2739,11 @@ async function startDownload(all) {
   } catch (e) {
     showToast("Download request failed: " + e.message);
   } finally {
+    if (selectUndownloadedBtn) {
+      delete selectUndownloadedBtn.dataset.busy;
+    }
     delete downloadAllBtn.dataset.busy;
     delete downloadSelectedBtn.dataset.busy;
-    downloadAllBtn.disabled = false;
-    downloadSelectedBtn.disabled = false;
     updateModalSelectionState();
   }
 }
@@ -2872,9 +2918,11 @@ async function startDownloadAllLangs() {
   downloadAllLangsBtn.dataset.busy = "1";
   downloadAllBtn.dataset.busy = "1";
   downloadSelectedBtn.dataset.busy = "1";
+  if (selectUndownloadedBtn) selectUndownloadedBtn.dataset.busy = "1";
   downloadAllLangsBtn.disabled = true;
   downloadAllBtn.disabled = true;
   downloadSelectedBtn.disabled = true;
+  if (selectUndownloadedBtn) selectUndownloadedBtn.disabled = true;
 
   let queued = 0;
   try {
@@ -2908,9 +2956,7 @@ async function startDownloadAllLangs() {
     delete downloadAllLangsBtn.dataset.busy;
     delete downloadAllBtn.dataset.busy;
     delete downloadSelectedBtn.dataset.busy;
-    downloadAllLangsBtn.disabled = false;
-    downloadAllBtn.disabled = false;
-    downloadSelectedBtn.disabled = false;
+    if (selectUndownloadedBtn) delete selectUndownloadedBtn.dataset.busy;
     updateModalSelectionState();
   }
 }
