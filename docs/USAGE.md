@@ -33,6 +33,9 @@ Use Library to:
 - sort results
 - detect missing episodes
 - compare local library state with the source
+- inspect the exact episode labels that are missing
+- queue or auto-repair missing episodes
+- select visible series and add them directly to Auto-Sync
 
 ### Favorites
 
@@ -60,6 +63,7 @@ Use Stats to view:
 - provider quality
 - storage-related summary
 - activity chart
+- global stats shared across accounts
 
 ### Timeline page
 
@@ -109,6 +113,7 @@ Settings contains:
 - Auto-Sync
 - Provider Health
 - Audit Log
+- Diagnostics
 
 ### Settings page
 
@@ -123,6 +128,11 @@ Settings lets you manage:
 - Auto-Sync defaults
 - download behavior
 - development toggles such as experimental FilmPalast
+- disk guard thresholds
+- bandwidth limit
+- provider fallback order
+- backup export / import restore
+- VPN / tunnel visibility and public IP detection
 
 ### Auto-Sync page
 
@@ -133,6 +143,7 @@ Use Auto-Sync to:
 - sync selected jobs
 - sync all jobs
 - edit language/provider/path per job
+- add series directly from Library selections
 
 The edit dialog only exposes languages and providers that are actually available for that series.
 
@@ -143,6 +154,7 @@ Use Provider Health to:
 - check which providers are currently healthy
 - see recent failures
 - inspect activity and success rates
+- inspect provider score history over time
 
 ### Audit Log page
 
@@ -154,6 +166,16 @@ Audit Log shows:
 - settings changes
 
 This is especially useful in multi-user setups.
+
+### Diagnostics page
+
+Diagnostics shows:
+
+- runtime / worker state
+- cache warmup state and cache ages
+- disk guard visibility
+- server bind / LAN / open URL information
+- live process information from the running web backend
 
 ## Alerts
 
@@ -183,6 +205,7 @@ When you open a series from Browse or Favorites, the modal gives you:
 - Auto-Sync toggle
 - season/episode browser
 - language flags per episode when available
+- a helper action to select only undownloaded episodes for the chosen language
 
 ## Search filters
 
@@ -205,10 +228,11 @@ With Web Auth enabled:
 - the first setup user becomes admin
 - admins can create more users
 - favorites are per account
-- stats are per account
 - search history is per account
 - UI settings are per account
 - browser notification settings are per account
+- stats are global/shared
+- provider score history is global/shared
 
 ## Source notes
 

@@ -6,18 +6,30 @@ This repository contains a customized AniWorld Downloader source build with a he
 
 This README documents the build that exists in this repository right now, not the older upstream defaults.
 
+## Documentation Language
+
+English is the default documentation language for this repository.
+
+- English docs: [docs/WIKI.md](docs/WIKI.md)
+- German docs: [docs/de/WIKI.md](docs/de/WIKI.md)
+
 ## What This Build Includes
 
 - modern Web UI for AniWorld and SerienStream / S.TO
 - optional local account login for the Web UI
 - favorites, stats, search history, UI settings, and browser notification preferences stored per account
 - dedicated pages for Library, Favorites, Stats, Timeline, Radar, Auto-Sync, Provider Health, and Audit Log
+- dedicated Diagnostics page for runtime, cache, storage, and worker visibility
 - queue modal with live progress, bandwidth, retries, captcha handling, and cleanup actions
 - timeline backed by a separate archive so clearing finished queue items does not wipe history
 - library compare / missing episode detection against the source
+- library-side bulk selection with direct `Add Selected To Auto-Sync`
+- missing-episode lists with direct queue / repair actions
 - Auto-Sync with single, selected, and all-job sync triggers
+- per-series modal helper for selecting undownloaded episodes that match the chosen language
 - per-user notification center plus optional browser notifications
 - large UI customization surface: density, scale, theme colors, radius, nav size, modal width, animation speed, table density, and background effects
+- theme presets, diagnostics, provider score history, backup / import, disk guard, VPN / tunnel detection, and bandwidth limiting
 - Docker and Docker Compose setup for local servers, VPS setups, NAS boxes, mini PCs, and other always-on hosts
 
 ## Stable vs Experimental
@@ -37,12 +49,23 @@ FilmPalast is hidden by default and can be enabled in `Settings > Development`.
 
 If you want the full setup and usage docs, start here:
 
+### English
+
 - [Wiki Index](docs/WIKI.md)
 - [First Setup](docs/FIRST-SETUP.md)
 - [Usage Guide](docs/USAGE.md)
 - [Customization Guide](docs/CUSTOMIZATION.md)
 - [Migration Guide](docs/MIGRATION.md)
 - [Server Deployment Guide](docs/SERVER-DEPLOYMENT.md)
+
+### German
+
+- [Wiki Index](docs/de/WIKI.md)
+- [First Setup](docs/de/FIRST-SETUP.md)
+- [Usage Guide](docs/de/USAGE.md)
+- [Customization Guide](docs/de/CUSTOMIZATION.md)
+- [Migration Guide](docs/de/MIGRATION.md)
+- [Server Deployment Guide](docs/de/SERVER-DEPLOYMENT.md)
 
 ## Quick Start
 
@@ -127,10 +150,16 @@ That folder contains things like:
 These are stored separately per logged-in user:
 
 - favorites
-- stats
 - search history
 - UI settings
 - browser notification settings
+
+These are global / shared in the current build:
+
+- stats
+- provider scoreboard / provider score history
+- queue / timeline archive
+- diagnostics snapshots
 
 ### What is not automatically persistent when changed only in the Web UI
 
@@ -147,6 +176,15 @@ Typical examples:
 ### Browser notifications
 
 This build supports browser notifications, but they are not a service-worker push system. Notifications work while the Web UI is open in a browser tab or window. The PWA / service worker setup was intentionally removed to avoid stale-state and loading issues.
+
+### Diagnostics and server visibility
+
+The current build also includes:
+
+- Diagnostics page for runtime, cache, queue, sync, and storage state
+- disk guard thresholds and free-space visibility
+- server bind host, LAN URLs, and open URLs in Settings
+- best-effort VPN / tunnel detection for common setups such as WireGuard, OpenVPN, Tailscale, and Gluetun-like environments
 
 ### Queue vs Timeline
 

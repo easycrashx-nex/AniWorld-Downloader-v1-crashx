@@ -2,6 +2,17 @@
 
 This folder is the practical documentation set for the customized AniWorld Downloader build in this repository.
 
+English is the default documentation language.
+
+German versions are available in:
+
+- [German Wiki Index](de/WIKI.md)
+- [German First Setup](de/FIRST-SETUP.md)
+- [German Usage Guide](de/USAGE.md)
+- [German Customization Guide](de/CUSTOMIZATION.md)
+- [German Migration Guide](de/MIGRATION.md)
+- [German Server Deployment Guide](de/SERVER-DEPLOYMENT.md)
+
 ## Recommended reading order
 
 ### If you are setting it up for the first time
@@ -31,7 +42,7 @@ This folder is the practical documentation set for the customized AniWorld Downl
   How the Web UI is structured and what each page does.
 
 - [Customization Guide](CUSTOMIZATION.md)
-  `.env`, Web UI settings, per-user preferences, themes, background effects, notifications, and experimental features.
+  `.env`, Web UI settings, per-user preferences, themes, background effects, notifications, diagnostics, disk guard, VPN/tunnel visibility, and experimental features.
 
 - [Migration Guide](MIGRATION.md)
   How to move from an older AniWorld Downloader install to this custom build, either cleanly or while keeping your data.
@@ -50,6 +61,7 @@ This folder is the practical documentation set for the customized AniWorld Downl
 ## Important project-specific notes
 
 - Queue and Timeline are separate now. Clearing finished queue items does not wipe Timeline.
-- Favorites, stats, search history, UI settings, and browser notification preferences are per account.
+- Favorites, search history, UI settings, and browser notification preferences are per account.
+- Stats and provider score history are global in the current build.
 - Browser notifications require an open browser tab. Service-worker push is intentionally not used.
 - Some server-wide settings changed through the Web UI are temporary unless you persist them in `.env` or Docker environment variables.

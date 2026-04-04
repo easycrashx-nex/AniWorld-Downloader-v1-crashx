@@ -76,6 +76,8 @@ That folder is where you will find:
 - favorites
 - search history
 - stats archive
+- stats snapshots
+- provider score history
 - UI preferences
 
 Default download path:
@@ -188,6 +190,7 @@ After the Web UI starts:
 2. Open a search result.
 3. Open the queue modal.
 4. Open Settings and confirm server info, UI settings, and paths are visible.
+5. Open Diagnostics and confirm runtime/cache/storage cards load.
 
 If all of that works, your installation is healthy.
 

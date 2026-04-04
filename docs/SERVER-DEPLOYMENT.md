@@ -212,6 +212,8 @@ Without `.aniworld`, you lose:
 - accounts
 - favorites
 - stats archive
+- stats snapshots
+- provider score history
 - search history
 - UI preferences
 - audit log
@@ -227,6 +229,9 @@ You should still monitor:
 - free disk space
 - download destination permissions
 - reverse proxy reachability
+- diagnostics page health
+- cache warmup state on heavy libraries
+- VPN / tunnel state if the server depends on one
 
 ## 9. Recommended server defaults
 

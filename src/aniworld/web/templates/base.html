@@ -234,40 +234,6 @@
             </div>
           </div>
 
-          <div class="nav-menu nav-menu-notifications" id="notificationMenu">
-            <button
-              type="button"
-              class="top-bar-user nav-menu-trigger"
-              id="notificationTrigger"
-            >
-              Alerts
-              <span class="nav-badge" id="notificationBadge" style="display: none"
-                >0</span
-              >
-            </button>
-            <div class="nav-dropdown nav-dropdown-right notification-dropdown">
-              <div class="notification-dropdown-head">
-                <div class="nav-dropdown-static notification-dropdown-static">
-                  <span class="nav-dropdown-label">Notification Center</span>
-                  <span class="nav-dropdown-note"
-                    >Recent queue, sync, library, and settings notices.</span
-                  >
-                </div>
-                <button
-                  type="button"
-                  class="nav-dropdown-button notification-clear-btn"
-                  id="notificationClearBtn"
-                >
-                  Clear
-                </button>
-              </div>
-              <div class="notification-list" id="notificationCenterList"></div>
-              <div class="notification-empty" id="notificationCenterEmpty">
-                No notifications yet.
-              </div>
-            </div>
-          </div>
-
           {% if auth_enabled and current_user %}
           <div class="nav-menu nav-menu-profile">
             <button

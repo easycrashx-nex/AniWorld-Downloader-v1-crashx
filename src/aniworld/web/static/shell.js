@@ -3,11 +3,6 @@
   const statsBadge = document.getElementById("statsBadge");
   const settingsBadge = document.getElementById("settingsBadge");
   const queueBadge = document.getElementById("queueBadge");
-  const notificationMenu = document.getElementById("notificationMenu");
-  const notificationBadge = document.getElementById("notificationBadge");
-  const notificationList = document.getElementById("notificationCenterList");
-  const notificationEmpty = document.getElementById("notificationCenterEmpty");
-  const notificationClearBtn = document.getElementById("notificationClearBtn");
   const toast = document.getElementById("toast");
   const navMenus = Array.from(document.querySelectorAll(".nav-menu"));
   let navFallbackTimer = null;
@@ -139,54 +134,6 @@
     }
   }
 
-  function renderNotifications() {
-    if (!notificationList || !notificationEmpty) return;
-
-    if (!notifications.length) {
-      notificationList.innerHTML = "";
-      notificationEmpty.style.display = "block";
-    } else {
-      notificationEmpty.style.display = "none";
-      notificationList.innerHTML = notifications
-        .map((entry) => {
-          const level = String(entry.level || "info");
-          const levelClass =
-            level === "error"
-              ? "notification-item-error"
-              : level === "success"
-                ? "notification-item-success"
-                : level === "warning"
-                  ? "notification-item-warning"
-                  : "notification-item-info";
-          const source = String(entry.source || "App");
-          return (
-            '<div class="notification-item ' +
-            levelClass +
-            (entry.read ? "" : " is-unread") +
-            '">' +
-            '<div class="notification-item-top">' +
-            '<span class="notification-item-source">' +
-            escText(source) +
-            "</span>" +
-            '<span class="notification-item-time">' +
-            escText(formatNotificationTime(entry.createdAt)) +
-            "</span>" +
-            "</div>" +
-            '<div class="notification-item-message">' +
-            escText(entry.message) +
-            "</div>" +
-            "</div>"
-          );
-        })
-        .join("");
-    }
-
-    setBadge(
-      notificationBadge,
-      notifications.filter((entry) => !entry.read).length,
-    );
-  }
-
   function loadNotifications() {
     try {
       const raw = localStorage.getItem(notificationStorageKey());
@@ -195,26 +142,11 @@
       notifications = [];
     }
     notifications = Array.isArray(notifications) ? notifications.slice(0, 30) : [];
-    renderNotifications();
-  }
-
-  function markNotificationsRead() {
-    let changed = false;
-    notifications = notifications.map((entry) => {
-      if (entry.read) return entry;
-      changed = true;
-      return Object.assign({}, entry, { read: true });
-    });
-    if (changed) {
-      saveNotifications();
-      renderNotifications();
-    }
   }
 
   function clearNotifications() {
     notifications = [];
     saveNotifications();
-    renderNotifications();
   }
 
   function addNotification(message, options = {}) {
@@ -250,7 +182,6 @@
     }
 
     saveNotifications();
-    renderNotifications();
     if (notificationEntry && options.desktop !== false) {
       sendBrowserNotification(notificationEntry);
     }
@@ -503,19 +434,6 @@
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeNavMenus();
   });
-
-  if (notificationMenu) {
-    notificationMenu.addEventListener("mouseenter", markNotificationsRead);
-    notificationMenu.addEventListener("focusin", markNotificationsRead);
-  }
-
-  if (notificationClearBtn) {
-    notificationClearBtn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      clearNotifications();
-    });
-  }
 
   window.loadNavState = loadNavState;
   window.applyUiDensity = applyUiDensity;

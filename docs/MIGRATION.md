@@ -12,6 +12,7 @@ Choose this if you want to keep:
 - accounts
 - favorites
 - stats
+- provider score history
 - search history
 - Auto-Sync jobs
 
@@ -152,6 +153,8 @@ Use this after the first start of the new build:
 - Favorites open series modals correctly
 - Library loads
 - Auto-Sync page loads
+- Diagnostics page loads
+- Provider Health history loads
 
 If all of that works, the migration is complete.
 

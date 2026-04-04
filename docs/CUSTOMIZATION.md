@@ -9,10 +9,16 @@ This guide covers both permanent configuration and account-specific Web UI custo
 These are stored in the web database per user:
 
 - favorites
-- stats scope
 - search history
 - UI settings
 - browser notification settings
+
+Global/shared in the current build:
+
+- stats
+- provider score history
+- queue / timeline archive
+- diagnostics snapshots
 
 ## Server-wide settings changed only in the Web UI
 
@@ -23,6 +29,10 @@ These can reset after restart unless you also persist them in `.env` or Docker e
 - disable English Sub
 - Auto-Sync defaults
 - experimental FilmPalast flag
+- bandwidth limit
+- provider fallback order
+- disk guard thresholds
+- library auto-repair toggle
 
 ## 2. Config file location
 
@@ -104,6 +114,7 @@ The current build includes a large number of account-specific UI controls.
 - Density
 - UI Scale
 - Theme Color
+- Theme Preset
 - Card Radius
 - Animation Speed
 - Content Width
@@ -139,6 +150,24 @@ Important:
 - they work while the Web UI is open
 - this build does not use a service worker for closed-tab push notifications
 
+## Diagnostics and server visibility
+
+The current build exposes extra runtime/server visibility in Settings and Diagnostics, including:
+
+- bind host / port / LAN URLs
+- public IP detection
+- best-effort VPN / tunnel detection
+- disk guard visibility
+- cache warmup visibility
+
+Typical supported VPN/tunnel detection targets include:
+
+- WireGuard
+- OpenVPN / tun
+- Tailscale
+- PPP-based tunnels
+- Gluetun-like environments
+
 ## 5. Custom paths
 
 Settings supports custom named download paths.
@@ -161,9 +190,10 @@ With Web Auth enabled, each user can keep their own:
 
 - favorites
 - search history
-- stats scope
 - UI theme/settings
 - browser notification settings
+
+Stats and provider score history are global/shared in the current build.
 
 Admins can additionally manage:
 
@@ -198,6 +228,16 @@ The build currently exposes these provider options:
 - Doodstream
 
 Actual availability still depends on the source and episode.
+
+## Library and modal helpers
+
+The current build also adds:
+
+- Library-side `Add Selected To Auto-Sync`
+- duplicate-safe Auto-Sync creation from the Library
+- exact missing-episode labels in the Library
+- `Queue Missing` and `Auto-Repair Missing`
+- series modal helper for selecting only undownloaded episodes that match the current language
 
 ## 9. Best practice for stable customization
 
