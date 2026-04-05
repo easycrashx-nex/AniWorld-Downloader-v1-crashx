@@ -164,6 +164,21 @@
       Re-enables FilmPalast in the home area while the source is still in
       development.
     </div>
+
+    <label class="settings-checkbox">
+      <input
+        type="checkbox"
+        id="experimentalSelfHeal"
+        onchange="saveExperimentalSelfHeal()"
+      />
+      Experimental stuck download self-heal
+    </label>
+    <div class="settings-hint">
+      Watches active ffmpeg downloads for hard stalls, kills the stuck process
+      tree, and requeues the same job instead of letting it die in place. This
+      is off by default and can put extra load on the server while a broken
+      stream is being analyzed and recovered.
+    </div>
   </div>
 
   <div class="settings-section">

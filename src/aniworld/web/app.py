@@ -28,6 +28,10 @@ from flask_wtf.csrf import CSRFProtect
 from ..config import LANG_KEY_MAP, LANG_LABELS, SUPPORTED_PROVIDERS, VERSION
 from ..extractors import provider_functions
 from ..logger import get_logger
+from ..models.common.common import (
+    get_ffmpeg_runtime_state,
+    terminate_ffmpeg_process_tree,
+)
 from ..providers import resolve_provider
 from ..search import (
     fetch_new_animes,
@@ -97,6 +101,7 @@ from .db import (
     retry_queue_item,
     record_audit_event,
     record_search_query,
+    requeue_running_item,
     set_captcha_url,
     clear_captcha_url,
     set_user_preference,
@@ -126,6 +131,7 @@ _ENV_PROVIDER_FALLBACK_ORDER = "ANIWORLD_PROVIDER_FALLBACK_ORDER"
 _ENV_DISK_WARN_GB = "ANIWORLD_DISK_WARN_GB"
 _ENV_DISK_WARN_PERCENT = "ANIWORLD_DISK_WARN_PERCENT"
 _ENV_LIBRARY_AUTO_REPAIR = "ANIWORLD_LIBRARY_AUTO_REPAIR"
+_ENV_EXPERIMENTAL_SELF_HEAL = "ANIWORLD_EXPERIMENTAL_SELF_HEAL"
 
 
 def _experimental_flags():
@@ -763,6 +769,9 @@ def _settings_payload(
         "library_auto_repair": _normalize_pref_bool(
             os.environ.get(_ENV_LIBRARY_AUTO_REPAIR, "0")
         ),
+        "experimental_self_heal": _normalize_pref_bool(
+            os.environ.get(_ENV_EXPERIMENTAL_SELF_HEAL, "0")
+        ),
         "ui_preset": _normalize_ui_preset(ui_preset),
         "ui_mode": _normalize_ui_mode(ui_mode),
         "ui_scale": _normalize_ui_scale(ui_scale),
@@ -1216,6 +1225,16 @@ _queue_lock = threading.Lock()
 
 # Auto-sync worker state
 _autosync_worker_started = False
+_self_heal_worker_started = False
+_self_heal_worker_lock = threading.Lock()
+_queue_recovery_lock = threading.Lock()
+_queue_recovery_state = {}
+_self_heal_runtime = {
+    "enabled": False,
+    "last_action_at": 0.0,
+    "last_reason": "",
+    "last_queue_id": None,
+}
 
 # Track jobs currently being synced to prevent duplicate runs
 _syncing_jobs = set()
@@ -1243,6 +1262,105 @@ _runtime_cache = {}
 _runtime_cache_lock = threading.Lock()
 _runtime_cache_warmer_started = False
 _runtime_cache_warmer_lock = threading.Lock()
+
+
+def _self_heal_enabled():
+    return os.environ.get(_ENV_EXPERIMENTAL_SELF_HEAL, "0") == "1"
+
+
+def _record_self_heal_action(queue_id, reason):
+    _self_heal_runtime.update(
+        enabled=_self_heal_enabled(),
+        last_action_at=time.time(),
+        last_reason=str(reason or ""),
+        last_queue_id=queue_id,
+    )
+
+
+def _peek_queue_recovery(queue_id):
+    with _queue_recovery_lock:
+        entry = _queue_recovery_state.get(int(queue_id))
+        return copy.deepcopy(entry) if entry else None
+
+
+def _consume_queue_recovery(queue_id):
+    with _queue_recovery_lock:
+        entry = _queue_recovery_state.pop(int(queue_id), None)
+        return copy.deepcopy(entry) if entry else None
+
+
+def _build_self_heal_error_payload(existing_errors, reason, ffmpeg_state):
+    try:
+        errors = json.loads(existing_errors or "[]")
+    except Exception:
+        errors = []
+
+    errors.append(
+        {
+            "type": "self_heal",
+            "error": str(reason or "self-heal recovery"),
+            "message": "Experimental watchdog detected a stuck ffmpeg process and requeued the download.",
+            "ffmpeg": {
+                "pid": ffmpeg_state.get("pid"),
+                "label": ffmpeg_state.get("label"),
+                "started_at": ffmpeg_state.get("started_at"),
+                "last_progress_at": ffmpeg_state.get("last_progress_at"),
+                "stall_timeout": ffmpeg_state.get("stall_timeout"),
+            },
+            "recovered_at": int(time.time()),
+        }
+    )
+    return json.dumps(errors[-20:])
+
+
+def _attempt_self_heal_requeue(queue_item, reason, ffmpeg_state):
+    queue_id = int(queue_item["id"])
+    now = time.time()
+    with _queue_recovery_lock:
+        state = _queue_recovery_state.get(queue_id) or {
+            "attempts": 0,
+            "last_attempt_at": 0.0,
+        }
+        if now - float(state.get("last_attempt_at") or 0.0) < 45:
+            return False
+        state["attempts"] = int(state.get("attempts") or 0) + 1
+        state["last_attempt_at"] = now
+        state["reason"] = str(reason or "stuck ffmpeg")
+        _queue_recovery_state[queue_id] = state
+
+    errors_json = _build_self_heal_error_payload(
+        queue_item.get("errors"),
+        reason,
+        ffmpeg_state,
+    )
+    requeue_running_item(queue_id, errors_json=errors_json, clear_current_url=True)
+    _record_self_heal_action(queue_id, reason)
+    record_audit_event(
+        "download.self_healed",
+        username=queue_item.get("username"),
+        subject_type="download",
+        subject=queue_item.get("title"),
+        details={
+            "queue_id": queue_id,
+            "reason": reason,
+            "attempts": _peek_queue_recovery(queue_id).get("attempts", 0),
+            "ffmpeg_pid": ffmpeg_state.get("pid"),
+        },
+    )
+    _emit_ui_event("queue", "dashboard", "nav", min_interval=0.2)
+    return True
+
+
+def _self_heal_snapshot():
+    entry = copy.deepcopy(_self_heal_runtime)
+    last_action_at = float(entry.get("last_action_at") or 0.0)
+    return {
+        "enabled": bool(entry.get("enabled")),
+        "last_action_at": last_action_at or None,
+        "last_reason": entry.get("last_reason") or "",
+        "last_queue_id": entry.get("last_queue_id"),
+        "ffmpeg": get_ffmpeg_runtime_state(),
+    }
 
 
 def _cache_get(key, ttl_seconds):
@@ -1411,7 +1529,13 @@ def _build_diagnostics_payload():
             "fallback_order": _provider_fallback_order(),
             "library_auto_repair": os.environ.get(_ENV_LIBRARY_AUTO_REPAIR, "0")
             == "1",
+            "experimental_self_heal": _self_heal_enabled(),
         },
+        "self_heal": _safe(
+            _self_heal_snapshot,
+            {"enabled": False, "last_action_at": None, "last_reason": "", "last_queue_id": None, "ffmpeg": {}},
+            "self_heal",
+        ),
     }
 
 
@@ -1758,6 +1882,13 @@ def _download_episode_with_fallback(item, ep_url, selected_path):
                 }
             )
             errors.append(f"{provider_name}: {exc}")
+            if _peek_queue_recovery(item["id"]):
+                err = RuntimeError(
+                    _peek_queue_recovery(item["id"]).get("reason")
+                    or "Experimental self-heal requeued this job"
+                )
+                err.attempt_details = attempt_details
+                raise err
             if len(tried) == 1:
                 fallback_candidates = _get_provider_candidates_for_episode(
                     ep_url,
@@ -2264,6 +2395,7 @@ def _queue_worker():
 
             episodes = json.loads(item["episodes"])
             errors = []
+            requeued_by_self_heal = False
 
             # Language separation: compute subfolder path if enabled
             import os
@@ -2317,6 +2449,19 @@ def _queue_worker():
                 try:
                     _download_episode_with_fallback(item, ep_url, selected_path)
                 except Exception as e:
+                    recovery = _consume_queue_recovery(item["id"])
+                    if recovery:
+                        logger.warning(
+                            "Recovered stuck queue item %s (%s) and requeued it",
+                            item["id"],
+                            recovery.get("reason") or "self-heal",
+                        )
+                        requeued_by_self_heal = True
+                        update_queue_progress(item["id"], i, "")
+                        _emit_ui_event(
+                            "queue", "dashboard", "nav", min_interval=0.2
+                        )
+                        break
                     logger.error(f"Download failed for {ep_url}: {e}")
                     attempt_details = getattr(e, "attempt_details", None) or []
                     errors.append(
@@ -2335,6 +2480,8 @@ def _queue_worker():
                     _emit_ui_event("queue", "dashboard", "nav", min_interval=0.35)
 
                 # Check for cancellation after each episode
+                if requeued_by_self_heal:
+                    break
                 if is_queue_cancelled(item["id"]):
                     logger.info(f"Download cancelled for queue item {item['id']}")
                     update_queue_progress(item["id"], i + 1, "")
@@ -2342,6 +2489,8 @@ def _queue_worker():
                     break
 
             # Only set final status if not already cancelled
+            if requeued_by_self_heal:
+                continue
             if not is_queue_cancelled(item["id"]):
                 update_queue_progress(item["id"], len(episodes), "")
                 status = (
@@ -2391,6 +2540,71 @@ def _ensure_queue_worker():
         conn.close()
 
     thread = threading.Thread(target=_queue_worker, daemon=True)
+    thread.start()
+
+
+def _self_heal_watchdog():
+    while True:
+        try:
+            _self_heal_runtime["enabled"] = _self_heal_enabled()
+            if not _self_heal_enabled():
+                time.sleep(5)
+                continue
+
+            running_item = get_running()
+            ffmpeg_state = get_ffmpeg_runtime_state()
+            if not running_item or not ffmpeg_state.get("active"):
+                time.sleep(4)
+                continue
+
+            last_progress_at = float(ffmpeg_state.get("last_progress_at") or 0.0)
+            stall_timeout = int(ffmpeg_state.get("stall_timeout") or 0)
+            if not last_progress_at or not stall_timeout:
+                time.sleep(4)
+                continue
+
+            grace_period = max(150, min(stall_timeout // 2, 240))
+            stale_for = time.time() - last_progress_at
+            if stale_for < grace_period:
+                time.sleep(4)
+                continue
+
+            attempts = (_peek_queue_recovery(running_item["id"]) or {}).get(
+                "attempts", 0
+            )
+            reason = (
+                f"Stalled ffmpeg detected after {int(stale_for)}s without progress"
+            )
+            logger.warning(
+                "Experimental self-heal triggered for queue item %s: %s",
+                running_item["id"],
+                reason,
+            )
+            terminate_ffmpeg_process_tree(reason)
+            if _attempt_self_heal_requeue(running_item, reason, ffmpeg_state):
+                if attempts >= 3:
+                    logger.warning(
+                        "Queue item %s has been recovered multiple times and will remain queued for manual review if it stalls again.",
+                        running_item["id"],
+                    )
+            time.sleep(8)
+        except Exception as exc:
+            logger.error("Self-heal watchdog error: %s", exc, exc_info=True)
+            time.sleep(10)
+
+
+def _ensure_self_heal_worker():
+    global _self_heal_worker_started
+    with _self_heal_worker_lock:
+        if _self_heal_worker_started:
+            return
+        _self_heal_worker_started = True
+
+    thread = threading.Thread(
+        target=_self_heal_watchdog,
+        daemon=True,
+        name="aniworld-self-heal",
+    )
     thread.start()
 
 
@@ -2870,6 +3084,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     if not _debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         _ensure_queue_worker()
         _ensure_autosync_worker()
+        _ensure_self_heal_worker()
 
     @app.after_request
     def _set_security_headers(response):
@@ -3752,6 +3967,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             )
         if "library_auto_repair" in data:
             _set_bool_env(_ENV_LIBRARY_AUTO_REPAIR, data["library_auto_repair"])
+        if "experimental_self_heal" in data:
+            _set_bool_env(_ENV_EXPERIMENTAL_SELF_HEAL, data["experimental_self_heal"])
         if "lang_separation" in data:
             _set_bool_env(_ENV_LANG_SEPARATION, data["lang_separation"])
         if "disable_english_sub" in data:
@@ -4474,6 +4691,10 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 100,
             )
             _set_bool_env(_ENV_LIBRARY_AUTO_REPAIR, settings_payload.get("library_auto_repair", "0"))
+            _set_bool_env(
+                _ENV_EXPERIMENTAL_SELF_HEAL,
+                settings_payload.get("experimental_self_heal", "0"),
+            )
         counts = import_app_state(payload.get("tables") or payload)
         _record_user_event(
             "backup.imported",

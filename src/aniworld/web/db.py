@@ -660,6 +660,39 @@ def update_queue_errors(queue_id, errors_json):
         conn.close()
 
 
+def requeue_running_item(queue_id, errors_json=None, clear_current_url=True):
+    conn = get_db()
+    try:
+        current_url = "" if clear_current_url else None
+        if errors_json is None and current_url is None:
+            conn.execute(
+                "UPDATE download_queue SET status = 'queued', completed_at = NULL "
+                "WHERE id = ?",
+                (queue_id,),
+            )
+        elif errors_json is None:
+            conn.execute(
+                "UPDATE download_queue SET status = 'queued', completed_at = NULL, current_url = ? "
+                "WHERE id = ?",
+                (current_url, queue_id),
+            )
+        elif current_url is None:
+            conn.execute(
+                "UPDATE download_queue SET status = 'queued', completed_at = NULL, errors = ? "
+                "WHERE id = ?",
+                (errors_json, queue_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE download_queue SET status = 'queued', completed_at = NULL, current_url = ?, errors = ? "
+                "WHERE id = ?",
+                (current_url, errors_json, queue_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def set_captcha_url(queue_id: int, url: str):
     """Set the captcha_url field to signal the Web UI that a captcha needs solving."""
     conn = get_db()

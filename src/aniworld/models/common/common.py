@@ -4,8 +4,10 @@ import os
 import platform
 import re
 import shlex
+import signal
 import subprocess
 import sys
+import time
 import threading as _threading
 from typing import Tuple
 
@@ -151,6 +153,16 @@ _ffmpeg_progress = {
     "bandwidth": "",
     "active": False,
 }
+_ffmpeg_runtime = {
+    "active": False,
+    "pid": None,
+    "label": "",
+    "started_at": 0.0,
+    "last_progress_at": 0.0,
+    "stall_timeout": 0,
+    "reason": "",
+    "_process": None,
+}
 
 
 def _bandwidth_limit_output_kwargs():
@@ -172,6 +184,78 @@ def get_ffmpeg_progress():
     """Return a snapshot of the current ffmpeg download progress."""
     with _ffmpeg_progress_lock:
         return dict(_ffmpeg_progress)
+
+
+def get_ffmpeg_runtime_state():
+    """Return sanitized runtime state for the active ffmpeg process."""
+    with _ffmpeg_progress_lock:
+        return {
+            "active": bool(_ffmpeg_runtime.get("active")),
+            "pid": _ffmpeg_runtime.get("pid"),
+            "label": _ffmpeg_runtime.get("label") or "",
+            "started_at": float(_ffmpeg_runtime.get("started_at") or 0.0),
+            "last_progress_at": float(_ffmpeg_runtime.get("last_progress_at") or 0.0),
+            "stall_timeout": int(_ffmpeg_runtime.get("stall_timeout") or 0),
+            "reason": _ffmpeg_runtime.get("reason") or "",
+        }
+
+
+def _reset_ffmpeg_runtime_state():
+    _ffmpeg_runtime.update(
+        active=False,
+        pid=None,
+        label="",
+        started_at=0.0,
+        last_progress_at=0.0,
+        stall_timeout=0,
+        reason="",
+        _process=None,
+    )
+
+
+def _kill_ffmpeg_process_tree(process):
+    if process is None:
+        return False
+    try:
+        if process.poll() is not None:
+            return False
+    except Exception:
+        return False
+
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=5,
+            )
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            return False
+    return True
+
+
+def terminate_ffmpeg_process_tree(reason="manual stop"):
+    """Terminate the active ffmpeg process tree, if any."""
+    with _ffmpeg_progress_lock:
+        process = _ffmpeg_runtime.get("_process")
+        if not process:
+            return False
+        _ffmpeg_runtime["reason"] = str(reason or "manual stop")
+
+    killed = _kill_ffmpeg_process_tree(process)
+    if killed:
+        with _ffmpeg_progress_lock:
+            _ffmpeg_progress.update(
+                percent=0.0, time="", speed="", bandwidth="", active=False
+            )
+    return killed
 
 
 def _parse_ffmpeg_time(time_str):
@@ -207,7 +291,6 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     """
     import queue
     import threading
-    import time
 
     STALL_TIMEOUT = (
         600  # 10 minutes without progress → kill (must exceed reconnect_delay_max=300)
@@ -232,12 +315,20 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
         args.insert(-1, "-stats_period")
         args.insert(-1, stats_period)
 
-    process = subprocess.Popen(
-        args,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        universal_newlines=False,
-    )
+    popen_kwargs = {
+        "args": args,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.PIPE,
+        "universal_newlines": False,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    process = subprocess.Popen(**popen_kwargs)
 
     # --- reader thread: reads stderr byte-by-byte and pushes complete lines ---
     line_queue = queue.Queue()
@@ -271,9 +362,20 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     last_change = time.monotonic()
     total_duration = 0.0
 
+    started_at = time.time()
     with _ffmpeg_progress_lock:
         _ffmpeg_progress.update(
             percent=0.0, time="", speed="", bandwidth="", active=True
+        )
+        _ffmpeg_runtime.update(
+            active=True,
+            pid=process.pid,
+            label=label or "",
+            started_at=started_at,
+            last_progress_at=started_at,
+            stall_timeout=STALL_TIMEOUT,
+            reason="",
+            _process=process,
         )
 
     try:
@@ -287,7 +389,9 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                         "[FFmpeg] Stall detected – no progress for "
                         f"{STALL_TIMEOUT}s. Killing process."
                     )
-                    process.kill()
+                    with _ffmpeg_progress_lock:
+                        _ffmpeg_runtime["reason"] = "stall timeout"
+                    _kill_ffmpeg_process_tree(process)
                     break
                 continue
 
@@ -351,6 +455,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                         bandwidth=cur_bw_str or prev_bw,
                         active=True,
                     )
+                    _ffmpeg_runtime["last_progress_at"] = time.time()
 
                 if debug_mode:
                     logger.info(f"[FFmpeg Progress] {line_str}")
@@ -367,7 +472,9 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                         "[FFmpeg] Stall detected – no progress for "
                         f"{STALL_TIMEOUT}s. Killing process."
                     )
-                    process.kill()
+                    with _ffmpeg_progress_lock:
+                        _ffmpeg_runtime["reason"] = "stall timeout"
+                    _kill_ffmpeg_process_tree(process)
                     break
             elif line_str:
                 # Try to capture total duration from ffmpeg header
@@ -389,6 +496,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
             _ffmpeg_progress.update(
                 percent=0.0, time="", speed="", bandwidth="", active=False
             )
+            _reset_ffmpeg_runtime_state()
 
     reader_thread.join(timeout=5)
     process.wait()

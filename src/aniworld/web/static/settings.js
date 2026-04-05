@@ -5,6 +5,7 @@ const disableEnglishSubCb = document.getElementById("disableEnglishSub");
 const experimentalFilmpalastCb = document.getElementById(
   "experimentalFilmpalast",
 );
+const experimentalSelfHealCb = document.getElementById("experimentalSelfHeal");
 const uiPresetSelect = document.getElementById("uiPreset");
 const uiModeSelect = document.getElementById("uiMode");
 const uiScaleSelect = document.getElementById("uiScale");
@@ -393,6 +394,9 @@ async function loadSettings() {
         disableEnglishSubCb.checked = data.disable_english_sub === "1";
       if (experimentalFilmpalastCb)
         experimentalFilmpalastCb.checked = data.experimental_filmpalast === "1";
+      if (experimentalSelfHealCb) {
+        experimentalSelfHealCb.checked = data.experimental_self_heal === "1";
+      }
       if (uiPresetSelect) uiPresetSelect.value = data.ui_preset || "custom";
       if (uiModeSelect) uiModeSelect.value = data.ui_mode || "cozy";
       if (uiScaleSelect) uiScaleSelect.value = data.ui_scale || "100";
@@ -639,6 +643,21 @@ async function saveUiScale() {
     showToast("UI scale saved");
   } catch (e) {
     showToast("Failed to save UI scale: " + e.message);
+  }
+}
+
+async function saveExperimentalSelfHeal() {
+  if (!experimentalSelfHealCb) return;
+  try {
+    await updateSettings({
+      experimental_self_heal: experimentalSelfHealCb.checked,
+    });
+    showToast(
+      "Experimental self-heal " +
+        (experimentalSelfHealCb.checked ? "enabled" : "disabled"),
+    );
+  } catch (e) {
+    showToast("Failed to save self-heal setting: " + e.message);
   }
 }
 
