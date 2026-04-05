@@ -29,6 +29,7 @@ These can reset after restart unless you also persist them in `.env` or Docker e
 - disable English Sub
 - Auto-Sync defaults
 - experimental FilmPalast flag
+- experimental stuck-download self-heal
 - bandwidth limit
 - provider fallback order
 - disk guard thresholds
@@ -103,6 +104,7 @@ ANIWORLD_SYNC_PROVIDER=VOE
 
 ```env
 ANIWORLD_EXPERIMENTAL_FILMPALAST=0
+ANIWORLD_EXPERIMENTAL_SELF_HEAL=0
 ```
 
 ## 4. Web UI settings
@@ -168,6 +170,8 @@ Typical supported VPN/tunnel detection targets include:
 - PPP-based tunnels
 - Gluetun-like environments
 
+The experimental self-heal watchdog is also surfaced through Settings and Diagnostics. When enabled, it watches running ffmpeg downloads for hard stalls, kills the stuck ffmpeg process tree, and requeues the same queue item instead of letting it disappear. It is intentionally off by default because recovery attempts can add extra load when a broken stream has to be analyzed and retried.
+
 ## 5. Custom paths
 
 Settings supports custom named download paths.
@@ -215,7 +219,33 @@ or via `.env` / Docker env:
 ANIWORLD_EXPERIMENTAL_FILMPALAST=1
 ```
 
-## 8. Provider notes
+## 8. Experimental self-heal
+
+This build includes an optional stuck-download recovery mechanism for hard ffmpeg hangs.
+
+You can enable it in:
+
+- `Settings > Development`
+
+or via `.env` / Docker env:
+
+```env
+ANIWORLD_EXPERIMENTAL_SELF_HEAL=1
+```
+
+What it does:
+
+- monitors the active ffmpeg download for lack of progress
+- kills a stuck ffmpeg process tree
+- requeues the same download job instead of losing it
+
+What it does not do:
+
+- it does not rewrite provider code
+- it does not act like a general AI debugger
+- it is not meant for normal provider failures that already flow through retry/fallback logic
+
+## 9. Provider notes
 
 The build currently exposes these provider options:
 
@@ -239,7 +269,7 @@ The current build also adds:
 - `Queue Missing` and `Auto-Repair Missing`
 - series modal helper for selecting only undownloaded episodes that match the current language
 
-## 9. Best practice for stable customization
+## 10. Best practice for stable customization
 
 If a setting should survive restarts, prefer one of these:
 

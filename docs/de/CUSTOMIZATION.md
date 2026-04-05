@@ -31,6 +31,7 @@ Wenn du sie restart-sicher willst, auch in `.env` oder Docker-Env setzen:
 - Provider Fallback Order
 - Disk Guard Thresholds
 - Library Auto-Repair Toggle
+- Experimental stuck-download self-heal
 
 ## 2. Config-Datei
 
@@ -68,6 +69,7 @@ ANIWORLD_SYNC_PROVIDER=VOE
 
 ```env
 ANIWORLD_EXPERIMENTAL_FILMPALAST=0
+ANIWORLD_EXPERIMENTAL_SELF_HEAL=0
 ```
 
 ## 4. UI Settings
@@ -133,7 +135,31 @@ Typische erkannte Setups:
 - PPP-Tunnel
 - Gluetun-aehnliche Setups
 
-## 8. Library- und Modal-Helfer
+Das experimentelle Self-Heal wird ebenfalls in Settings und Diagnostics sichtbar gemacht. Wenn es aktiviert ist, beobachtet es laufende ffmpeg-Downloads auf harte Hänger, beendet den hängenden Prozessbaum und legt denselben Queue-Job wieder in `queued`, statt ihn zu verlieren. Standardmaessig bleibt es aus, weil die Recovery bei kaputten Streams zusaetzliche Last erzeugen kann.
+
+## 8. Experimentelles Self-Heal
+
+Aktivierbar in:
+
+- `Settings > Development`
+
+oder ueber `.env` / Docker-Env:
+
+```env
+ANIWORLD_EXPERIMENTAL_SELF_HEAL=1
+```
+
+Es ist gedacht fuer:
+
+- echte ffmpeg-Haenger
+- Queue-Rettung ohne Server-Neustart
+
+Es ist nicht gedacht als:
+
+- allgemeiner AI-Debugger
+- Ersatz fuer normale Retry-/Fallback-Logik
+
+## 9. Library- und Modal-Helfer
 
 Aktuell enthalten:
 
@@ -144,7 +170,7 @@ Aktuell enthalten:
 - `Auto-Repair Missing`
 - Modal-Aktion fuer nur undownloadete Folgen passend zur aktuellen Sprache
 
-## 9. Provider
+## 10. Provider
 
 Der Build bietet aktuell:
 

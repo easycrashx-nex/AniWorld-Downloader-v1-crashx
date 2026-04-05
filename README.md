@@ -2,7 +2,7 @@
 
 # AniWorld Downloader 5.0.0
 
-This repository contains a customized AniWorld Downloader source build with a heavily expanded Web UI, multi-user support, per-account preferences, a persistent history/archive flow, Auto-Sync management, browser notifications, library comparison, provider health, audit logging, and a large amount of UI customization.
+This repository contains a customized AniWorld Downloader source build with a heavily expanded Web UI, multi-user support, per-account preferences, a persistent history/archive flow, Auto-Sync management, browser notifications, library comparison, provider health, audit logging, experimental stuck-download self-heal recovery, and a large amount of UI customization.
 
 This README documents the build that exists in this repository right now, not the older upstream defaults.
 
@@ -24,12 +24,13 @@ English is the default documentation language for this repository.
 - dedicated Diagnostics page for runtime, cache, storage, and worker visibility
 - queue modal with live progress, bandwidth, retries, captcha handling, and cleanup actions
 - timeline backed by a separate archive so clearing finished queue items does not wipe history
+- experimental self-heal watchdog for stuck ffmpeg downloads that requeues the job instead of dropping it
 - library compare / missing episode detection against the source
 - library-side bulk selection with direct `Add Selected To Auto-Sync`
 - missing-episode lists with direct queue / repair actions
 - Auto-Sync with single, selected, and all-job sync triggers
 - per-series modal helper for selecting undownloaded episodes that match the chosen language
-- per-user notification center plus optional browser notifications
+- per-user browser notification preferences
 - large UI customization surface: density, scale, theme colors, radius, nav size, modal width, animation speed, table density, and background effects
 - theme presets, diagnostics, provider score history, backup / import, disk guard, VPN / tunnel detection, and bandwidth limiting
 - Docker and Docker Compose setup for local servers, VPS setups, NAS boxes, mini PCs, and other always-on hosts
@@ -174,6 +175,7 @@ Typical examples:
 - language separation
 - Auto-Sync defaults
 - experimental source toggles
+- experimental stuck-download self-heal toggle
 
 ### Browser notifications
 
@@ -187,11 +189,13 @@ The current build also includes:
 - disk guard thresholds and free-space visibility
 - server bind host, LAN URLs, and open URLs in Settings
 - best-effort VPN / tunnel detection for common setups such as WireGuard, OpenVPN, Tailscale, and Gluetun-like environments
+- self-heal/runtime visibility for stuck-download recovery when the experimental watchdog is enabled
 
 ### Queue vs Timeline
 
 - Queue is the live working area for active and pending jobs.
 - Timeline is the archive/history view.
+- Experimental self-heal can requeue a stuck running job instead of letting it die in place.
 
 Clearing finished queue items does not clear Timeline anymore.
 

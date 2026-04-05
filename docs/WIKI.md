@@ -61,6 +61,7 @@ German versions are available in:
 ## Important project-specific notes
 
 - Queue and Timeline are separate now. Clearing finished queue items does not wipe Timeline.
+- Experimental self-heal can requeue a stuck ffmpeg download instead of dropping the queue item.
 - Favorites, search history, UI settings, and browser notification preferences are per account.
 - Stats and provider score history are global in the current build.
 - Browser notifications require an open browser tab. Service-worker push is intentionally not used.

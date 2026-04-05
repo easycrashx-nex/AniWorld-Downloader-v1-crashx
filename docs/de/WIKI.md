@@ -59,6 +59,7 @@ Die englische Dokumentation bleibt der Hauptstand:
 ## Build-spezifische Hinweise
 
 - Queue und Timeline sind getrennt. `Clear Finished` leert nicht die Timeline.
+- Das experimentelle Self-Heal kann einen haengenden ffmpeg-Download wieder in die Queue legen, statt den Job zu verlieren.
 - Favorites, Search History, UI-Settings und Browser-Notification-Settings sind pro Account.
 - Stats und Provider Score History sind global.
 - Browser-Notifications funktionieren bei offenem Tab. Service Worker / PWA Push wird absichtlich nicht genutzt.

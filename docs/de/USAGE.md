@@ -68,6 +68,7 @@ Wichtig:
 
 - Timeline ist getrennt von Queue
 - `Clear Finished` leert nicht die Timeline
+- einzelne Timeline-Eintraege koennen direkt geloescht werden
 
 ### Radar
 
@@ -83,6 +84,8 @@ Du siehst dort:
 - Fortschritt, Speed, ETA
 - Retry / Cancel / Clear Finished
 - Captcha-Hinweise
+
+Wenn `Experimental stuck download self-heal` in den Settings aktiviert ist, kann der Downloader einen echten ffmpeg-Haenger erkennen, den haengenden Prozessbaum beenden und denselben Job wieder in `queued` setzen. Das ist nur fuer harte Stalls gedacht, nicht fuer normale Provider-Fehler.
 
 ## Settings
 
@@ -111,6 +114,7 @@ Hier kannst du verwalten:
 - Backup Export / Import Restore
 - VPN-/Tunnel-Sichtbarkeit
 - Development-Optionen wie FilmPalast
+- experimentelles stuck-download self-heal
 
 ### Auto-Sync
 
@@ -144,19 +148,7 @@ Diagnostics zeigt:
 - Cache Warmup und Cache-Alter
 - Disk Guard Infos
 - Server / Bind / LAN / Open URL Infos
-
-## Alerts
-
-`Alerts` ist das In-App Notification Center.
-
-Es sammelt Meldungen fuer:
-
-- Browse
-- Queue
-- Auto-Sync
-- Library
-- Settings
-- System
+- Self-Heal-Status fuer stuck-download recovery, wenn aktiviert
 
 ## Serien-Modal
 

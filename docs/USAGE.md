@@ -76,6 +76,7 @@ It shows:
 - cancelled downloads
 - error details
 - retry actions
+- delete actions for individual archive entries
 
 Important:
 
@@ -102,6 +103,9 @@ Use it to:
 - retry failed items
 - clear finished queue items
 - solve captcha prompts when required
+- keep the live working set separate from the Timeline archive
+
+If `Experimental stuck download self-heal` is enabled in Settings, the downloader can detect a hard ffmpeg stall, kill the stuck process tree, and requeue the same job instead of losing it. This is meant for real hangs, not normal provider failures.
 
 Queue is for current and pending work. Timeline is for archive/history.
 
@@ -128,6 +132,7 @@ Settings lets you manage:
 - Auto-Sync defaults
 - download behavior
 - development toggles such as experimental FilmPalast
+- experimental stuck-download self-heal
 - disk guard thresholds
 - bandwidth limit
 - provider fallback order
@@ -176,21 +181,9 @@ Diagnostics shows:
 - disk guard visibility
 - server bind / LAN / open URL information
 - live process information from the running web backend
+- self-heal state for stuck download recovery when enabled
 
-## Alerts
-
-The `Alerts` menu is the in-app notification center.
-
-It stores recent notices for:
-
-- Browse
-- Queue
-- Auto-Sync
-- Library
-- Settings
-- system/general messages
-
-Browser notifications can also be enabled in Settings, but they only work while the browser tab is open.
+Browser notifications can be enabled in Settings, but they only work while the browser tab is open.
 
 ## Series modal
 
