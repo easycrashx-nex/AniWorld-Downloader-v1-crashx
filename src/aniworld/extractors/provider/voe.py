@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+from urllib.parse import urlparse
 
 import niquests
 
@@ -103,8 +104,13 @@ def extract_voe_source_from_html(html):
 # -----------------------------
 def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, timeout=30):
     """Get direct VOE video URL with improved retry logic."""
-    if not (embeded_voe_link or "").strip():
+    embeded_voe_link = (embeded_voe_link or "").strip()
+    if not embeded_voe_link:
         raise ValueError("No VOE link provided.")
+
+    parsed_embed_url = urlparse(embeded_voe_link)
+    if not parsed_embed_url.scheme or not parsed_embed_url.netloc:
+        raise ValueError(f"Invalid VOE URL: {embeded_voe_link!r}")
 
     if headers is None:
         headers = PROVIDER_HEADERS_D.get("VOE", {"User-Agent": DEFAULT_USER_AGENT})
@@ -205,6 +211,10 @@ def get_direct_link_from_voe(embeded_voe_link, headers=None, max_retries=3, time
 def get_preview_image_link_from_voe(embeded_voe_link, headers=None):
     """Get VOE preview image URL."""
     try:
+        parsed_embed_url = urlparse((embeded_voe_link or "").strip())
+        if not parsed_embed_url.scheme or not parsed_embed_url.netloc:
+            raise ValueError(f"Invalid VOE URL: {embeded_voe_link!r}")
+
         if headers is None:
             headers = PROVIDER_HEADERS_D.get("VOE", {"User-Agent": DEFAULT_USER_AGENT})
 
