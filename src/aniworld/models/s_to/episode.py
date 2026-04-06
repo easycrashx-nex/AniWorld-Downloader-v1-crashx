@@ -307,14 +307,16 @@ class SerienstreamEpisode:
 
             parsed_provider = urlparse((self.__provider_url or "").strip())
             redirect_netloc = urlparse(self.redirect_url).netloc
-            if (
-                not parsed_provider.scheme
-                or not parsed_provider.netloc
-                or parsed_provider.netloc == redirect_netloc
-            ):
+            if not parsed_provider.scheme or not parsed_provider.netloc:
                 raise ValueError(
                     f"Failed to resolve provider URL for {self.selected_provider} "
                     f"from redirect {self.redirect_url}"
+                )
+            if parsed_provider.netloc == redirect_netloc:
+                logger.warning(
+                    "SerienStream provider URL still points to redirect host for %s: %s",
+                    self.selected_provider,
+                    self.__provider_url,
                 )
         return self.__provider_url
 
