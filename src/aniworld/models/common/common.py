@@ -194,7 +194,9 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     import threading
     import time
 
-    STALL_TIMEOUT = 600  # 10 minutes without progress → kill (must exceed reconnect_delay_max=300)
+    STALL_TIMEOUT = (
+        600  # 10 minutes without progress → kill (must exceed reconnect_delay_max=300)
+    )
 
     debug_mode = os.getenv("ANIWORLD_DEBUG_MODE", "0") == "1"
     is_tty = sys.stderr.isatty()
@@ -204,9 +206,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     _RE_TIME = re.compile(r"time=(\S+)")
     _RE_SPEED = re.compile(r"speed=\s*(\S+)")
     _RE_BITRATE = re.compile(r"bitrate=\s*(\S+)")
-    _RE_SIZE = re.compile(
-        r"size=\s*(\d+(?:\.\d+)?)\s*([kKmM])(?:i)?B", re.IGNORECASE
-    )
+    _RE_SIZE = re.compile(r"size=\s*(\d+(?:\.\d+)?)\s*([kKmM])(?:i)?B", re.IGNORECASE)
     _RE_DURATION = re.compile(r"Duration:\s*(\d+:\d+:\d+\.\d+)")
 
     # Use shorter stats_period for smoother progress (1s in non-debug, 10s in debug)
@@ -218,7 +218,10 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
         args.insert(-1, stats_period)
 
     process = subprocess.Popen(
-        args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, universal_newlines=False
+        args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        universal_newlines=False,
     )
 
     # --- reader thread: reads stderr byte-by-byte and pushes complete lines ---
@@ -254,7 +257,9 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     total_duration = 0.0
 
     with _ffmpeg_progress_lock:
-        _ffmpeg_progress.update(percent=0.0, time="", speed="", bandwidth="", active=True)
+        _ffmpeg_progress.update(
+            percent=0.0, time="", speed="", bandwidth="", active=True
+        )
 
     try:
         while True:
@@ -303,14 +308,14 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                 if m:
                     size_val = float(m.group(1))
                     size_unit = m.group(2).lower()
-                    size_kb = size_val * (1000 if size_unit == "m" else 1)
+                    size_kb = size_val * (1024 if size_unit == "m" else 1)
                     now = time.monotonic()
                     if last_size_kb is not None and last_size_ts is not None:
                         dt = now - last_size_ts
                         if dt > 0:
                             kb_per_sec = (size_kb - last_size_kb) / dt
                             if kb_per_sec > 0:
-                                mb_per_sec = kb_per_sec / 1000
+                                mb_per_sec = kb_per_sec / 1024
                                 cur_bw_str = f"{mb_per_sec:.1f} MB/s"
                     last_size_kb = size_kb
                     last_size_ts = now
@@ -373,7 +378,11 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     reader_thread.join(timeout=5)
     process.wait()
     if process.returncode != 0:
-        detail = "\n".join(stderr_lines[-20:]) if stderr_lines else f"exit code {process.returncode}"
+        detail = (
+            "\n".join(stderr_lines[-20:])
+            if stderr_lines
+            else f"exit code {process.returncode}"
+        )
         logger.error(f"[FFmpeg] Process failed (rc={process.returncode}):\n{detail}")
         raise RuntimeError(f"ffmpeg error (rc={process.returncode}): {detail}")
 
@@ -542,7 +551,12 @@ def download(self):
 
         except Exception as e:
             # Clean up temp files from failed attempt
-            for suffix in (".temp_full.mkv", ".temp_audio.mkv", ".temp_video.mkv", ".new.mkv"):
+            for suffix in (
+                ".temp_full.mkv",
+                ".temp_audio.mkv",
+                ".temp_video.mkv",
+                ".new.mkv",
+            ):
                 temp = self._episode_path.with_suffix(suffix)
                 if temp.exists():
                     temp.unlink()

@@ -1,6 +1,6 @@
 [project]
 name = "aniworld"
-version = "4.2.1"
+version = "4.3.0"
 authors = [{ name = "Phoenixthrush UwU", email = "contact@phoenixthrush.com" }]
 maintainers = [
   { name = "Phoenixthrush UwU", email = "contact@phoenixthrush.com" },
@@ -22,6 +22,7 @@ dependencies = [
   "waitress",
   "packaging",
   "cryptography",
+  "patchright",
   'windows-curses<3.14; sys_platform == "win32" and python_version < "3.14"', # npyscreen on Windows
 ]
 

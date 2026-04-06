@@ -58,6 +58,18 @@
     </div>
     {% block content %}{% endblock %}
 
+    <footer class="site-footer">
+      <p>
+        AniWorld Downloader is open source.
+        <a
+          href="https://github.com/phoenixthrush/AniWorld-Downloader"
+          target="_blank"
+          rel="noopener noreferrer"
+          >View the project on GitHub</a
+        >.
+      </p>
+    </footer>
+
     <div
       class="queue-overlay"
       id="queueOverlay"
@@ -72,6 +84,29 @@
 
     <div class="toast" id="toast"></div>
     <script src="{{ url_for('static', filename='queue.js') }}"></script>
+
+    <div
+      class="captcha-overlay"
+      id="captchaOverlay"
+      onclick="if (event.target === this) closeCaptchaModal();"
+    >
+      <div class="captcha-modal">
+        <button class="close" onclick="closeCaptchaModal()">&times;</button>
+        <h2 class="queue-modal-title">&#128274; Captcha lösen</h2>
+        <p id="captchaHint" class="captcha-hint">
+          Klick auf die Darstellung um mit dem Browser zu interagieren.
+        </p>
+        <div class="captcha-screen-wrap">
+          <img
+            id="captchaScreenshot"
+            class="captcha-screen"
+            alt="Captcha Browser"
+            draggable="false"
+          />
+        </div>
+      </div>
+    </div>
+
     {% block scripts %}{% endblock %}
   </body>
 </html>
