@@ -413,7 +413,7 @@ function renderQueue(items) {
           queueActionButton(
             "queue-action-btn queue-action-secondary",
             "Solve Captcha",
-            "openCaptchaModal(" + item.id + ")",
+            "openCaptchaPage(" + item.id + ")",
             "Solve captcha",
           ),
         );
@@ -666,6 +666,19 @@ function openCaptchaModal(queueId) {
       /* ignore */
     }
   }, 1500);
+}
+
+function openCaptchaPage(queueId) {
+  const targetUrl = "/captcha/" + queueId;
+  const popup = window.open(targetUrl, "_blank", "noopener");
+  if (!popup) {
+    window.location.href = targetUrl;
+    return;
+  }
+  popup.focus();
+  if (typeof showToast === "function") {
+    showToast("Captcha opened in a new tab.");
+  }
 }
 
 function closeCaptchaModal() {

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Solve Captcha - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container insight-shell captcha-page-shell">
+  <div class="page-header">
+    <span class="eyebrow">Queue Recovery</span>
+    <h1>Solve Captcha</h1>
+    <p class="page-description">
+      Complete the captcha in this tab. Once it is solved, the running download
+      continues in the background and you can switch back to the downloader.
+    </p>
+  </div>
+
+  <section class="dashboard-panel captcha-page-panel">
+    <div class="section-heading">
+      <div>
+        <span class="section-kicker">Session</span>
+        <h2 class="browse-heading">
+          {{ queue_item.title if queue_item else ('Queue Item #' ~ queue_id) }}
+        </h2>
+      </div>
+      <p class="section-description">
+        Click inside the live browser surface below to interact with the
+        captcha.
+      </p>
+    </div>
+
+    <div class="captcha-page-meta">
+      <span class="episode-chip">Queue #{{ queue_id }}</span>
+      {% if queue_item and queue_item.language %}
+      <span class="episode-chip">{{ queue_item.language }}</span>
+      {% endif %}
+      {% if queue_item and queue_item.provider %}
+      <span class="episode-chip">{{ queue_item.provider }}</span>
+      {% endif %}
+      <span class="episode-chip" id="captchaPageState">Waiting</span>
+    </div>
+
+    <p id="captchaPageHint" class="captcha-page-hint">
+      Connecting to the running captcha session...
+    </p>
+
+    <div class="captcha-page-screen-wrap">
+      <img
+        id="captchaPageScreenshot"
+        class="captcha-page-screen"
+        alt="Captcha Browser"
+        draggable="false"
+      />
+    </div>
+
+    <div class="captcha-page-actions">
+      <button class="queue-action-btn queue-action-secondary" id="captchaReloadBtn" type="button">
+        Refresh
+      </button>
+      <button class="queue-action-btn queue-action-primary" id="captchaBackBtn" type="button">
+        Back To Downloader
+      </button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.CAPTCHA_QUEUE_ID = {{ queue_id|tojson }};
+  window.CAPTCHA_RETURN_URL = {{ request.referrer|default(url_for('index'))|tojson }};
+</script>
+<script src="{{ url_for('static', filename='captcha.js') }}"></script>
+{% endblock %}

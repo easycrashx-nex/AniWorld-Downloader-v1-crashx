@@ -4944,6 +4944,69 @@ input[type="checkbox"] {
   cursor: crosshair;
 }
 
+.captcha-page-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.captcha-page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.captcha-page-hint {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 0.96rem;
+}
+
+.captcha-page-screen-wrap {
+  overflow: hidden;
+  border-radius: calc(var(--card-radius) + 6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  min-height: 420px;
+}
+
+.captcha-page-screen {
+  width: 100%;
+  min-height: 400px;
+  display: block;
+  border-radius: calc(var(--card-radius) + 2px);
+  cursor: crosshair;
+  object-fit: contain;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 46%),
+    rgba(5, 10, 20, 0.8);
+}
+
+.captcha-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+#captchaPageState.is-success {
+  border-color: color-mix(in srgb, var(--success) 32%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, rgba(255, 255, 255, 0.04));
+  color: var(--success);
+}
+
+#captchaPageState.is-warning {
+  border-color: color-mix(in srgb, var(--gold) 32%, transparent);
+  background: color-mix(in srgb, var(--gold) 12%, rgba(255, 255, 255, 0.04));
+  color: var(--gold);
+}
+
+#captchaPageState.is-error {
+  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, rgba(255, 255, 255, 0.04));
+  color: var(--danger);
+}
+
 .library-location-header {
   background: rgba(86, 182, 255, 0.08);
 }

@@ -326,6 +326,8 @@ def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
 
         session.result_url = result_url or final_url
         session.done = True
+        if solved:
+            _time.sleep(2.0)
 
         with _captcha_state_lock:
             _captcha_state = None
@@ -441,7 +443,7 @@ def solve_sto_modal(episode_url: str, provider_name: str, language_label: str):
             weiter_clicked = False
             start = _time.time()
 
-            while _time.time() - start < 90:
+            while _time.time() - start < 300:
                 # WebUI: stream screenshots + forward user clicks
                 if session_obj is not None:
                     try:
@@ -525,6 +527,8 @@ def solve_sto_modal(episode_url: str, provider_name: str, language_label: str):
         if session_obj is not None:
             session_obj.result_url = final_url
             session_obj.done = True
+            if final_url:
+                _time.sleep(2.0)
 
         return final_url
 

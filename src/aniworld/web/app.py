@@ -27,7 +27,14 @@ from flask import (
 )
 from flask_wtf.csrf import CSRFProtect
 
-from ..config import LANG_KEY_MAP, LANG_LABELS, SUPPORTED_PROVIDERS, VERSION
+from ..config import (
+    DEFAULT_USER_AGENT,
+    GLOBAL_SESSION,
+    LANG_KEY_MAP,
+    LANG_LABELS,
+    SUPPORTED_PROVIDERS,
+    VERSION,
+)
 from ..extractors import provider_functions
 from ..logger import get_logger
 from ..models.common.common import (
@@ -1002,7 +1009,23 @@ def _absolute_asset_url(source_url, asset_url):
         return None
     from urllib.parse import urljoin
 
-    return urljoin(source_url, asset_url)
+    absolute_url = urljoin(source_url, asset_url)
+    parsed = urlparse(absolute_url)
+    host = (parsed.netloc or "").lower()
+    if host in {"s.to", "serienstream.to"} and parsed.path.startswith("/media/images/"):
+        return url_for("api_image_proxy", src=absolute_url)
+    return absolute_url
+
+
+def _image_proxy_allowed(source_url):
+    if not source_url:
+        return False
+    try:
+        parsed = urlparse(source_url)
+    except Exception:
+        return False
+    host = (parsed.netloc or "").lower()
+    return host in {"s.to", "serienstream.to"} and parsed.path.startswith("/media/images/")
 
 
 def _resolve_base_path(raw_value):
@@ -3537,6 +3560,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                         {
                             "title": title,
                             "url": f"https://s.to{link}",
+                            "poster_url": _absolute_asset_url(
+                                "https://s.to",
+                                item.get("poster_url") or "",
+                            )
+                            or "",
                         }
                     )
         else:
@@ -4078,6 +4106,45 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         return jsonify({"active": True, "done": session.done})
 
     # ─────────────────────────────────────────────────────────────────────────
+
+    @app.route("/captcha/<int:queue_id>")
+    def captcha_page(queue_id):
+        queue_item = next(
+            (item for item in get_queue() if int(item.get("id") or 0) == queue_id),
+            None,
+        )
+        return render_template(
+            "captcha.html",
+            queue_id=queue_id,
+            queue_item=queue_item,
+        )
+
+    @app.route("/api/image-proxy")
+    def api_image_proxy():
+        source_url = (request.args.get("src") or "").strip()
+        if not _image_proxy_allowed(source_url):
+            return jsonify({"error": "image source is not allowed"}), 400
+
+        try:
+            response = GLOBAL_SESSION.get(
+                source_url,
+                headers={
+                    "User-Agent": DEFAULT_USER_AGENT,
+                    "Referer": "https://s.to/",
+                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                },
+                timeout=20,
+            )
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "image/jpeg")
+            return Response(
+                response.content,
+                mimetype=content_type,
+                headers={"Cache-Control": "public, max-age=1800"},
+            )
+        except Exception as exc:
+            logger.warning("Image proxy failed for %s: %s", source_url, exc)
+            return jsonify({"error": "image could not be loaded"}), 502
 
     @app.route("/library")
     def library_page():
