@@ -4646,6 +4646,10 @@ input[type="checkbox"] {
   backdrop-filter: blur(14px);
 }
 
+.settings-update-overlay[hidden] {
+  display: none !important;
+}
+
 .settings-update-panel {
   width: min(480px, 100%);
   display: grid;
