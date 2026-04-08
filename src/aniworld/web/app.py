@@ -687,6 +687,27 @@ def _start_update_worker(requested_by=None):
     return True
 
 
+def _restart_process_worker():
+    time.sleep(0.8)
+    python_exe = sys.executable or ""
+    restart_args = [python_exe, "-m", "aniworld", *sys.argv[1:]]
+    try:
+        os.execv(python_exe, restart_args)
+    except Exception:
+        logger.exception("Could not restart downloader process via execv")
+        os._exit(1)
+
+
+def _start_restart_worker():
+    thread = threading.Thread(
+        target=_restart_process_worker,
+        daemon=True,
+        name="aniworld-process-restart",
+    )
+    thread.start()
+    return True
+
+
 def _disk_guard_snapshot():
     from pathlib import Path
 
@@ -5132,6 +5153,28 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             details={"requested_by": username},
         )
         return jsonify(_update_status_payload(force=True, can_apply=True))
+
+    @app.route("/api/system/restart", methods=["POST"])
+    def api_system_restart():
+        username, is_admin = _get_current_user_info()
+        if not is_admin:
+            return jsonify({"error": "Only admins can restart the downloader."}), 403
+        runtime = _get_update_runtime()
+        if runtime.get("active"):
+            return jsonify({"error": "Wait for the running update to finish first."}), 409
+        _record_user_event(
+            "system.restart_requested",
+            subject_type="system",
+            subject="process-restart",
+            details={"requested_by": username},
+        )
+        _start_restart_worker()
+        return jsonify(
+            {
+                "ok": True,
+                "message": "Restarting downloader. Reload this page in a few seconds.",
+            }
+        )
 
     @app.route("/api/custom-paths", methods=["POST"])
     def api_custom_paths_add():

@@ -82,6 +82,7 @@ const updateRemoteCommitValue = document.getElementById(
 );
 const updateStatusNote = document.getElementById("updateStatusNote");
 const updateCheckBtn = document.getElementById("updateCheckBtn");
+const restartAppBtn = document.getElementById("restartAppBtn");
 const updateApplyBtn = document.getElementById("updateApplyBtn");
 const settingsUpdateOverlay = document.getElementById("settingsUpdateOverlay");
 const settingsUpdateOverlayMessage = document.getElementById(
@@ -115,6 +116,7 @@ let customPathsRequest = null;
 let updateStatusRequest = null;
 let updatePollTimer = null;
 let updateOverlayDismissed = false;
+let restartInFlight = false;
 const UPDATE_POLL_IDLE_MS = 300000;
 const UPDATE_POLL_ACTIVE_MS = 2500;
 const SYNC_LANGUAGE_OPTIONS = ["German Dub", "English Sub", "German Sub"];
@@ -414,11 +416,26 @@ function renderUpdateStatus(data) {
   }
 
   if (updateCheckBtn) {
-    updateCheckBtn.disabled = active;
+    updateCheckBtn.disabled = active || restartInFlight;
     updateCheckBtn.textContent = active ? "Checking..." : "Check Now";
   }
+  if (restartAppBtn) {
+    restartAppBtn.disabled = active || restartInFlight || !supported || !canApply;
+    restartAppBtn.textContent = restartInFlight ? "Restarting..." : "Restart";
+    restartAppBtn.title = !canApply
+      ? "Only admins can restart the downloader"
+      : active
+        ? "Wait for the running update to finish first"
+        : "";
+  }
   if (updateApplyBtn) {
-    updateApplyBtn.disabled = active || !supported || !canApply || !updateAvailable || dirty;
+    updateApplyBtn.disabled =
+      active ||
+      restartInFlight ||
+      !supported ||
+      !canApply ||
+      !updateAvailable ||
+      dirty;
     updateApplyBtn.textContent = active ? "Updating..." : "Update Now";
     updateApplyBtn.title = !canApply
       ? "Only admins can apply updates"
@@ -525,6 +542,63 @@ async function startWebUpdate() {
       can_apply: true,
     });
     showToast("Update could not be started: " + e.message);
+  }
+}
+
+async function restartDownloaderFromSettings() {
+  if (!restartAppBtn || restartAppBtn.disabled) return;
+  restartInFlight = true;
+  updateOverlayDismissed = false;
+  if (updateCheckBtn) updateCheckBtn.disabled = true;
+  if (restartAppBtn) {
+    restartAppBtn.disabled = true;
+    restartAppBtn.textContent = "Restarting...";
+  }
+  if (updateApplyBtn) updateApplyBtn.disabled = true;
+  if (settingsUpdateOverlayMessage) {
+    settingsUpdateOverlayMessage.textContent =
+      "Restarting downloader. Reload this page in a few seconds.";
+  }
+  if (settingsUpdateOverlayPhase) {
+    settingsUpdateOverlayPhase.textContent = "Restarting";
+  }
+  if (settingsUpdateOverlayClose) {
+    settingsUpdateOverlayClose.hidden = true;
+  }
+  setUpdateOverlayVisible(true);
+  try {
+    const resp = await fetch("/api/system/restart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) {
+      restartInFlight = false;
+      renderUpdateStatus({
+        supported: true,
+        active: false,
+        phase: "error",
+        message: data.error || "Restart could not be started.",
+        can_apply: true,
+      });
+      showToast(data.error || "Restart could not be started");
+      return;
+    }
+    if (settingsUpdateOverlayMessage) {
+      settingsUpdateOverlayMessage.textContent =
+        data.message || "Restarting downloader. Reload this page in a few seconds.";
+    }
+    showToast("Restart started");
+  } catch (e) {
+    restartInFlight = false;
+    renderUpdateStatus({
+      supported: true,
+      active: false,
+      phase: "error",
+      message: "Restart could not be started.",
+      can_apply: true,
+    });
+    showToast("Restart could not be started: " + e.message);
   }
 }
 
@@ -1416,6 +1490,10 @@ if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
 
 if (updateCheckBtn) {
   updateCheckBtn.addEventListener("click", () => loadUpdateStatus(true));
+}
+
+if (restartAppBtn) {
+  restartAppBtn.addEventListener("click", restartDownloaderFromSettings);
 }
 
 if (updateApplyBtn) {
