@@ -6,6 +6,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 from collections import deque
@@ -380,14 +381,22 @@ def _server_network_info(app):
     is_wildcard = host in {"0.0.0.0", "::"}
 
     if is_local_only:
-        ip_addresses = ["127.0.0.1"]
-        access_urls = [f"http://localhost:{port}"]
+        ip_addresses = []
+        access_urls = []
     elif is_wildcard:
-        ip_addresses = _discover_local_ipv4_addresses()
+        ip_addresses = [
+            ip
+            for ip in _discover_local_ipv4_addresses()
+            if ip and not ip.startswith("127.")
+        ]
         access_urls = [f"http://{ip}:{port}" for ip in ip_addresses]
     else:
-        ip_addresses = [host]
-        access_urls = [f"http://{host}:{port}"]
+        ip_addresses = (
+            []
+            if host.startswith("127.") or host in {"localhost", "::1"}
+            else [host]
+        )
+        access_urls = [f"http://{host}:{port}"] if ip_addresses else []
 
     return {
         "server_bind_host": host,
@@ -397,6 +406,285 @@ def _server_network_info(app):
         "server_scope": "Local only" if is_local_only else "LAN / exposed",
         "vpn": _detect_vpn_status(),
     }
+
+
+_update_runtime_lock = threading.Lock()
+_update_runtime_state = {
+    "active": False,
+    "phase": "idle",
+    "message": "No update task is running.",
+    "started_at": None,
+    "finished_at": None,
+    "restart_required": False,
+    "last_error": "",
+    "last_checked_at": None,
+    "requested_by": None,
+}
+
+
+def _set_update_runtime(**kwargs):
+    with _update_runtime_lock:
+        _update_runtime_state.update(kwargs)
+
+
+def _get_update_runtime():
+    with _update_runtime_lock:
+        return dict(_update_runtime_state)
+
+
+def _resolve_repo_root():
+    candidates = []
+    try:
+        candidates.append(Path(__file__).resolve().parents[3])
+    except Exception:
+        pass
+    try:
+        candidates.append(Path.cwd())
+    except Exception:
+        pass
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        key = str(resolved).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if (resolved / ".git").exists():
+            return resolved
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=str(resolved),
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return Path(result.stdout.strip())
+        except Exception:
+            continue
+    return None
+
+
+def _run_git_command(args, cwd, timeout=30):
+    result = subprocess.run(
+        args,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return {
+        "code": int(result.returncode),
+        "stdout": (result.stdout or "").strip(),
+        "stderr": (result.stderr or "").strip(),
+    }
+
+
+def _git_update_snapshot(force=False):
+    if not force:
+        cached = _cache_get("system:update_status", 300)
+        if cached is not None:
+            return cached
+
+    repo_root = _resolve_repo_root()
+    if not repo_root:
+        snapshot = {
+            "supported": False,
+            "reason": "No git repository was detected for this installation.",
+        }
+        _cache_set("system:update_status", snapshot)
+        return snapshot
+
+    branch_info = _run_git_command(["git", "branch", "--show-current"], repo_root, 12)
+    if branch_info["code"] != 0 or not branch_info["stdout"]:
+        snapshot = {
+            "supported": False,
+            "reason": branch_info["stderr"] or "Could not detect the current git branch.",
+            "repo_root": str(repo_root),
+        }
+        _cache_set("system:update_status", snapshot)
+        return snapshot
+
+    branch = branch_info["stdout"]
+    local_rev = _run_git_command(["git", "rev-parse", "HEAD"], repo_root, 12)
+    remote_url = _run_git_command(
+        ["git", "remote", "get-url", "origin"], repo_root, 12
+    )
+    dirty = _run_git_command(
+        ["git", "status", "--porcelain", "--untracked-files=no"], repo_root, 18
+    )
+    remote_rev = _run_git_command(
+        ["git", "ls-remote", "--heads", "origin", branch], repo_root, 25
+    )
+
+    remote_hash = ""
+    if remote_rev["code"] == 0 and remote_rev["stdout"]:
+        remote_hash = remote_rev["stdout"].split()[0].strip()
+
+    snapshot = {
+        "supported": True,
+        "repo_root": str(repo_root),
+        "branch": branch,
+        "remote_url": remote_url["stdout"] or "",
+        "local_commit": local_rev["stdout"] or "",
+        "remote_commit": remote_hash,
+        "local_short": (local_rev["stdout"] or "")[:7],
+        "remote_short": remote_hash[:7],
+        "dirty": bool(dirty["stdout"]),
+        "update_available": bool(
+            remote_hash and local_rev["stdout"] and remote_hash != local_rev["stdout"]
+        ),
+        "reason": "",
+        "checked_at": int(time.time()),
+    }
+    if remote_rev["code"] != 0:
+        snapshot["reason"] = remote_rev["stderr"] or "Could not check the remote repository."
+
+    _cache_set("system:update_status", snapshot)
+    return snapshot
+
+
+def _update_status_payload(force=False, can_apply=False):
+    snapshot = _git_update_snapshot(force=force)
+    runtime = _get_update_runtime()
+    payload = dict(snapshot)
+    payload.update(
+        {
+            "active": bool(runtime.get("active")),
+            "phase": runtime.get("phase") or "idle",
+            "message": runtime.get("message") or "",
+            "started_at": runtime.get("started_at"),
+            "finished_at": runtime.get("finished_at"),
+            "restart_required": bool(runtime.get("restart_required")),
+            "last_error": runtime.get("last_error") or "",
+            "last_checked_at": runtime.get("last_checked_at"),
+            "requested_by": runtime.get("requested_by"),
+            "can_apply": bool(can_apply and snapshot.get("supported")),
+        }
+    )
+    return payload
+
+
+def _run_update_worker(requested_by=None):
+    try:
+        _set_update_runtime(
+            active=True,
+            phase="checking",
+            message="Checking repository state...",
+            started_at=int(time.time()),
+            finished_at=None,
+            restart_required=False,
+            last_error="",
+            last_checked_at=int(time.time()),
+            requested_by=requested_by,
+        )
+
+        snapshot = _git_update_snapshot(force=True)
+        repo_root = snapshot.get("repo_root")
+        if not snapshot.get("supported") or not repo_root:
+            raise RuntimeError(snapshot.get("reason") or "Updates are not available here.")
+        if snapshot.get("dirty"):
+            raise RuntimeError(
+                "The git worktree has local changes. Commit or stash them before using the updater."
+            )
+
+        branch = snapshot.get("branch") or "main"
+        _set_update_runtime(
+            phase="fetching",
+            message=f"Fetching latest changes from origin/{branch}...",
+            last_checked_at=int(time.time()),
+        )
+        fetch_result = _run_git_command(
+            ["git", "fetch", "--quiet", "origin", branch],
+            repo_root,
+            120,
+        )
+        if fetch_result["code"] != 0:
+            raise RuntimeError(fetch_result["stderr"] or "git fetch failed")
+
+        snapshot = _git_update_snapshot(force=True)
+        if not snapshot.get("update_available"):
+            _set_update_runtime(
+                active=False,
+                phase="done",
+                message="Already on the latest GitHub version.",
+                finished_at=int(time.time()),
+                last_checked_at=int(time.time()),
+            )
+            return
+
+        _set_update_runtime(
+            phase="pulling",
+            message="Downloading and applying the update...",
+        )
+        pull_result = _run_git_command(
+            ["git", "pull", "--ff-only", "origin", branch],
+            repo_root,
+            180,
+        )
+        if pull_result["code"] != 0:
+            raise RuntimeError(pull_result["stderr"] or "git pull failed")
+
+        python_exe = sys.executable or ""
+        if python_exe:
+            _set_update_runtime(
+                phase="installing",
+                message="Refreshing the Python installation...",
+            )
+            pip_result = subprocess.run(
+                [python_exe, "-m", "pip", "install", "-e", str(repo_root)],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                timeout=240,
+                check=False,
+            )
+            if pip_result.returncode != 0:
+                raise RuntimeError(
+                    (pip_result.stderr or pip_result.stdout or "pip install failed").strip()
+                )
+
+        _git_update_snapshot(force=True)
+        _set_update_runtime(
+            active=False,
+            phase="done",
+            message="Update installed. Restart the downloader to load the new code.",
+            finished_at=int(time.time()),
+            restart_required=True,
+            last_checked_at=int(time.time()),
+        )
+    except Exception as exc:
+        _set_update_runtime(
+            active=False,
+            phase="error",
+            message=str(exc),
+            finished_at=int(time.time()),
+            last_error=str(exc),
+            last_checked_at=int(time.time()),
+        )
+
+
+def _start_update_worker(requested_by=None):
+    runtime = _get_update_runtime()
+    if runtime.get("active"):
+        return False
+    thread = threading.Thread(
+        target=_run_update_worker,
+        kwargs={"requested_by": requested_by},
+        daemon=True,
+        name="aniworld-git-updater",
+    )
+    thread.start()
+    return True
 
 
 def _disk_guard_snapshot():
@@ -565,6 +853,15 @@ def _normalize_disk_guard_threshold(value, fallback, upper_bound):
     if parsed.is_integer():
         return str(int(parsed))
     return f"{parsed:.1f}".rstrip("0").rstrip(".")
+
+
+def _normalize_smart_retry_profile(value):
+    profile = str(value or "balanced").strip().lower()
+    return (
+        profile
+        if profile in {"conservative", "balanced", "aggressive"}
+        else "balanced"
+    )
 
 
 def _normalize_ui_preset(value):
@@ -765,6 +1062,7 @@ def _settings_payload(
     browser_notify_library="1",
     browser_notify_settings="1",
     browser_notify_system="1",
+    auto_open_captcha_tab="0",
 ):
     return {
         "download_path": _resolved_download_path_value(),
@@ -833,6 +1131,10 @@ def _settings_payload(
         "browser_notify_library": _normalize_pref_bool(browser_notify_library),
         "browser_notify_settings": _normalize_pref_bool(browser_notify_settings),
         "browser_notify_system": _normalize_pref_bool(browser_notify_system),
+        "auto_open_captcha_tab": _normalize_pref_bool(auto_open_captcha_tab),
+        "smart_retry_profile": _normalize_smart_retry_profile(
+            _global_pref("smart_retry_profile", "balanced")
+        ),
         "external_notifications_enabled": _normalize_pref_bool(
             _global_pref("external_notifications_enabled", "0")
         ),
@@ -1668,7 +1970,7 @@ def _build_diagnostics_payload():
             {
                 "server_bind_host": "127.0.0.1",
                 "server_port": 8080,
-                "server_ips": ["127.0.0.1"],
+                "server_ips": [],
                 "server_access_urls": [],
                 "server_scope": "Unavailable",
             },
@@ -2045,6 +2347,104 @@ def _pick_retry_provider(queue_item):
     return next_candidates[0] if next_candidates else queue_item["provider"]
 
 
+def _resolve_provider_benchmark_sample(episode_url="", language=""):
+    sample_url = str(episode_url or "").strip()
+    sample_language = str(language or "").strip() or "German Dub"
+
+    if sample_url:
+        return {
+            "episode_url": sample_url,
+            "language": sample_language,
+            "title": "Manual sample",
+        }
+
+    queue_items = get_queue()
+    for item in queue_items:
+        try:
+            episodes = json.loads(item.get("episodes") or "[]")
+        except Exception:
+            episodes = []
+        if not episodes:
+            continue
+        first_episode = str(episodes[0] or "").strip()
+        if not first_episode:
+            continue
+        return {
+            "episode_url": first_episode,
+            "language": str(item.get("language") or "German Dub").strip()
+            or "German Dub",
+            "title": str(item.get("title") or "Queue sample").strip()
+            or "Queue sample",
+        }
+
+    raise ValueError("No queue episode is available for a benchmark sample")
+
+
+def _run_provider_benchmark(episode_url="", language=""):
+    sample = _resolve_provider_benchmark_sample(episode_url, language)
+    prov = resolve_provider(sample["episode_url"])
+    if not prov.episode_cls:
+        raise ValueError("This source does not support provider benchmarking")
+
+    episode = prov.episode_cls(url=sample["episode_url"])
+    provider_map = _extract_provider_info(getattr(episode, "provider_data", None))
+    available = _rank_provider_candidates(provider_map.get(sample["language"], []))
+    if not available:
+        raise ValueError(
+            f"No providers are available for {sample['language']} on this episode"
+        )
+
+    results = []
+    for provider_name in available:
+        started_at = time.perf_counter()
+        status = "ready"
+        redirect_url = ""
+        redirect_host = ""
+        error_message = ""
+
+        try:
+            redirect_url = str(
+                episode.provider_link(sample["language"], provider_name) or ""
+            ).strip()
+            if not redirect_url:
+                status = "broken"
+                error_message = "No redirect URL returned"
+            else:
+                redirect_host = urlparse(redirect_url).netloc
+        except Exception as exc:
+            status = "error"
+            error_message = str(exc)
+
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000, 1)
+        results.append(
+            {
+                "provider": provider_name,
+                "status": status,
+                "latency_ms": elapsed_ms,
+                "redirect_url": redirect_url,
+                "redirect_host": redirect_host,
+                "error": error_message,
+            }
+        )
+
+    ordered = sorted(
+        results,
+        key=lambda item: (
+            0 if item["status"] == "ready" else 1 if item["status"] == "broken" else 2,
+            item["latency_ms"],
+            item["provider"].lower(),
+        ),
+    )
+    for rank, item in enumerate(ordered, start=1):
+        item["rank"] = rank
+
+    return {
+        "sample": sample,
+        "results": ordered,
+        "provider_count": len(ordered),
+    }
+
+
 def _download_episode_with_fallback(item, ep_url, selected_path):
     from ..playwright import captcha as _captcha_mod
 
@@ -2103,6 +2503,9 @@ def _download_episode_with_fallback(item, ep_url, selected_path):
                     item["language"],
                     exclude=provider_name,
                 )
+                fallback_limit = _smart_retry_fallback_limit()
+                if fallback_limit is not None:
+                    fallback_candidates = fallback_candidates[:fallback_limit]
                 for candidate in fallback_candidates:
                     if candidate not in tried and candidate not in providers_to_try:
                         providers_to_try.append(candidate)
@@ -2578,6 +2981,19 @@ def _is_path_within_roots(path_string):
         except ValueError:
             continue
     return False
+
+
+def _smart_retry_profile():
+    return _normalize_smart_retry_profile(_global_pref("smart_retry_profile", "balanced"))
+
+
+def _smart_retry_fallback_limit():
+    profile = _smart_retry_profile()
+    if profile == "conservative":
+        return 1
+    if profile == "balanced":
+        return 2
+    return None
 
 
 def _resolve_duplicate_file_paths(file_paths):
@@ -3985,6 +4401,40 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         _emit_ui_event("queue", "dashboard", "nav")
         return jsonify({"ok": True})
 
+    @app.route("/api/queue/<int:queue_id>/hard-cancel", methods=["POST"])
+    def api_queue_hard_cancel(queue_id):
+        queue_item = next((item for item in get_queue() if item["id"] == queue_id), None)
+        if not queue_item:
+            return jsonify({"error": "Item not found"}), 404
+        if queue_item.get("status") != "cancelled" or not queue_item.get("current_url"):
+            return (
+                jsonify(
+                    {
+                        "error": "Hard cancel is only available after a running item has been cancelled.",
+                    }
+                ),
+                400,
+            )
+
+        reason = f"hard cancel requested for queue item {queue_id}"
+        killed = terminate_ffmpeg_process_tree(reason)
+        update_queue_progress(
+            queue_id,
+            int(queue_item.get("current_episode") or 0),
+            "",
+        )
+        _record_user_event(
+            "queue.hard_cancelled",
+            subject_type="download",
+            subject=(queue_item or {}).get("title") or f"Queue #{queue_id}",
+            details={
+                "queue_id": queue_id,
+                "killed_process": bool(killed),
+            },
+        )
+        _emit_ui_event("queue", "dashboard", "nav")
+        return jsonify({"ok": True, "killed_process": bool(killed)})
+
     @app.route("/api/queue/<int:queue_id>/move", methods=["POST"])
     def api_queue_move(queue_id):
         data = request.get_json(silent=True) or {}
@@ -4340,6 +4790,9 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         browser_notify_system = get_user_preference(
             username, "browser_notify_system", "1"
         )
+        auto_open_captcha_tab = get_user_preference(
+            username, "auto_open_captcha_tab", "0"
+        )
         payload = _settings_payload(
             ui_preset=ui_preset,
             ui_mode=ui_mode,
@@ -4365,6 +4818,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             browser_notify_library=browser_notify_library,
             browser_notify_settings=browser_notify_settings,
             browser_notify_system=browser_notify_system,
+            auto_open_captcha_tab=auto_open_captcha_tab,
         )
         payload.update(_server_network_info(app))
         return jsonify(payload)
@@ -4550,8 +5004,19 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "browser_notify_system",
                 _normalize_pref_bool(data["browser_notify_system"]),
             )
+        if "auto_open_captcha_tab" in data:
+            set_user_preference(
+                username,
+                "auto_open_captcha_tab",
+                _normalize_pref_bool(data["auto_open_captcha_tab"]),
+            )
         current_user, is_admin = _get_current_user_info()
         if is_admin:
+            if "smart_retry_profile" in data:
+                _set_global_pref(
+                    "smart_retry_profile",
+                    _normalize_smart_retry_profile(data["smart_retry_profile"]),
+                )
             if "external_notifications_enabled" in data:
                 _set_global_pref(
                     "external_notifications_enabled",
@@ -4621,6 +5086,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "browser_notify_library",
                     "browser_notify_settings",
                     "browser_notify_system",
+                    "auto_open_captcha_tab",
+                    "smart_retry_profile",
                     "external_notifications_enabled",
                     "external_notification_type",
                     "external_notification_url",
@@ -4638,6 +5105,33 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     def api_custom_paths():
         paths = get_custom_paths()
         return jsonify({"paths": paths})
+
+    @app.route("/api/update/status")
+    def api_update_status():
+        _, is_admin = _get_current_user_info()
+        return jsonify(_update_status_payload(force=False, can_apply=is_admin))
+
+    @app.route("/api/update/check", methods=["POST"])
+    def api_update_check():
+        _, is_admin = _get_current_user_info()
+        payload = _update_status_payload(force=True, can_apply=is_admin)
+        _set_update_runtime(last_checked_at=int(time.time()))
+        return jsonify(payload)
+
+    @app.route("/api/update/apply", methods=["POST"])
+    def api_update_apply():
+        username, is_admin = _get_current_user_info()
+        if not is_admin:
+            return jsonify({"error": "Only admins can apply updates."}), 403
+        if not _start_update_worker(requested_by=username):
+            return jsonify({"error": "An update is already running."}), 409
+        _record_user_event(
+            "system.update_requested",
+            subject_type="system",
+            subject="git-update",
+            details={"requested_by": username},
+        )
+        return jsonify(_update_status_payload(force=True, can_apply=True))
 
     @app.route("/api/custom-paths", methods=["POST"])
     def api_custom_paths_add():
@@ -5077,6 +5571,29 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     @app.route("/api/provider-health/failures")
     def api_provider_health_failures():
         return jsonify({"items": get_provider_failure_analytics()})
+
+    @app.route("/api/provider-health/benchmark", methods=["POST"])
+    def api_provider_health_benchmark():
+        data = request.get_json(silent=True) or {}
+        try:
+            payload = _run_provider_benchmark(
+                episode_url=(data.get("episode_url") or "").strip(),
+                language=(data.get("language") or "").strip(),
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        _record_user_event(
+            "provider.benchmark",
+            subject_type="provider",
+            subject=(payload.get("sample") or {}).get("title") or "provider-benchmark",
+            details={
+                "episode_url": (payload.get("sample") or {}).get("episode_url"),
+                "language": (payload.get("sample") or {}).get("language"),
+                "providers": [item.get("provider") for item in payload.get("results") or []],
+            },
+        )
+        return jsonify(payload)
 
     @app.route("/api/diagnostics")
     def api_diagnostics():

@@ -664,7 +664,7 @@
   window.addEventListener(
     "contextmenu",
     (event) => {
-      if (magnetActive && isFreeBackgroundTarget(event.target)) {
+      if (isFreeBackgroundTarget(event.target)) {
         event.preventDefault();
       }
     },

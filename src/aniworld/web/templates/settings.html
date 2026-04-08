@@ -11,58 +11,14 @@
     </p>
   </div>
 
-  {% if auth_enabled %}
-  <div class="settings-section">
-    <h2>User Management</h2>
-
-    {% if not force_sso %}
-    <h3 class="settings-subtitle">Add User</h3>
-    <div class="add-user-row" style="margin-bottom: 16px">
-      <input type="text" id="newUsername" placeholder="Username" />
-      <input type="password" id="newPassword" placeholder="Password" />
-      <select id="newRole">
-        <option value="user">User</option>
-        <option value="admin">Admin</option>
-      </select>
-      <button onclick="addUser()">Add</button>
-    </div>
-    {% endif %}
-
-    <table class="user-table" id="userTable">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Username</th>
-          <th>Role</th>
-          <th>Auth</th>
-          <th>Created</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="userTableBody"></tbody>
-    </table>
-  </div>
-  {% endif %}
-
-  <div class="settings-section">
-    <h2>Custom Paths</h2>
-    <h3 class="settings-subtitle">Add Path</h3>
-    <div class="add-user-row" style="margin-bottom: 16px">
-      <input type="text" id="newPathName" placeholder="Name (for example NAS)" />
-      <input type="text" id="newPathValue" placeholder="/mnt/nas/anime" />
-      <button onclick="addCustomPath()">Add</button>
-    </div>
-    <table class="user-table" id="customPathsTable">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Path</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="customPathsBody"></tbody>
-    </table>
-  </div>
+  <nav class="settings-nav">
+    <a href="#settings-system" class="settings-nav-link">System</a>
+    <a href="#settings-downloads" class="settings-nav-link">Downloads</a>
+    <a href="#settings-search" class="settings-nav-link">Search</a>
+    <a href="#settings-notifications" class="settings-nav-link">Notifications</a>
+    <a href="#settings-ui" class="settings-nav-link">UI</a>
+    <a href="#settings-data" class="settings-nav-link">Data</a>
+  </nav>
 
   <div class="settings-notice">
     Server settings like download paths, provider defaults, and experimental
@@ -70,6 +26,48 @@
     To persist those, set them in your <code>.env</code> file at
     <code>{{ env_path }}</code>. Personal display preferences stay tied to your
     account.
+  </div>
+
+  <div class="settings-section settings-section-highlight" id="settings-system">
+    <div class="settings-section-head">
+      <div>
+        <h2>Updates</h2>
+        <p class="settings-section-copy">
+          Check whether this installation is behind GitHub and launch a guided
+          update from the web UI.
+        </p>
+      </div>
+      <div class="settings-inline-actions">
+        <button type="button" class="btn-secondary" id="updateCheckBtn">
+          Check Now
+        </button>
+        <button type="button" id="updateApplyBtn">Update Now</button>
+      </div>
+    </div>
+    <div class="settings-info-grid settings-update-grid">
+      <div class="settings-info-card">
+        <span class="field-label">Status</span>
+        <strong id="updateStatusValue" class="settings-static-value">Checking...</strong>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">Branch</span>
+        <strong id="updateBranchValue" class="settings-static-value">-</strong>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">Installed Commit</span>
+        <strong id="updateLocalCommitValue" class="settings-static-value">-</strong>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">GitHub Commit</span>
+        <strong id="updateRemoteCommitValue" class="settings-static-value">-</strong>
+      </div>
+    </div>
+    <div class="settings-info-card">
+      <span class="field-label">Update Notes</span>
+      <div id="updateStatusNote" class="settings-update-note">
+        Checking the current repository state...
+      </div>
+    </div>
   </div>
 
   <div class="settings-section">
@@ -151,7 +149,7 @@
   </div>
 
   <div class="settings-section">
-    <h2>Development</h2>
+    <h2>Runtime & Recovery</h2>
     <label class="settings-checkbox">
       <input
         type="checkbox"
@@ -192,9 +190,23 @@
       Turns off the riskiest experimental recovery helpers and outbound webhook
       notifications so the downloader stays in a conservative runtime mode.
     </div>
+
+    <label class="settings-checkbox">
+      <input
+        type="checkbox"
+        id="autoOpenCaptchaTab"
+        onchange="saveAutoOpenCaptchaTab()"
+      />
+      Auto open captcha in a new tab
+    </label>
+    <div class="settings-hint">
+      Tries to open the captcha solve page automatically when a running queue
+      item requires manual interaction. This depends on your browser popup
+      rules.
+    </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="settings-notifications">
     <h2>Browser Notifications</h2>
     <div class="settings-info-card">
       <span class="field-label">Browser Permission</span>
@@ -356,7 +368,7 @@
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="settings-ui">
     <h2>UI Settings</h2>
     <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
       <div class="settings-field">
@@ -529,7 +541,7 @@
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="settings-search">
     <h2>Default Search Filters</h2>
     <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
       <div class="settings-field">
@@ -647,7 +659,7 @@
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="settings-downloads">
     <h2>Downloads</h2>
     <h3 class="settings-subtitle">Download Path</h3>
     <div class="settings-row">
@@ -677,11 +689,21 @@
           placeholder="VOE, Filemoon, Doodstream"
         />
       </div>
+      <div class="settings-field">
+        <label class="field-label">Smart Retry Profile</label>
+        <select id="smartRetryProfile" class="sync-select">
+          <option value="conservative">Conservative</option>
+          <option value="balanced">Balanced</option>
+          <option value="aggressive">Aggressive</option>
+        </select>
+      </div>
       <button onclick="saveDownloadAdvancedSettings()">Save Download Rules</button>
     </div>
     <div class="settings-hint">
       Bandwidth limiting is a soft ffmpeg cap. Provider fallback order controls
-      which hosts are preferred first when the current provider fails.
+      which hosts are preferred first when the current provider fails. Smart
+      retry profiles decide how many alternative hosts are tried automatically
+      before a download is marked as failed.
     </div>
 
     <label class="settings-checkbox">
@@ -749,7 +771,7 @@
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="settings-data">
     <h2>Backup & Restore</h2>
     <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
       <button type="button" onclick="exportBackup()">Export Backup</button>
@@ -762,6 +784,86 @@
       Exports settings, favorites, Auto-Sync jobs, search history, series
       metadata, and archived stats. Import merges the backup into the current
       database.
+    </div>
+
+    <div class="settings-subsection" id="settings-paths">
+      <h3 class="settings-subtitle">Custom Paths</h3>
+      <div class="settings-hint settings-hint-tight">
+        Add reusable target paths like NAS shares or archive folders for fast
+        selection in the downloader.
+      </div>
+      <div class="add-user-row" style="margin-bottom: 16px">
+        <input type="text" id="newPathName" placeholder="Name (for example NAS)" />
+        <input type="text" id="newPathValue" placeholder="/mnt/nas/anime" />
+        <button onclick="addCustomPath()">Add</button>
+      </div>
+      <table class="user-table" id="customPathsTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Path</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="customPathsBody"></tbody>
+      </table>
+    </div>
+
+    {% if auth_enabled %}
+    <div class="settings-subsection" id="settings-users">
+      <h3 class="settings-subtitle">User Management</h3>
+      <div class="settings-hint settings-hint-tight">
+        Manage local web accounts, roles, and access for the current
+        installation.
+      </div>
+
+      {% if not force_sso %}
+      <div class="add-user-row" style="margin-bottom: 16px">
+        <input type="text" id="newUsername" placeholder="Username" />
+        <input type="password" id="newPassword" placeholder="Password" />
+        <select id="newRole">
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button onclick="addUser()">Add</button>
+      </div>
+      {% endif %}
+
+      <table class="user-table" id="userTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Auth</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody"></tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="settings-update-overlay" id="settingsUpdateOverlay" hidden>
+    <div class="settings-update-panel">
+      <div class="settings-update-spinner"></div>
+      <h3>Updating Downloader</h3>
+      <p id="settingsUpdateOverlayMessage">
+        Preparing the update task...
+      </p>
+      <div id="settingsUpdateOverlayPhase" class="settings-update-phase">
+        Checking repository state
+      </div>
+      <button
+        type="button"
+        class="btn-secondary settings-update-close"
+        id="settingsUpdateOverlayClose"
+        hidden
+      >
+        Close
+      </button>
     </div>
   </div>
 </div>

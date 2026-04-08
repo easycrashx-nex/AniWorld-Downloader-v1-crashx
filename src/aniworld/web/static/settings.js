@@ -7,6 +7,7 @@ const experimentalFilmpalastCb = document.getElementById(
 );
 const experimentalSelfHealCb = document.getElementById("experimentalSelfHeal");
 const safeModeCb = document.getElementById("safeMode");
+const autoOpenCaptchaTabCb = document.getElementById("autoOpenCaptchaTab");
 const uiPresetSelect = document.getElementById("uiPreset");
 const uiModeSelect = document.getElementById("uiMode");
 const uiScaleSelect = document.getElementById("uiScale");
@@ -22,6 +23,7 @@ const bandwidthLimitInput = document.getElementById("bandwidthLimit");
 const providerFallbackOrderInput = document.getElementById(
   "providerFallbackOrder",
 );
+const smartRetryProfileSelect = document.getElementById("smartRetryProfile");
 const diskWarnGbInput = document.getElementById("diskWarnGb");
 const diskWarnPercentInput = document.getElementById("diskWarnPercent");
 const libraryAutoRepairCb = document.getElementById("libraryAutoRepair");
@@ -72,6 +74,25 @@ const browserNotificationStatus = document.getElementById(
 const browserNotificationPermissionBtn = document.getElementById(
   "browserNotificationPermissionBtn",
 );
+const updateStatusValue = document.getElementById("updateStatusValue");
+const updateBranchValue = document.getElementById("updateBranchValue");
+const updateLocalCommitValue = document.getElementById("updateLocalCommitValue");
+const updateRemoteCommitValue = document.getElementById(
+  "updateRemoteCommitValue",
+);
+const updateStatusNote = document.getElementById("updateStatusNote");
+const updateCheckBtn = document.getElementById("updateCheckBtn");
+const updateApplyBtn = document.getElementById("updateApplyBtn");
+const settingsUpdateOverlay = document.getElementById("settingsUpdateOverlay");
+const settingsUpdateOverlayMessage = document.getElementById(
+  "settingsUpdateOverlayMessage",
+);
+const settingsUpdateOverlayPhase = document.getElementById(
+  "settingsUpdateOverlayPhase",
+);
+const settingsUpdateOverlayClose = document.getElementById(
+  "settingsUpdateOverlayClose",
+);
 const searchDefaultSortSelect = document.getElementById("searchDefaultSort");
 const searchDefaultGenresInput = document.getElementById(
   "searchDefaultGenres",
@@ -91,6 +112,11 @@ const syncLanguageSelect = document.getElementById("syncLanguage");
 const syncProviderSelect = document.getElementById("syncProvider");
 let settingsRequest = null;
 let customPathsRequest = null;
+let updateStatusRequest = null;
+let updatePollTimer = null;
+let updateOverlayDismissed = false;
+const UPDATE_POLL_IDLE_MS = 300000;
+const UPDATE_POLL_ACTIVE_MS = 2500;
 const SYNC_LANGUAGE_OPTIONS = ["German Dub", "English Sub", "German Sub"];
 const UI_PRESETS = {
   control: {
@@ -168,6 +194,7 @@ function refreshSettingsSelects() {
   if (uiNavSizeSelect) window.refreshCustomSelect(uiNavSizeSelect);
   if (uiTableDensitySelect) window.refreshCustomSelect(uiTableDensitySelect);
   if (uiBackgroundSelect) window.refreshCustomSelect(uiBackgroundSelect);
+  if (smartRetryProfileSelect) window.refreshCustomSelect(smartRetryProfileSelect);
   if (searchDefaultSortSelect)
     window.refreshCustomSelect(searchDefaultSortSelect);
 }
@@ -322,6 +349,185 @@ function renderVpnInterfaces(data) {
     .join("");
 }
 
+function formatUpdateTimestamp(value) {
+  if (!value) return "";
+  const date = new Date(Number(value) * 1000);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString();
+}
+
+function setUpdateOverlayVisible(visible) {
+  if (!settingsUpdateOverlay) return;
+  settingsUpdateOverlay.hidden = !visible;
+}
+
+function scheduleUpdatePolling(intervalMs = UPDATE_POLL_IDLE_MS) {
+  if (updatePollTimer) clearInterval(updatePollTimer);
+  updatePollTimer = setInterval(() => {
+    loadUpdateStatus(false);
+  }, intervalMs);
+}
+
+function renderUpdateStatus(data) {
+  if (!updateStatusValue) return;
+
+  const supported = !!data?.supported;
+  const active = !!data?.active;
+  const updateAvailable = !!data?.update_available;
+  const canApply = !!data?.can_apply;
+  const dirty = !!data?.dirty;
+  const phase = String(data?.phase || "idle");
+  const message = String(
+    data?.message || data?.reason || "No update data available.",
+  );
+
+  let statusText = "Up to date";
+  if (!supported) statusText = "Unavailable";
+  else if (active) statusText = "Updating";
+  else if (dirty) statusText = "Worktree Dirty";
+  else if (updateAvailable) statusText = "Update Available";
+
+  updateStatusValue.textContent = statusText;
+  if (updateBranchValue) updateBranchValue.textContent = data?.branch || "-";
+  if (updateLocalCommitValue) {
+    updateLocalCommitValue.textContent = data?.local_short || "-";
+    updateLocalCommitValue.title = data?.local_commit || "";
+  }
+  if (updateRemoteCommitValue) {
+    updateRemoteCommitValue.textContent = data?.remote_short || "-";
+    updateRemoteCommitValue.title = data?.remote_commit || "";
+  }
+
+  if (updateStatusNote) {
+    const details = [];
+    if (message) details.push(message);
+    if (data?.remote_url) details.push("Remote: " + data.remote_url);
+    if (data?.last_checked_at) {
+      details.push("Last checked: " + formatUpdateTimestamp(data.last_checked_at));
+    } else if (data?.checked_at) {
+      details.push("Last checked: " + formatUpdateTimestamp(data.checked_at));
+    }
+    if (data?.restart_required) {
+      details.push("Restart required to load the new code.");
+    }
+    updateStatusNote.textContent = details.filter(Boolean).join(" ");
+  }
+
+  if (updateCheckBtn) {
+    updateCheckBtn.disabled = active;
+    updateCheckBtn.textContent = active ? "Checking..." : "Check Now";
+  }
+  if (updateApplyBtn) {
+    updateApplyBtn.disabled = active || !supported || !canApply || !updateAvailable || dirty;
+    updateApplyBtn.textContent = active ? "Updating..." : "Update Now";
+    updateApplyBtn.title = !canApply
+      ? "Only admins can apply updates"
+      : dirty
+        ? "Commit or stash local changes before updating"
+        : "";
+  }
+
+  if (settingsUpdateOverlayMessage) {
+    settingsUpdateOverlayMessage.textContent = message;
+  }
+  if (settingsUpdateOverlayPhase) {
+    settingsUpdateOverlayPhase.textContent =
+      phase === "done"
+        ? "Finished"
+        : phase === "error"
+          ? "Update failed"
+          : phase.charAt(0).toUpperCase() + phase.slice(1);
+  }
+  if (active) updateOverlayDismissed = false;
+  const shouldShowOverlay =
+    active ||
+    (!updateOverlayDismissed &&
+      supported &&
+      (phase === "done" || phase === "error"));
+  if (settingsUpdateOverlayClose) {
+    settingsUpdateOverlayClose.hidden =
+      active || !(phase === "done" || phase === "error");
+  }
+  setUpdateOverlayVisible(shouldShowOverlay);
+}
+
+async function loadUpdateStatus(force = false) {
+  if (!updateStatusValue) return null;
+  if (updateStatusRequest) return updateStatusRequest;
+  updateStatusRequest = (async () => {
+    try {
+      const resp = await fetch(force ? "/api/update/check" : "/api/update/status", {
+        method: force ? "POST" : "GET",
+      });
+      const data = await resp.json();
+      renderUpdateStatus(data || {});
+      return data;
+    } catch (e) {
+      renderUpdateStatus({
+        supported: false,
+        reason: "Update status could not be loaded.",
+      });
+      return null;
+    } finally {
+      updateStatusRequest = null;
+    }
+  })();
+  return updateStatusRequest;
+}
+
+async function startWebUpdate() {
+  if (!updateApplyBtn || updateApplyBtn.disabled) return;
+  updateOverlayDismissed = false;
+  setUpdateOverlayVisible(true);
+  renderUpdateStatus({
+    supported: true,
+    active: true,
+    phase: "checking",
+    message: "Starting the update task...",
+    can_apply: true,
+  });
+  try {
+    const resp = await fetch("/api/update/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) {
+      renderUpdateStatus(
+        Object.assign({}, data, {
+          supported: true,
+          active: false,
+          phase: "error",
+          message: data.error || "Update could not be started.",
+          can_apply: true,
+        }),
+      );
+      showToast(data.error || "Update could not be started");
+      return;
+    }
+    renderUpdateStatus(data);
+    showToast("Update started");
+    if (updatePollTimer) clearInterval(updatePollTimer);
+    updatePollTimer = setInterval(async () => {
+      const status = await loadUpdateStatus(false);
+      if (!status?.active) {
+        clearInterval(updatePollTimer);
+        updatePollTimer = null;
+        scheduleUpdatePolling();
+      }
+    }, UPDATE_POLL_ACTIVE_MS);
+  } catch (e) {
+    renderUpdateStatus({
+      supported: true,
+      active: false,
+      phase: "error",
+      message: "Update could not be started.",
+      can_apply: true,
+    });
+    showToast("Update could not be started: " + e.message);
+  }
+}
+
 function updateExternalNotificationState() {
   const enabled = !!externalNotificationsEnabledCb?.checked;
   [
@@ -431,6 +637,9 @@ async function loadSettings() {
       if (safeModeCb) {
         safeModeCb.checked = data.safe_mode === "1";
       }
+      if (autoOpenCaptchaTabCb) {
+        autoOpenCaptchaTabCb.checked = data.auto_open_captcha_tab === "1";
+      }
       if (externalNotificationsEnabledCb) {
         externalNotificationsEnabledCb.checked =
           data.external_notifications_enabled === "1";
@@ -477,6 +686,9 @@ async function loadSettings() {
       }
       if (providerFallbackOrderInput) {
         providerFallbackOrderInput.value = data.provider_fallback_order || "";
+      }
+      if (smartRetryProfileSelect) {
+        smartRetryProfileSelect.value = data.smart_retry_profile || "balanced";
       }
       if (diskWarnGbInput) {
         diskWarnGbInput.value = data.disk_warn_gb || "8";
@@ -731,6 +943,21 @@ async function saveSafeMode() {
   }
 }
 
+async function saveAutoOpenCaptchaTab() {
+  if (!autoOpenCaptchaTabCb) return;
+  try {
+    await updateSettings({
+      auto_open_captcha_tab: autoOpenCaptchaTabCb.checked,
+    });
+    showToast(
+      "Automatic captcha tab opening " +
+        (autoOpenCaptchaTabCb.checked ? "enabled" : "disabled"),
+    );
+  } catch (e) {
+    showToast("Failed to save captcha tab setting: " + e.message);
+  }
+}
+
 async function saveExternalNotificationSettings() {
   updateExternalNotificationState();
   try {
@@ -888,6 +1115,7 @@ async function saveDownloadAdvancedSettings() {
     await updateSettings({
       bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
       provider_fallback_order: providerFallbackOrderInput?.value || "",
+      smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
     });
     showToast("Download rules saved");
   } catch (e) {
@@ -1001,8 +1229,13 @@ async function saveDownloadPath() {
 }
 
 loadSettings();
+loadUpdateStatus(false);
 renderBrowserNotificationPermissionState();
-window.addEventListener("focus", renderBrowserNotificationPermissionState);
+window.addEventListener("focus", () => {
+  renderBrowserNotificationPermissionState();
+  loadUpdateStatus(false);
+});
+scheduleUpdatePolling();
 
 async function saveSyncSchedule() {
   if (!syncScheduleSelect) return;
@@ -1177,6 +1410,21 @@ if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
   window.LiveUpdates.subscribe(["settings"], () => {
     loadSettings();
     loadCustomPaths();
+    loadUpdateStatus(false);
+  });
+}
+
+if (updateCheckBtn) {
+  updateCheckBtn.addEventListener("click", () => loadUpdateStatus(true));
+}
+
+if (updateApplyBtn) {
+  updateApplyBtn.addEventListener("click", startWebUpdate);
+}
+if (settingsUpdateOverlayClose) {
+  settingsUpdateOverlayClose.addEventListener("click", () => {
+    updateOverlayDismissed = true;
+    setUpdateOverlayVisible(false);
   });
 }
 

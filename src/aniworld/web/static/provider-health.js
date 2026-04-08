@@ -1,9 +1,20 @@
 const providerHealthList = document.getElementById("providerHealthList");
 const providerHistoryList = document.getElementById("providerHistoryList");
 const providerFailureList = document.getElementById("providerFailureList");
+const providerBenchmarkList = document.getElementById("providerBenchmarkList");
+const providerBenchmarkEpisodeUrlInput = document.getElementById(
+  "providerBenchmarkEpisodeUrl",
+);
+const providerBenchmarkLanguageSelect = document.getElementById(
+  "providerBenchmarkLanguage",
+);
+const providerBenchmarkRunBtn = document.getElementById(
+  "providerBenchmarkRunBtn",
+);
 let providerHealthRequest = null;
 let providerHistoryRequest = null;
 let providerFailureRequest = null;
+let providerBenchmarkRequest = null;
 
 function providerHealthTone(health) {
   return health || "idle";
@@ -184,6 +195,57 @@ function renderProviderFailures(items) {
     .join("");
 }
 
+function renderProviderBenchmark(data) {
+  if (!providerBenchmarkList) return;
+  const sample = data?.sample || {};
+  const results = Array.isArray(data?.results) ? data.results : [];
+  if (!results.length) {
+    providerBenchmarkList.innerHTML =
+      '<div class="stats-empty">No benchmark results available for this sample.</div>';
+    return;
+  }
+
+  providerBenchmarkList.innerHTML = `
+    <div class="provider-benchmark-summary">
+      <strong>${escProviderHealth(sample.title || "Sample episode")}</strong>
+      <span>${escProviderHealth(sample.language || "-")}</span>
+      <span>${escProviderHealth(sample.episode_url || "-")}</span>
+    </div>
+    <div class="provider-benchmark-cards">
+      ${results
+        .map((item) => {
+          const tone =
+            item.status === "ready"
+              ? "is-ready"
+              : item.status === "broken"
+                ? "is-warn"
+                : "is-error";
+          return `
+            <article class="provider-benchmark-card ${tone}">
+              <div class="provider-benchmark-head">
+                <div>
+                  <div class="provider-health-rank">#${Number(item.rank || 0)}</div>
+                  <strong>${escProviderHealth(item.provider || "Unknown")}</strong>
+                </div>
+                <div class="provider-benchmark-latency">${Number(item.latency_ms || 0)} ms</div>
+              </div>
+              <div class="provider-benchmark-meta">
+                <span>${escProviderHealth((item.status || "unknown").toUpperCase())}</span>
+                <span>${escProviderHealth(item.redirect_host || "No redirect host")}</span>
+              </div>
+              ${
+                item.error
+                  ? `<div class="provider-benchmark-error">${escProviderHealth(item.error)}</div>`
+                  : item.redirect_url
+                    ? `<div class="provider-benchmark-url">${escProviderHealth(item.redirect_url)}</div>`
+                    : ""
+              }
+            </article>`;
+        })
+        .join("")}
+    </div>`;
+}
+
 async function loadProviderHealth() {
   if (!providerHealthList) return null;
   if (providerHealthRequest) return providerHealthRequest;
@@ -244,6 +306,43 @@ async function loadProviderFailures() {
   return providerFailureRequest;
 }
 
+async function runProviderBenchmark() {
+  if (!providerBenchmarkList) return null;
+  if (providerBenchmarkRequest) return providerBenchmarkRequest;
+  if (providerBenchmarkRunBtn) providerBenchmarkRunBtn.disabled = true;
+  providerBenchmarkList.innerHTML =
+    '<div class="stats-empty">Running provider benchmark...</div>';
+
+  providerBenchmarkRequest = (async () => {
+    try {
+      const resp = await fetch("/api/provider-health/benchmark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          episode_url: providerBenchmarkEpisodeUrlInput?.value || "",
+          language: providerBenchmarkLanguageSelect?.value || "German Dub",
+        }),
+      });
+      const data = await resp.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      renderProviderBenchmark(data);
+      return data;
+    } catch (e) {
+      providerBenchmarkList.innerHTML =
+        '<div class="stats-empty">Provider benchmark failed: ' +
+        escProviderHealth(e.message || "Unknown error") +
+        "</div>";
+      return null;
+    } finally {
+      providerBenchmarkRequest = null;
+      if (providerBenchmarkRunBtn) providerBenchmarkRunBtn.disabled = false;
+    }
+  })();
+  return providerBenchmarkRequest;
+}
+
 function escProviderHealth(value) {
   const div = document.createElement("div");
   div.textContent = value == null ? "" : String(value);
@@ -260,6 +359,10 @@ if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
     loadProviderHistory();
     loadProviderFailures();
   });
+}
+
+if (providerBenchmarkLanguageSelect && window.refreshCustomSelect) {
+  window.refreshCustomSelect(providerBenchmarkLanguageSelect);
 }
 
 setInterval(() => {

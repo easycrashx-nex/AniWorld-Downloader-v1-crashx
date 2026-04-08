@@ -22,7 +22,10 @@ except ImportError:
 # -----------------------------
 REDIRECT_PATTERN = re.compile(r"https?://[^'\"<>]+")
 B64_PATTERN = re.compile(r"var a168c='([^']+)'")
-HLS_PATTERN = re.compile(r"'hls': '(?P<hls>[^']+)'")
+HLS_PATTERN = re.compile(r"""["']hls["']\s*:\s*["'](?P<hls>[^"']+)["']""")
+M3U8_PATTERN = re.compile(r"""https?://[^'"<>\s\\]+\.m3u8[^'"<>\s\\]*""")
+FILE_PATTERN = re.compile(r"""["']file["']\s*:\s*["'](?P<file>https?://[^"']+)["']""")
+SOURCE_PATTERN = re.compile(r"""["']source["']\s*:\s*["'](?P<source>https?://[^"']+)["']""")
 VOE_SCRIPT_PATTERN = re.compile(
     r'<script type="application/json">\s*"(?:\\.|[^"\\])*"\s*</script>', re.DOTALL
 )
@@ -71,8 +74,42 @@ def decode_voe_string(encoded):
 
 
 def extract_voe_source_from_html(html):
-    """Extract VOE video source using regex + decode_voe_string"""
+    """Extract VOE video source from current and legacy VOE page formats."""
     try:
+        if not html:
+            return None
+
+        # Newer/alternate VOE pages sometimes expose the HLS URL directly.
+        for pattern_name, pattern in (
+            ("m3u8", M3U8_PATTERN),
+            ("hls", HLS_PATTERN),
+            ("file", FILE_PATTERN),
+            ("source", SOURCE_PATTERN),
+        ):
+            match = pattern.search(html)
+            if match:
+                source = match.groupdict().get(pattern_name) or match.group(0)
+                source = (
+                    str(source or "")
+                    .encode("utf-8", errors="ignore")
+                    .decode("unicode_escape")
+                    .replace("\\/", "/")
+                    .strip()
+                )
+                if source.startswith("http"):
+                    return source
+
+        # Legacy obfuscated payload stored in JS variable.
+        b64_match = B64_PATTERN.search(html)
+        if b64_match:
+            try:
+                decoded = decode_voe_string(b64_match.group(1))
+                source = str(decoded.get("source") or "").strip()
+                if source:
+                    return source
+            except ValueError:
+                pass
+
         script_blocks = re.findall(
             r'<script\s+type=["\']application/json["\']>(.*?)</script>', html, re.DOTALL
         )
@@ -88,7 +125,7 @@ def extract_voe_source_from_html(html):
 
             try:
                 decoded = decode_voe_string(encoded_text)
-                source = decoded.get("source")
+                source = str(decoded.get("source") or "").strip()
                 if source:
                     return source
             except ValueError:

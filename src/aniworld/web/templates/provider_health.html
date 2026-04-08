@@ -45,6 +45,49 @@
   <section class="dashboard-panel">
     <div class="section-heading">
       <div>
+        <span class="section-kicker">Benchmark</span>
+        <h2 class="browse-heading">Provider Benchmark</h2>
+      </div>
+      <p class="section-description">
+        Run a lightweight provider availability benchmark against a sample
+        episode and compare redirect resolution latency.
+      </p>
+    </div>
+    <div class="settings-row provider-benchmark-toolbar" style="gap: 10px; flex-wrap: wrap">
+      <div class="settings-field settings-field-wide">
+        <label class="field-label">Sample Episode URL</label>
+        <input
+          type="text"
+          id="providerBenchmarkEpisodeUrl"
+          placeholder="Leave empty to use the first queued/running episode"
+        />
+      </div>
+      <div class="settings-field">
+        <label class="field-label">Language</label>
+        <select id="providerBenchmarkLanguage" class="sync-select">
+          <option value="German Dub">German Dub</option>
+          <option value="English Sub">English Sub</option>
+          <option value="German Sub">German Sub</option>
+          <option value="English Dub">English Dub</option>
+        </select>
+      </div>
+      <button
+        type="button"
+        class="btn-secondary"
+        id="providerBenchmarkRunBtn"
+        onclick="runProviderBenchmark()"
+      >
+        Run Benchmark
+      </button>
+    </div>
+    <div class="provider-benchmark-list" id="providerBenchmarkList">
+      <div class="stats-empty">Run a benchmark to compare available providers.</div>
+    </div>
+  </section>
+
+  <section class="dashboard-panel">
+    <div class="section-heading">
+      <div>
         <span class="section-kicker">Failures</span>
         <h2 class="browse-heading">Provider Failure Analytics</h2>
       </div>

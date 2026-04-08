@@ -8,10 +8,38 @@ let queueRequest = null;
 let queuePollIntervalMs = 0;
 let queueStatsFetchedAt = 0;
 let queueHasRunningWork = false;
+let autoOpenCaptchaEnabled = false;
+let queuePrefsLoaded = false;
+let queuePrefsRequest = null;
+const autoOpenedCaptchaIds = new Set();
+let autoOpenCaptchaWarned = false;
 
 const ACTIVE_QUEUE_POLL_MS = 1800;
 const IDLE_QUEUE_POLL_MS = 6000;
 const QUEUE_STATS_REFRESH_MS = 45000;
+
+async function loadQueuePrefs() {
+  if (queuePrefsLoaded) return;
+  if (queuePrefsRequest) return queuePrefsRequest;
+  queuePrefsRequest = (async () => {
+    try {
+      const resp = await fetch("/api/settings");
+      const data = await resp.json();
+      autoOpenCaptchaEnabled = data.auto_open_captcha_tab === "1";
+      queuePrefsLoaded = true;
+    } catch (e) {
+      autoOpenCaptchaEnabled = false;
+    } finally {
+      queuePrefsRequest = null;
+    }
+  })();
+  return queuePrefsRequest;
+}
+
+function invalidateQueuePrefs() {
+  queuePrefsLoaded = false;
+  queuePrefsRequest = null;
+}
 
 (async function loadQueueCustomPaths() {
   try {
@@ -85,6 +113,7 @@ async function loadQueue(options = {}) {
 
   queueRequest = (async () => {
     try {
+      await loadQueuePrefs();
       const queueResp = await fetch("/api/queue");
       const data = await queueResp.json();
       const items = data.items || [];
@@ -101,6 +130,7 @@ async function loadQueue(options = {}) {
         queueStatsFetchedAt = Date.now();
       }
       renderQueue(items);
+      maybeAutoOpenCaptcha(items);
       updateBadge(items);
     } catch (e) {
       /* ignore */
@@ -426,6 +456,15 @@ function renderQueue(items) {
           "Cancel after current episode",
         ),
       );
+    } else if (isCancelling) {
+      actionButtons.push(
+        queueActionButton(
+          "queue-action-btn queue-action-danger queue-action-hard-cancel",
+          "Hard Cancel",
+          "hardCancelQueueItem(" + item.id + ")",
+          "Stop this download immediately",
+        ),
+      );
     } else if (item.status === "failed" || item.status === "cancelled") {
       actionButtons.push(
         queueActionButton(
@@ -668,17 +707,74 @@ function openCaptchaModal(queueId) {
   }, 1500);
 }
 
-function openCaptchaPage(queueId) {
+function maybeAutoOpenCaptcha(items) {
+  if (!autoOpenCaptchaEnabled || window.location.pathname.startsWith("/captcha/")) {
+    return;
+  }
+
+  const activeIds = new Set(
+    items
+      .filter((item) => !!item.captcha_url)
+      .map((item) => Number(item.id)),
+  );
+  Array.from(autoOpenedCaptchaIds).forEach((id) => {
+    if (!activeIds.has(id)) autoOpenedCaptchaIds.delete(id);
+  });
+
+  const blockedItem = items.find(
+    (item) => item.status === "running" && item.captcha_url,
+  );
+  if (!blockedItem) return;
+  const queueId = Number(blockedItem.id);
+  if (!queueId || autoOpenedCaptchaIds.has(queueId)) return;
+
+  const opened = openCaptchaPage(queueId, true);
+  if (opened) {
+    autoOpenedCaptchaIds.add(queueId);
+  } else if (!autoOpenCaptchaWarned && typeof showToast === "function") {
+    autoOpenCaptchaWarned = true;
+    showToast("Browser blocked the automatic captcha tab. Allow popups for this page.");
+  }
+}
+
+async function hardCancelQueueItem(id) {
+  try {
+    const resp = await fetch("/api/queue/" + id + "/hard-cancel", {
+      method: "POST",
+    });
+    const data = await resp.json();
+    if (data.error) {
+      showToast(data.error);
+      return;
+    }
+    showToast("Download stopped immediately");
+    loadQueue({ includeStats: true, forceStats: true });
+  } catch (e) {
+    showToast("Failed to hard cancel download: " + e.message);
+  }
+}
+
+if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
+  window.LiveUpdates.subscribe(["settings"], () => {
+    invalidateQueuePrefs();
+    loadQueuePrefs();
+  });
+}
+
+function openCaptchaPage(queueId, autoOpen = false) {
   const targetUrl = "/captcha/" + queueId;
   const popup = window.open(targetUrl, "_blank", "noopener");
   if (!popup) {
-    window.location.href = targetUrl;
-    return;
+    if (!autoOpen) {
+      window.location.href = targetUrl;
+    }
+    return false;
   }
   popup.focus();
-  if (typeof showToast === "function") {
+  if (!autoOpen && typeof showToast === "function") {
     showToast("Captcha opened in a new tab.");
   }
+  return true;
 }
 
 function closeCaptchaModal() {
