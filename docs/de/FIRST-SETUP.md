@@ -76,46 +76,43 @@ Dort liegen typischerweise:
 ## 4. Lokales Setup auf Windows
 
 ```powershell
-cd <project-folder>
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+cd aniworld
 py -m venv .venv
-.venv\Scripts\Activate.ps1
-py -m pip install --upgrade pip
-py -m pip install -e .
-py -m aniworld -w
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m aniworld -w
 ```
 
 Mit Web-Auth:
 
 ```powershell
-py -m aniworld -w -wA
+.\.venv\Scripts\python.exe -m aniworld -w -wA
 ```
 
 Im LAN freigeben:
 
 ```powershell
-py -m aniworld -w -wA --web-expose
+.\.venv\Scripts\python.exe -m aniworld -w -wA --web-expose
 ```
+
+Hinweise:
+
+- Es wird absichtlich **nicht** `Activate.ps1` verwendet, weil PowerShell das auf vielen Windows-Systemen standardmaessig blockiert.
+- `git clone ... aniworld` erstellt den Ordner `aniworld` automatisch fuer dich.
+- `pip install -e .` funktioniert nur im echten Repository-Ordner, also dort, wo auch `pyproject.toml` liegt.
+- Wenn du statt `git clone` ein ZIP benutzt, musst du zuerst das ZIP entpacken und dann dieselben Befehle im entpackten Projektordner ausfuehren.
 
 ## 5. Lokales Setup auf Linux
 
 ```bash
-cd <project-folder>
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
 ```
 
 ## 6. Lokales Setup auf macOS
 
 ```bash
-cd <project-folder>
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
 ```
 
 ## 7. Erststart

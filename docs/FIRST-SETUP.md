@@ -86,78 +86,70 @@ Default download path:
 
 ## 4. Local source setup on Windows
 
-Open PowerShell in the project folder and run:
+Open PowerShell in the folder where the new `aniworld` project folder should be created and run:
 
 ```powershell
-cd <project-folder>
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+cd aniworld
 py -m venv .venv
-.venv\Scripts\Activate.ps1
-py -m pip install --upgrade pip
-py -m pip install -e .
-```
-
-Start the Web UI:
-
-```powershell
-py -m aniworld -w
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m aniworld -w
 ```
 
 Enable local Web UI accounts from the start:
 
 ```powershell
-py -m aniworld -w -wA
+.\.venv\Scripts\python.exe -m aniworld -w -wA
 ```
 
 Expose to your LAN:
 
 ```powershell
-py -m aniworld -w -wA --web-expose
+.\.venv\Scripts\python.exe -m aniworld -w -wA --web-expose
 ```
+
+Notes:
+
+- This avoids `Activate.ps1`, because PowerShell often blocks script activation on default Windows setups.
+- `git clone ... aniworld` creates the `aniworld` folder for you automatically.
+- `pip install -e .` only works inside the real repository folder, meaning the folder must contain `pyproject.toml`.
+- If you used a ZIP instead of `git clone`, first extract the ZIP and then run the same commands inside the extracted project folder.
 
 ## 5. Local source setup on Linux
 
 ```bash
-cd <project-folder>
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
 ```
 
 With local accounts:
 
 ```bash
-python -m aniworld -w -wA
+./.venv/bin/python -m aniworld -w -wA
 ```
 
 Expose to your LAN:
 
 ```bash
-python -m aniworld -w -wA --web-expose
+./.venv/bin/python -m aniworld -w -wA --web-expose
 ```
 
 ## 6. Local source setup on macOS
 
 ```bash
-cd <project-folder>
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
 ```
 
 With local accounts:
 
 ```bash
-python -m aniworld -w -wA
+./.venv/bin/python -m aniworld -w -wA
 ```
 
 Expose to your LAN:
 
 ```bash
-python -m aniworld -w -wA --web-expose
+./.venv/bin/python -m aniworld -w -wA --web-expose
 ```
 
 ## 7. First launch behavior

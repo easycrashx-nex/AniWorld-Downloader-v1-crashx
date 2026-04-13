@@ -79,34 +79,27 @@ The Web UI is the recommended mode for this build, especially on Windows.
 #### Windows PowerShell
 
 ```powershell
-cd <project-folder>
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+cd aniworld
 py -m venv .venv
-.venv\Scripts\Activate.ps1
-py -m pip install --upgrade pip
-py -m pip install -e .
-py -m aniworld -w
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m aniworld -w
 ```
+
+This intentionally does not use `Activate.ps1`, because many Windows systems block PowerShell script activation by default.
+Run the block from the folder where you want the new `aniworld` project folder to be created.
 
 #### Linux
 
 ```bash
-cd <project-folder>
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
 ```
 
 #### macOS
 
 ```bash
-cd <project-folder>
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
 ```
 
 Expose the Web UI to your LAN if needed:
@@ -118,7 +111,7 @@ python -m aniworld -w --web-expose
 On Windows, use:
 
 ```powershell
-py -m aniworld -w --web-expose
+.\.venv\Scripts\python.exe -m aniworld -w --web-expose
 ```
 
 ### Recommended server mode
