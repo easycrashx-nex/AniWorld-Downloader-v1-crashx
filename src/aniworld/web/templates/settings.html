@@ -73,6 +73,18 @@
         Checking the current repository state...
       </div>
     </div>
+    <div class="settings-restart-banner" id="settingsRestartBanner" hidden>
+      <div>
+        <strong>Restart Required</strong>
+        <p>
+          A new version has been installed. Restart AniWorld Downloader to load
+          the updated code.
+        </p>
+      </div>
+      <button type="button" class="btn-primary" id="settingsRestartBannerBtn">
+        Restart Now
+      </button>
+    </div>
   </div>
 
   <div class="settings-section">
@@ -853,7 +865,7 @@
 
   <div class="settings-update-overlay" id="settingsUpdateOverlay" hidden>
     <div class="settings-update-panel">
-      <div class="settings-update-spinner"></div>
+      <div class="settings-update-spinner" id="settingsUpdateOverlaySpinner"></div>
       <h3>Updating Downloader</h3>
       <p id="settingsUpdateOverlayMessage">
         Preparing the update task...
@@ -861,14 +873,24 @@
       <div id="settingsUpdateOverlayPhase" class="settings-update-phase">
         Checking repository state
       </div>
-      <button
-        type="button"
-        class="btn-secondary settings-update-close"
-        id="settingsUpdateOverlayClose"
-        hidden
-      >
-        Close
-      </button>
+      <div class="settings-update-actions">
+        <button
+          type="button"
+          class="btn-secondary settings-update-close"
+          id="settingsUpdateOverlayClose"
+          hidden
+        >
+          Close
+        </button>
+        <button
+          type="button"
+          class="btn-primary settings-update-restart"
+          id="settingsUpdateOverlayRestart"
+          hidden
+        >
+          Restart Now
+        </button>
+      </div>
     </div>
   </div>
 </div>

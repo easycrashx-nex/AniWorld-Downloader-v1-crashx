@@ -91,8 +91,18 @@ const settingsUpdateOverlayMessage = document.getElementById(
 const settingsUpdateOverlayPhase = document.getElementById(
   "settingsUpdateOverlayPhase",
 );
+const settingsUpdateOverlaySpinner = document.getElementById(
+  "settingsUpdateOverlaySpinner",
+);
 const settingsUpdateOverlayClose = document.getElementById(
   "settingsUpdateOverlayClose",
+);
+const settingsUpdateOverlayRestart = document.getElementById(
+  "settingsUpdateOverlayRestart",
+);
+const settingsRestartBanner = document.getElementById("settingsRestartBanner");
+const settingsRestartBannerBtn = document.getElementById(
+  "settingsRestartBannerBtn",
 );
 const searchDefaultSortSelect = document.getElementById("searchDefaultSort");
 const searchDefaultGenresInput = document.getElementById(
@@ -117,6 +127,7 @@ let updateStatusRequest = null;
 let updatePollTimer = null;
 let updateOverlayDismissed = false;
 let restartInFlight = false;
+let updateCheckInFlight = false;
 const UPDATE_POLL_IDLE_MS = 300000;
 const UPDATE_POLL_ACTIVE_MS = 2500;
 const SYNC_LANGUAGE_OPTIONS = ["German Dub", "English Sub", "German Sub"];
@@ -363,6 +374,11 @@ function setUpdateOverlayVisible(visible) {
   settingsUpdateOverlay.hidden = !visible;
 }
 
+function setUpdateSpinnerVisible(visible) {
+  if (!settingsUpdateOverlaySpinner) return;
+  settingsUpdateOverlaySpinner.hidden = !visible;
+}
+
 function scheduleUpdatePolling(intervalMs = UPDATE_POLL_IDLE_MS) {
   if (updatePollTimer) clearInterval(updatePollTimer);
   updatePollTimer = setInterval(() => {
@@ -378,6 +394,7 @@ function renderUpdateStatus(data) {
   const updateAvailable = !!data?.update_available;
   const canApply = !!data?.can_apply;
   const dirty = !!data?.dirty;
+  const restartRequired = !!data?.restart_required;
   const phase = String(data?.phase || "idle");
   const message = String(
     data?.message || data?.reason || "No update data available.",
@@ -386,6 +403,7 @@ function renderUpdateStatus(data) {
   let statusText = "Up to date";
   if (!supported) statusText = "Unavailable";
   else if (active) statusText = "Updating";
+  else if (restartRequired) statusText = "Restart Required";
   else if (dirty) statusText = "Worktree Dirty";
   else if (updateAvailable) statusText = "Update Available";
 
@@ -416,8 +434,9 @@ function renderUpdateStatus(data) {
   }
 
   if (updateCheckBtn) {
-    updateCheckBtn.disabled = active || restartInFlight;
-    updateCheckBtn.textContent = active ? "Checking..." : "Check Now";
+    updateCheckBtn.disabled = active || restartInFlight || updateCheckInFlight;
+    updateCheckBtn.textContent =
+      active || updateCheckInFlight ? "Checking..." : "Check Now";
   }
   if (restartAppBtn) {
     restartAppBtn.disabled = active || restartInFlight || !supported || !canApply;
@@ -455,26 +474,35 @@ function renderUpdateStatus(data) {
           ? "Update failed"
           : phase.charAt(0).toUpperCase() + phase.slice(1);
   }
+  setUpdateSpinnerVisible(active || updateCheckInFlight);
   if (active) updateOverlayDismissed = false;
+  if (settingsRestartBanner) {
+    settingsRestartBanner.hidden = !restartRequired || restartInFlight;
+  }
   const shouldShowOverlay =
     active ||
     (!updateOverlayDismissed &&
       supported &&
-      (phase === "done" || phase === "error"));
+      (phase === "done" || phase === "error" || restartRequired));
   if (settingsUpdateOverlayClose) {
     settingsUpdateOverlayClose.hidden =
-      active || !(phase === "done" || phase === "error");
+      active || !(phase === "done" || phase === "error" || restartRequired);
+  }
+  if (settingsUpdateOverlayRestart) {
+    settingsUpdateOverlayRestart.hidden =
+      active || restartInFlight || !restartRequired || !canApply;
   }
   setUpdateOverlayVisible(shouldShowOverlay);
 }
 
 async function loadUpdateStatus(force = false) {
   if (!updateStatusValue) return null;
-  if (updateStatusRequest) return updateStatusRequest;
-  updateStatusRequest = (async () => {
+  if (updateStatusRequest && !force) return updateStatusRequest;
+  const request = (async () => {
     try {
       const resp = await fetch(force ? "/api/update/check" : "/api/update/status", {
         method: force ? "POST" : "GET",
+        cache: "no-store",
       });
       const data = await resp.json();
       renderUpdateStatus(data || {});
@@ -486,10 +514,11 @@ async function loadUpdateStatus(force = false) {
       });
       return null;
     } finally {
-      updateStatusRequest = null;
+      if (!force) updateStatusRequest = null;
     }
   })();
-  return updateStatusRequest;
+  if (!force) updateStatusRequest = request;
+  return request;
 }
 
 async function startWebUpdate() {
@@ -599,6 +628,24 @@ async function restartDownloaderFromSettings() {
       can_apply: true,
     });
     showToast("Restart could not be started: " + e.message);
+  }
+}
+
+async function checkForUpdatesNow() {
+  if (!updateCheckBtn || updateCheckBtn.disabled) return;
+  updateCheckInFlight = true;
+  renderUpdateStatus({
+    supported: true,
+    active: false,
+    phase: "checking",
+    message: "Checking GitHub for updates...",
+    can_apply: true,
+  });
+  try {
+    await loadUpdateStatus(true);
+  } finally {
+    updateCheckInFlight = false;
+    await loadUpdateStatus(false);
   }
 }
 
@@ -1489,7 +1536,7 @@ if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
 }
 
 if (updateCheckBtn) {
-  updateCheckBtn.addEventListener("click", () => loadUpdateStatus(true));
+  updateCheckBtn.addEventListener("click", checkForUpdatesNow);
 }
 
 if (restartAppBtn) {
@@ -1504,6 +1551,18 @@ if (settingsUpdateOverlayClose) {
     updateOverlayDismissed = true;
     setUpdateOverlayVisible(false);
   });
+}
+if (settingsUpdateOverlayRestart) {
+  settingsUpdateOverlayRestart.addEventListener(
+    "click",
+    restartDownloaderFromSettings,
+  );
+}
+if (settingsRestartBannerBtn) {
+  settingsRestartBannerBtn.addEventListener(
+    "click",
+    restartDownloaderFromSettings,
+  );
 }
 
 async function addUser() {

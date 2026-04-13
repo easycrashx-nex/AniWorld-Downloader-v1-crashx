@@ -412,7 +412,7 @@ _update_runtime_lock = threading.Lock()
 _update_runtime_state = {
     "active": False,
     "phase": "idle",
-    "message": "No update task is running.",
+    "message": "",
     "started_at": None,
     "finished_at": None,
     "restart_required": False,
@@ -5135,8 +5135,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     @app.route("/api/update/check", methods=["POST"])
     def api_update_check():
         _, is_admin = _get_current_user_info()
-        payload = _update_status_payload(force=True, can_apply=is_admin)
         _set_update_runtime(last_checked_at=int(time.time()))
+        payload = _update_status_payload(force=True, can_apply=is_admin)
         return jsonify(payload)
 
     @app.route("/api/update/apply", methods=["POST"])
