@@ -92,62 +92,83 @@ git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniwor
 cd aniworld
 py -m pip install --upgrade pip
 py -m pip install -e .
-py -m aniworld -w
+powershell -ExecutionPolicy Bypass -File .\install-launcher.ps1
+.\aniworld.cmd -w
 ```
 
 Enable local Web UI accounts from the start:
 
 ```powershell
-py -m aniworld -w -wA
+.\aniworld.cmd -w -wA
 ```
 
 Expose to your LAN:
 
 ```powershell
-py -m aniworld -w -wA --web-expose
+.\aniworld.cmd -w -wA --web-expose
 ```
 
 Notes:
 
 - `git clone ... aniworld` creates the `aniworld` folder for you automatically.
 - `pip install -e .` only works inside the real repository folder, meaning the folder must contain `pyproject.toml`.
+- `aniworld.cmd` is included in this repository and forces the local custom build from `src`, so it does not accidentally launch an older global `aniworld` install.
+- `install-launcher.ps1` installs a user-level `aniworld` command into `%USERPROFILE%\.local\bin` and adds that folder to your user `PATH`.
 - If you used a ZIP instead of `git clone`, first extract the ZIP and then run the same commands inside the extracted project folder.
 - A virtual environment is optional. Use one only if you explicitly want isolated Python packages.
+
+After the one-time launcher install, future terminals can use:
+
+```powershell
+aniworld -w -wA
+```
 
 ## 5. Local source setup on Linux
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
 ```
 
 With local accounts:
 
 ```bash
-python3 -m aniworld -w -wA
+./aniworld -w -wA
 ```
 
 Expose to your LAN:
 
 ```bash
-python3 -m aniworld -w -wA --web-expose
+./aniworld -w -wA --web-expose
+```
+
+After the one-time launcher install, future terminals can use:
+
+```bash
+aniworld -w -wA
 ```
 
 ## 6. Local source setup on macOS
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
 ```
 
 With local accounts:
 
 ```bash
-python3 -m aniworld -w -wA
+./aniworld -w -wA
 ```
 
 Expose to your LAN:
 
 ```bash
-python3 -m aniworld -w -wA --web-expose
+./aniworld -w -wA --web-expose
+```
+
+After the one-time launcher install, future terminals can use:
+
+```bash
+aniworld -w -wA
 ```
 
 ## 7. First launch behavior

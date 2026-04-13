@@ -83,21 +83,40 @@ git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniwor
 cd aniworld
 py -m pip install --upgrade pip
 py -m pip install -e .
-py -m aniworld -w
+powershell -ExecutionPolicy Bypass -File .\install-launcher.ps1
+.\aniworld.cmd -w
 ```
 
 Run the block from the folder where you want the new `aniworld` project folder to be created.
+`aniworld.cmd` is a repo-local launcher that always starts this custom build from `src`, even if another global `aniworld` install already exists on the system.
+After the one-time launcher install, future terminals can use:
+
+```powershell
+aniworld -w -wA
+```
 
 #### Linux
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
+```
+
+After the one-time launcher install, future terminals can use:
+
+```bash
+aniworld -w -wA
 ```
 
 #### macOS
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
+```
+
+After the one-time launcher install, future terminals can use:
+
+```bash
+aniworld -w -wA
 ```
 
 If you prefer a virtual environment, you can still use one, but it is optional and not required for this repository.
@@ -111,7 +130,7 @@ python -m aniworld -w --web-expose
 On Windows, use:
 
 ```powershell
-py -m aniworld -w --web-expose
+.\aniworld.cmd -w --web-expose
 ```
 
 ### Recommended server mode

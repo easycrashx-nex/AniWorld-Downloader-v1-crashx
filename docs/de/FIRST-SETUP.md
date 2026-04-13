@@ -79,38 +79,59 @@ git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniwor
 cd aniworld
 py -m pip install --upgrade pip
 py -m pip install -e .
-py -m aniworld -w
+powershell -ExecutionPolicy Bypass -File .\install-launcher.ps1
+.\aniworld.cmd -w
 ```
 
 Mit Web-Auth:
 
 ```powershell
-py -m aniworld -w -wA
+.\aniworld.cmd -w -wA
 ```
 
 Im LAN freigeben:
 
 ```powershell
-py -m aniworld -w -wA --web-expose
+.\aniworld.cmd -w -wA --web-expose
 ```
 
 Hinweise:
 
 - `git clone ... aniworld` erstellt den Ordner `aniworld` automatisch fuer dich.
 - `pip install -e .` funktioniert nur im echten Repository-Ordner, also dort, wo auch `pyproject.toml` liegt.
+- `aniworld.cmd` liegt direkt im Repository und startet bewusst euren lokalen Custom-Build aus `src`, damit nicht versehentlich ein alter global installierter `aniworld`-Befehl startet.
+- `install-launcher.ps1` installiert einen userweiten `aniworld`-Befehl nach `%USERPROFILE%\.local\bin` und ergaenzt diesen Ordner im User-`PATH`.
 - Wenn du statt `git clone` ein ZIP benutzt, musst du zuerst das ZIP entpacken und dann dieselben Befehle im entpackten Projektordner ausfuehren.
 - Eine venv ist optional. Nutze sie nur, wenn du bewusst isolierte Python-Pakete willst.
+
+Nach der einmaligen Launcher-Installation kannst du in neuen Terminals einfach nutzen:
+
+```powershell
+aniworld -w -wA
+```
 
 ## 5. Lokales Setup auf Linux
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
+```
+
+Nach der einmaligen Launcher-Installation kannst du in neuen Terminals einfach nutzen:
+
+```bash
+aniworld -w -wA
 ```
 
 ## 6. Lokales Setup auf macOS
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
+```
+
+Nach der einmaligen Launcher-Installation kannst du in neuen Terminals einfach nutzen:
+
+```bash
+aniworld -w -wA
 ```
 
 ## 7. Erststart
