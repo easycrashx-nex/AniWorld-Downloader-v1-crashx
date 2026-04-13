@@ -45,7 +45,7 @@ German versions are available in:
   `.env`, Web UI settings, per-user preferences, themes, background effects, notifications, diagnostics, disk guard, VPN/tunnel visibility, and experimental features.
 
 - [Migration Guide](MIGRATION.md)
-  How to move from an older AniWorld Downloader install to this custom build, either cleanly or while keeping your data.
+  How to move from an older AniWorld Downloader install to this custom build, including package cleanup, `.aniworld` backups, and full-reset steps.
 
 - [Server Deployment Guide](SERVER-DEPLOYMENT.md)
   Docker, Docker Compose, Linux systemd, reverse proxy notes, and server-specific recommendations.

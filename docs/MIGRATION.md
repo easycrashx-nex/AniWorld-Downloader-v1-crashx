@@ -38,23 +38,39 @@ Platform paths:
 - Linux: `~/.aniworld`
 - macOS: `~/.aniworld`
 
-## 3. If you installed the old version with pip
+Quick backup commands:
 
 ### Windows PowerShell
 
 ```powershell
-py -m pip uninstall aniworld
+Copy-Item "$HOME\.aniworld" "$HOME\.aniworld.backup" -Recurse -Force
 ```
 
 ### Linux / macOS
 
 ```bash
-python -m pip uninstall aniworld
+cp -a ~/.aniworld ~/.aniworld.backup
+```
+
+## 3. If you installed the old version with pip
+
+### Windows PowerShell
+
+```powershell
+py -m pip uninstall -y aniworld
+```
+
+### Linux / macOS
+
+```bash
+python3 -m pip uninstall -y aniworld
 ```
 
 Then install this source build:
 
 - go to [First Setup](FIRST-SETUP.md)
+
+This is strongly recommended if you previously had an older global `aniworld` install on the same machine.
 
 ## 4. If you used an older ZIP / source folder
 
@@ -87,6 +103,34 @@ mv ~/.aniworld ~/.aniworld.backup
 ```
 
 Then start the new build. It will create a fresh `.aniworld`.
+
+### Hard reset: delete the old app-data folder
+
+Only do this if you explicitly want to wipe the old local setup.
+
+#### Windows PowerShell
+
+```powershell
+Remove-Item "$HOME\.aniworld" -Recurse -Force
+```
+
+#### Linux / macOS
+
+```bash
+rm -rf ~/.aniworld
+```
+
+If you delete `.aniworld`, you lose the old local:
+
+- accounts
+- saved settings
+- favorites
+- search history
+- stats archive / snapshots
+- provider score history
+- audit log
+- Auto-Sync jobs
+- local auth/session data
 
 ## 6. If you want to keep existing app data
 
@@ -166,5 +210,7 @@ If you want the least risk:
 2. back up downloads
 3. uninstall old pip version if applicable
 4. keep the old project folder as backup
-5. install this custom build in a new folder
-6. reuse the old `.aniworld` only if you want to keep your data
+5. if you want a true clean slate, rename or delete `.aniworld`
+6. install this custom build in a new folder
+7. start the new build
+8. only restore the backup if you intentionally want the old data back

@@ -38,7 +38,7 @@ Die englische Dokumentation bleibt der Hauptstand:
   `.env`, Web-UI-Settings, Themes, Background Effects, Notifications, Diagnostics, Disk Guard, VPN-/Tunnel-Sichtbarkeit und experimentelle Features.
 
 - [Migration Guide](MIGRATION.md)
-  Umstieg von alten AniWorld Downloader Setups auf diesen Build.
+  Umstieg von alten AniWorld Downloader Setups auf diesen Build, inklusive Paket-Bereinigung, `.aniworld`-Backup und Full-Reset.
 
 - [Server Deployment Guide](SERVER-DEPLOYMENT.md)
   Docker, Docker Compose, Linux systemd, Reverse Proxy und Server-Empfehlungen.

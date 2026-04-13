@@ -37,21 +37,37 @@ Pfade:
 - Windows: `%USERPROFILE%\\.aniworld`
 - Linux/macOS: `~/.aniworld`
 
-## 3. Altes pip-Setup
+Schnelle Backup-Befehle:
 
 ### Windows
 
 ```powershell
-py -m pip uninstall aniworld
+Copy-Item "$HOME\.aniworld" "$HOME\.aniworld.backup" -Recurse -Force
 ```
 
 ### Linux / macOS
 
 ```bash
-python -m pip uninstall aniworld
+cp -a ~/.aniworld ~/.aniworld.backup
+```
+
+## 3. Altes pip-Setup
+
+### Windows
+
+```powershell
+py -m pip uninstall -y aniworld
+```
+
+### Linux / macOS
+
+```bash
+python3 -m pip uninstall -y aniworld
 ```
 
 Danach diesen Build normal neu installieren.
+
+Das ist stark empfohlen, wenn auf dem Rechner vorher schon ein altes globales `aniworld` installiert war.
 
 ## 4. Altes ZIP / Source-Setup
 
@@ -75,6 +91,36 @@ Linux / macOS:
 ```bash
 mv ~/.aniworld ~/.aniworld.backup
 ```
+
+Danach erstellt der neue Build einen frischen `.aniworld`-Ordner.
+
+### Hard Reset: alten App-Datenordner loeschen
+
+Nur machen, wenn du den alten lokalen Stand wirklich komplett loswerden willst.
+
+Windows:
+
+```powershell
+Remove-Item "$HOME\.aniworld" -Recurse -Force
+```
+
+Linux / macOS:
+
+```bash
+rm -rf ~/.aniworld
+```
+
+Wenn du `.aniworld` loeschst, verlierst du die alten lokalen:
+
+- Accounts
+- gespeicherten Settings
+- Favorites
+- Search History
+- Stats-Archiv / Snapshots
+- Provider Score History
+- Audit Log
+- Auto-Sync Jobs
+- lokale Auth-/Session-Daten
 
 ## 6. Bestehende Daten behalten
 
@@ -108,3 +154,14 @@ Wichtig:
 - Auto-Sync laedt
 - Diagnostics laedt
 - Provider Health History laedt
+
+## 9. Empfohlener Weg fuer die meisten Nutzer
+
+Wenn du moeglichst sauber umsteigen willst:
+
+1. `.aniworld` sichern
+2. Download-Ordner sichern
+3. altes `aniworld` per `pip uninstall -y aniworld` entfernen
+4. wenn du wirklich frisch starten willst, `.aniworld` umbenennen oder loeschen
+5. diesen Custom-Build neu installieren
+6. nur dann ein Backup zurueckspielen, wenn du die alten Daten bewusst behalten willst
