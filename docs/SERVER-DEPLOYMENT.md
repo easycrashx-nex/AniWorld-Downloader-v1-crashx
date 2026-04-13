@@ -93,7 +93,6 @@ This is useful if you do not want Docker.
 ### Example layout
 
 - app folder: `/opt/aniworld`
-- virtualenv: `/opt/aniworld/.venv`
 - service user: `aniworld`
 
 ### Install
@@ -102,11 +101,11 @@ This is useful if you do not want Docker.
 sudo mkdir -p /opt/aniworld
 sudo chown "$USER":"$USER" /opt/aniworld
 cd /opt/aniworld
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
 ```
+
+A virtual environment is optional here. Use one only if you explicitly want isolated packages.
 
 ### Example systemd service
 
@@ -124,7 +123,7 @@ WorkingDirectory=/opt/aniworld
 Environment=ANIWORLD_WEB_AUTH=1
 Environment=ANIWORLD_WEB_ADMIN_USER=admin
 Environment=ANIWORLD_WEB_ADMIN_PASS=change-me
-ExecStart=/opt/aniworld/.venv/bin/python -m aniworld -w --web-expose --no-browser --web-port 8080
+ExecStart=/usr/bin/python3 -m aniworld -w --web-expose --no-browser --web-port 8080
 Restart=always
 RestartSec=5
 

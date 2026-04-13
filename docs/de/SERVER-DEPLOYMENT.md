@@ -51,7 +51,6 @@ docker run -d --name aniworld-downloader \
 Beispiel:
 
 - App-Ordner: `/opt/aniworld`
-- venv: `/opt/aniworld/.venv`
 - User: `aniworld`
 
 Beispiel-Start:
@@ -59,6 +58,8 @@ Beispiel-Start:
 ```bash
 python -m aniworld -w --web-expose --no-browser --web-port 8080
 ```
+
+Eine venv ist auch hier optional und kein Muss.
 
 ## 4. Reverse Proxy
 

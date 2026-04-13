@@ -59,8 +59,8 @@ Empfohlener sicherer Weg:
 
 1. alten Projektordner als Backup behalten
 2. neuen Build in neuen Ordner legen
-3. neue venv anlegen
-4. neuen Build installieren
+3. neuen Build installieren
+4. optional nur dann eine venv anlegen, wenn du das bewusst willst
 
 ## 5. Sauberer Reset
 

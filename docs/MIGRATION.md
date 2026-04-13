@@ -67,8 +67,8 @@ Recommended safe path:
 
 1. keep the old project folder untouched
 2. place this custom build in a new folder
-3. create a fresh venv there
-4. install the new build
+3. install the new build there
+4. optionally create a venv only if you explicitly want one
 
 ## 5. If you want a clean reset of app data
 

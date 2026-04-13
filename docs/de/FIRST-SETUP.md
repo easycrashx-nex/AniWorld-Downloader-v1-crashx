@@ -31,7 +31,6 @@ Nutze es, wenn du:
 ### Linux
 
 - Python 3.9 bis 3.13
-- `python3-venv`
 - FFmpeg
 - Browser
 
@@ -39,7 +38,7 @@ Beispiel Debian / Ubuntu:
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv ffmpeg
+sudo apt install -y python3 python3-pip ffmpeg
 ```
 
 ### macOS
@@ -78,41 +77,40 @@ Dort liegen typischerweise:
 ```powershell
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
 cd aniworld
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\python.exe -m aniworld -w
+py -m pip install --upgrade pip
+py -m pip install -e .
+py -m aniworld -w
 ```
 
 Mit Web-Auth:
 
 ```powershell
-.\.venv\Scripts\python.exe -m aniworld -w -wA
+py -m aniworld -w -wA
 ```
 
 Im LAN freigeben:
 
 ```powershell
-.\.venv\Scripts\python.exe -m aniworld -w -wA --web-expose
+py -m aniworld -w -wA --web-expose
 ```
 
 Hinweise:
 
-- Es wird absichtlich **nicht** `Activate.ps1` verwendet, weil PowerShell das auf vielen Windows-Systemen standardmaessig blockiert.
 - `git clone ... aniworld` erstellt den Ordner `aniworld` automatisch fuer dich.
 - `pip install -e .` funktioniert nur im echten Repository-Ordner, also dort, wo auch `pyproject.toml` liegt.
 - Wenn du statt `git clone` ein ZIP benutzt, musst du zuerst das ZIP entpacken und dann dieselben Befehle im entpackten Projektordner ausfuehren.
+- Eine venv ist optional. Nutze sie nur, wenn du bewusst isolierte Python-Pakete willst.
 
 ## 5. Lokales Setup auf Linux
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
 ```
 
 ## 6. Lokales Setup auf macOS
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m venv .venv && ./.venv/bin/python -m pip install --upgrade pip && ./.venv/bin/python -m pip install -e . && ./.venv/bin/python -m aniworld -w
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && python3 -m aniworld -w
 ```
 
 ## 7. Erststart
