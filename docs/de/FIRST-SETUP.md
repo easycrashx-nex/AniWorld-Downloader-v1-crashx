@@ -72,7 +72,41 @@ Dort liegen typischerweise:
 - Provider Score History
 - UI-Preferences
 
-## 4. Lokales Setup auf Windows
+## 4. TL;DR Schnellstart
+
+Wenn Python und FFmpeg schon eingerichtet sind, sind das die kuerzesten empfohlenen Befehle.
+
+### Windows
+
+```powershell
+py -m pip uninstall -y aniworld
+py -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+### Linux
+
+```bash
+python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+### macOS
+
+```bash
+python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+Hinweise:
+
+- Damit wird ein altes installiertes `aniworld`-Paket durch diesen Custom-GitHub-Build ersetzt.
+- Dein vorhandener `.aniworld`-Ordner wird dabei nicht geloescht.
+- Wenn `aniworld` danach noch auf den alten Stand zeigt, oeffne ein neues Terminal.
+
+## 5. Lokales Setup auf Windows
 
 ```powershell
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
@@ -110,7 +144,7 @@ Nach der einmaligen Launcher-Installation kannst du in neuen Terminals einfach n
 aniworld -w -wA
 ```
 
-## 5. Lokales Setup auf Linux
+## 6. Lokales Setup auf Linux
 
 ```bash
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
@@ -122,7 +156,7 @@ Nach der einmaligen Launcher-Installation kannst du in neuen Terminals einfach n
 aniworld -w -wA
 ```
 
-## 6. Lokales Setup auf macOS
+## 7. Lokales Setup auf macOS
 
 ```bash
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
@@ -134,7 +168,7 @@ Nach der einmaligen Launcher-Installation kannst du in neuen Terminals einfach n
 aniworld -w -wA
 ```
 
-## 7. Erststart
+## 8. Erststart
 
 ### Ohne `-wA`
 
@@ -147,7 +181,7 @@ aniworld -w -wA
 - erster User wird Admin
 - weitere User koennen spaeter in `Settings > User Management` angelegt werden
 
-## 8. Nach dem ersten Start pruefen
+## 9. Nach dem ersten Start pruefen
 
 1. Web-UI oeffnet sich
 2. Suche liefert Ergebnisse
@@ -158,7 +192,7 @@ aniworld -w -wA
 
 Wenn das klappt, ist die Installation gesund.
 
-## 9. Typische Probleme
+## 10. Typische Probleme
 
 ### Port belegt
 

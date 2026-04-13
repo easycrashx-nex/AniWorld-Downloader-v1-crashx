@@ -83,7 +83,41 @@ Default download path:
 
 - usually your user `Downloads` folder unless overridden
 
-## 4. Local source setup on Windows
+## 4. TL;DR quick install
+
+If you already have Python and FFmpeg set up, these are the shortest recommended commands.
+
+### Windows PowerShell
+
+```powershell
+py -m pip uninstall -y aniworld
+py -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+### Linux
+
+```bash
+python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+### macOS
+
+```bash
+python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+Notes:
+
+- This replaces an older installed `aniworld` package with this custom GitHub build.
+- It does not remove your `.aniworld` app-data folder.
+- Open a new terminal if `aniworld` still points to an older install after the upgrade.
+
+## 5. Local source setup on Windows
 
 Open PowerShell in the folder where the new `aniworld` project folder should be created and run:
 
@@ -123,7 +157,7 @@ After the one-time launcher install, future terminals can use:
 aniworld -w -wA
 ```
 
-## 5. Local source setup on Linux
+## 6. Local source setup on Linux
 
 ```bash
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
@@ -147,7 +181,7 @@ After the one-time launcher install, future terminals can use:
 aniworld -w -wA
 ```
 
-## 6. Local source setup on macOS
+## 7. Local source setup on macOS
 
 ```bash
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
@@ -171,7 +205,7 @@ After the one-time launcher install, future terminals can use:
 aniworld -w -wA
 ```
 
-## 7. First launch behavior
+## 8. First launch behavior
 
 ### Without `-wA`
 
@@ -184,7 +218,7 @@ aniworld -w -wA
 - the first created user becomes admin
 - after that, additional users can be created in `Settings > User Management`
 
-## 8. What happens on the first start
+## 9. What happens on the first start
 
 On first start, the app may:
 
@@ -193,7 +227,7 @@ On first start, the app may:
 - install or validate browser/runtime dependencies
 - create your first account if Web Auth is enabled
 
-## 9. Verify the setup
+## 10. Verify the setup
 
 After the Web UI starts:
 
@@ -205,7 +239,7 @@ After the Web UI starts:
 
 If all of that works, your installation is healthy.
 
-## 10. Basic troubleshooting
+## 11. Basic troubleshooting
 
 ### Port already in use
 

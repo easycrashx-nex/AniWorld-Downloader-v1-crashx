@@ -72,6 +72,35 @@ If you want the full setup and usage docs, start here:
 
 ## Quick Start
 
+### TL;DR Quick Start
+
+#### Windows PowerShell
+
+```powershell
+py -m pip uninstall -y aniworld
+py -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+#### Linux
+
+```bash
+python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+#### macOS
+
+```bash
+python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+This replaces an older installed `aniworld` package with this custom GitHub build.
+It does not delete your existing app data in `%USERPROFILE%\.aniworld` or `~/.aniworld`.
+
 ### Recommended local mode
 
 The Web UI is the recommended mode for this build, especially on Windows.
