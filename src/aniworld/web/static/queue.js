@@ -261,6 +261,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Captcha",
       percent: 0,
       hasExactPercent: false,
+      pipelinePercent: 38,
       stateLabel: "Waiting for captcha",
     };
   }
@@ -272,6 +273,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Cancelling",
       percent: 100,
       hasExactPercent: false,
+      pipelinePercent: 96,
       stateLabel: "Stopping current step",
     };
   }
@@ -291,6 +293,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Preflight",
       percent: 0,
       hasExactPercent: false,
+      pipelinePercent: 10,
       stateLabel: "Resolving stream",
     };
   }
@@ -303,6 +306,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: label,
       percent: rawPercent,
       hasExactPercent: hasTransferPercent,
+      pipelinePercent: hasTransferPercent ? 25 + rawPercent * 0.5 : 38,
       stateLabel: hasTransferPercent ? "Transfer progress" : "Downloading",
     };
   }
@@ -314,6 +318,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: phase === "audio" ? "Audio" : phase === "video" ? "Video" : "Muxing",
       percent: 0,
       hasExactPercent: false,
+      pipelinePercent: phase === "audio" ? 76 : phase === "video" ? 82 : 88,
       stateLabel: "Combining streams",
     };
   }
@@ -325,6 +330,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Metadata",
       percent: 0,
       hasExactPercent: false,
+      pipelinePercent: 97,
       stateLabel: "Writing metadata",
     };
   }
@@ -335,6 +341,7 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
     activeLabel: engine === "ytdlp" ? "yt-dlp" : engine || "Download",
     percent: 0,
     hasExactPercent: false,
+    pipelinePercent: 20,
     stateLabel: "Preparing current step",
   };
 }
@@ -460,6 +467,10 @@ function renderQueue(items) {
         isCancelling,
       );
       const stepPercent = Math.max(0, Math.min(100, stepState.percent || 0));
+      const pipelinePercent = Math.max(
+        0,
+        Math.min(100, Math.round(stepState.pipelinePercent || 0)),
+      );
       const stepTrack = stepState.steps
         .map((step) => {
           const state =
@@ -497,6 +508,8 @@ function renderQueue(items) {
       } else {
         let epDetail =
           completedEpisodes + "/" + item.total_episodes + " episodes completed";
+        const liveStats = formatQueueLiveStats(runtime, lastFfmpegProgress);
+        if (liveStats) epDetail += " - " + liveStats;
         const etaText = formatEta(
           estimateQueueEta(item, runtime, lastFfmpegProgress),
         );
@@ -528,9 +541,12 @@ function renderQueue(items) {
         '<div class="queue-step-track">' +
         stepTrack +
         "</div>" +
-        (stepState.hasExactPercent
+        '<div class="queue-progress-note">' +
+        escQ(stepState.stateLabel) +
+        "</div>" +
+        ((stepState.hasExactPercent || pipelinePercent > 0)
           ? '<div class="queue-progress-bar queue-progress-bar-step"><div class="queue-progress-fill queue-progress-fill-step" style="width:' +
-            stepPercent +
+            (stepState.hasExactPercent ? stepPercent : pipelinePercent) +
             '%"></div></div>'
           : "") +
         "</div>" +
