@@ -5244,6 +5244,8 @@ input[type="checkbox"] {
 
 .queue-step-progress {
   margin-top: 10px;
+  display: grid;
+  gap: 8px;
 }
 
 .queue-progress-info-step {
@@ -5251,22 +5253,46 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 
-.queue-progress-bar-step {
-  height: 6px;
-  margin-top: 6px;
-  background: rgba(255, 255, 255, 0.06);
+.queue-step-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.queue-progress-bar-step.is-indeterminate {
-  overflow: hidden;
+.queue-step-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(196, 212, 232, 0.62);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.queue-step-chip.is-active {
+  border-color: rgba(255, 198, 92, 0.3);
+  background: rgba(255, 198, 92, 0.12);
+  color: #ffd88a;
+}
+
+.queue-step-chip.is-complete {
+  border-color: rgba(86, 182, 255, 0.24);
+  background: rgba(86, 182, 255, 0.12);
+  color: #bcdcff;
+}
+
+.queue-progress-bar-step {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .queue-progress-fill-step {
   background: linear-gradient(90deg, rgba(255, 198, 92, 0.95), rgba(255, 142, 76, 0.95));
-}
-
-.queue-progress-bar-step.is-indeterminate .queue-progress-fill-step {
-  animation: queueStepPulse 1.25s ease-in-out infinite;
 }
 
 .queue-errors {
