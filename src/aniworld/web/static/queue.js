@@ -361,18 +361,6 @@ function renderQueue(items) {
         ffPct = (lastFfmpegProgress.percent || 0) / item.total_episodes;
       }
       const combinedPct = Math.min(Math.round(epPct + ffPct), 100);
-      const phase = runtime?.phase ? String(runtime.phase) : "";
-      const engine = runtime?.engine ? String(runtime.engine) : "";
-      const stepState = {
-        activeLabel: engine || phase || "Download",
-        hasExactPercent: !!(isRunning && lastFfmpegProgress.active),
-        stateLabel: phase || "Downloading",
-      };
-      const stepPercent = Math.max(
-        0,
-        Math.min(100, Number(lastFfmpegProgress.percent || 0)),
-      );
-      const pipelinePercent = stepPercent;
       let label;
       if (isCancelling) {
         label =
@@ -410,24 +398,6 @@ function renderQueue(items) {
         '<div class="queue-progress-bar"><div class="queue-progress-fill" style="width:' +
         combinedPct +
         '%"></div></div>' +
-        '<div class="queue-step-progress">' +
-        '<div class="queue-progress-info queue-progress-info-step">' +
-        "<span>" +
-        escQ(stepState.activeLabel + (seInfo ? " • " + seInfo : "")) +
-        "</span>" +
-        "<span>" +
-        (stepState.hasExactPercent ? stepPercent + "%" : stepState.stateLabel) +
-        "</span>" +
-        "</div>" +
-        '<div class="queue-progress-note">' +
-        escQ(stepState.stateLabel) +
-        "</div>" +
-        ((stepState.hasExactPercent || pipelinePercent > 0)
-          ? '<div class="queue-progress-bar queue-progress-bar-step"><div class="queue-progress-fill queue-progress-fill-step" style="width:' +
-            (stepState.hasExactPercent ? stepPercent : pipelinePercent) +
-            '%"></div></div>'
-          : "") +
-        "</div>" +
         "</div>";
     }
 
@@ -475,7 +445,7 @@ function renderQueue(items) {
       actionButtons.push(
         queueActionButton(
           "queue-icon-btn queue-icon-btn-neutral",
-          "▲",
+          "?",
           "moveQueueItem(" + item.id + ",'up')",
           "Move up",
           true,
@@ -484,7 +454,7 @@ function renderQueue(items) {
       actionButtons.push(
         queueActionButton(
           "queue-icon-btn queue-icon-btn-neutral",
-          "▼",
+          "?",
           "moveQueueItem(" + item.id + ",'down')",
           "Move down",
           true,
