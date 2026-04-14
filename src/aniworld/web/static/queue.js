@@ -246,6 +246,59 @@ function formatQueueLiveStats(runtime, progress) {
   return parts.join(" · ");
 }
 
+function formatQueueStepLabel(runtime, item, seInfo, isCancelling) {
+  if (item?.captcha_url) return "Captcha";
+  if (isCancelling) return "Cancelling";
+  const phase = String(runtime?.phase || "").toLowerCase();
+  const engine = String(runtime?.engine || "").trim();
+
+  if (phase === "preflight") return "Preflight";
+  if (phase === "audio") return "Audio";
+  if (phase === "video") return "Video";
+  if (phase === "muxing") return "Muxing";
+  if (phase === "metadata") return "Metadata";
+  if (phase === "downloading") return engine === "ytdlp" ? "yt-dlp" : "FFmpeg";
+  if (engine) return engine === "ytdlp" ? "yt-dlp" : engine;
+  return seInfo || "Download";
+}
+
+function getQueueStepProgress(runtime, progress, item, isCancelling) {
+  if (item?.captcha_url) {
+    return { percent: 0, indeterminate: true, label: "Captcha waiting" };
+  }
+  if (isCancelling) {
+    return { percent: 100, indeterminate: true, label: "Stopping current step" };
+  }
+
+  const phase = String(runtime?.phase || "").toLowerCase();
+  const rawPercent = Number(progress?.percent || 0);
+  const hasTransferPercent = Number.isFinite(rawPercent) && rawPercent > 0;
+
+  if (phase === "downloading" && hasTransferPercent) {
+    return {
+      percent: Math.max(0, Math.min(100, rawPercent)),
+      indeterminate: false,
+      label: "Transfer progress",
+    };
+  }
+  if (phase === "audio") {
+    return { percent: 30, indeterminate: true, label: "Preparing audio stream" };
+  }
+  if (phase === "video") {
+    return { percent: 45, indeterminate: true, label: "Preparing video stream" };
+  }
+  if (phase === "muxing") {
+    return { percent: 78, indeterminate: true, label: "Muxing streams" };
+  }
+  if (phase === "metadata") {
+    return { percent: 92, indeterminate: true, label: "Writing metadata" };
+  }
+  if (phase === "preflight") {
+    return { percent: 10, indeterminate: true, label: "Resolving stream" };
+  }
+  return { percent: 0, indeterminate: true, label: "Preparing current step" };
+}
+
 function toggleQueueErrorsOnly() {
   queueErrorsOnly = !queueErrorsOnly;
   const btn = document.getElementById("queueErrorsToggleBtn");
@@ -362,6 +415,17 @@ function renderQueue(items) {
         ffPct = (lastFfmpegProgress.percent || 0) / item.total_episodes;
       }
       const combinedPct = Math.min(Math.round(epPct + ffPct), 100);
+      const stepState = getQueueStepProgress(
+        runtime,
+        lastFfmpegProgress,
+        item,
+        isCancelling,
+      );
+      const stepLabel = formatQueueStepLabel(runtime, item, seInfo, isCancelling);
+      const stepPercent = Math.max(
+        0,
+        Math.min(100, Math.round(Number(stepState.percent || 0))),
+      );
 
       let label;
       if (isCancelling) {
@@ -409,6 +473,21 @@ function renderQueue(items) {
         '<div class="queue-progress-bar"><div class="queue-progress-fill" style="width:' +
         combinedPct +
         '%"></div></div>' +
+        '<div class="queue-step-progress">' +
+        '<div class="queue-progress-info queue-progress-info-step">' +
+        "<span>" +
+        escQ(stepLabel + (seInfo ? " • " + seInfo : "")) +
+        "</span>" +
+        "<span>" +
+        (stepState.indeterminate ? (stepPercent > 0 ? stepPercent + "%" : "…") : stepPercent + "%") +
+        "</span>" +
+        "</div>" +
+        '<div class="queue-progress-bar queue-progress-bar-step' +
+        (stepState.indeterminate ? " is-indeterminate" : "") +
+        '"><div class="queue-progress-fill queue-progress-fill-step" style="width:' +
+        (stepState.indeterminate && !stepPercent ? 32 : Math.max(stepPercent, 6)) +
+        '%"></div></div>' +
+        "</div>" +
         "</div>";
     }
 

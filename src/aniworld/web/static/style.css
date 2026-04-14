@@ -5242,6 +5242,33 @@ input[type="checkbox"] {
   background: linear-gradient(90deg, var(--teal), var(--blue));
 }
 
+.queue-step-progress {
+  margin-top: 10px;
+}
+
+.queue-progress-info-step {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.queue-progress-bar-step {
+  height: 6px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.queue-progress-bar-step.is-indeterminate {
+  overflow: hidden;
+}
+
+.queue-progress-fill-step {
+  background: linear-gradient(90deg, rgba(255, 198, 92, 0.95), rgba(255, 142, 76, 0.95));
+}
+
+.queue-progress-bar-step.is-indeterminate .queue-progress-fill-step {
+  animation: queueStepPulse 1.25s ease-in-out infinite;
+}
+
 .queue-errors {
   margin-top: 10px;
   display: inline-flex;
@@ -6236,4 +6263,18 @@ body[data-ui-nav-size] .brand-title {
 
 body[data-ui-nav-size] .brand-subtitle {
   font-size: var(--brand-subtitle-size);
+}
+
+@keyframes queueStepPulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scaleX(0.88);
+    transform-origin: left center;
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
 }
