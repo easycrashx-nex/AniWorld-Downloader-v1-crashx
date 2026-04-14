@@ -246,106 +246,6 @@ function formatQueueLiveStats(runtime, progress) {
   return parts.join(" · ");
 }
 
-function getQueueStepState(runtime, progress, item, isCancelling) {
-  const steps = [
-    { key: "preflight", label: "Preflight" },
-    { key: "download", label: "Download" },
-    { key: "mux", label: "Mux" },
-    { key: "metadata", label: "Metadata" },
-  ];
-
-  if (item?.captcha_url) {
-    return {
-      steps,
-      activeKey: "download",
-      activeLabel: "Captcha",
-      percent: 0,
-      hasExactPercent: false,
-      pipelinePercent: 38,
-      stateLabel: "Waiting for captcha",
-    };
-  }
-
-  if (isCancelling) {
-    return {
-      steps,
-      activeKey: "download",
-      activeLabel: "Cancelling",
-      percent: 100,
-      hasExactPercent: false,
-      pipelinePercent: 96,
-      stateLabel: "Stopping current step",
-    };
-  }
-
-  const phase = String(runtime?.phase || "").toLowerCase();
-  const engine = String(runtime?.engine || "").trim();
-  const rawPercent = Math.max(
-    0,
-    Math.min(100, Math.round(Number(progress?.percent || 0))),
-  );
-  const hasTransferPercent = Number.isFinite(rawPercent) && rawPercent > 0;
-
-  if (phase === "preflight") {
-    return {
-      steps,
-      activeKey: "preflight",
-      activeLabel: "Preflight",
-      percent: 0,
-      hasExactPercent: false,
-      pipelinePercent: 10,
-      stateLabel: "Resolving stream",
-    };
-  }
-
-  if (phase === "downloading") {
-    const label = engine === "ytdlp" ? "yt-dlp" : "FFmpeg";
-    return {
-      steps,
-      activeKey: "download",
-      activeLabel: label,
-      percent: rawPercent,
-      hasExactPercent: hasTransferPercent,
-      pipelinePercent: hasTransferPercent ? 25 + rawPercent * 0.5 : 38,
-      stateLabel: hasTransferPercent ? "Transfer progress" : "Downloading",
-    };
-  }
-
-  if (phase === "audio" || phase === "video" || phase === "muxing") {
-    return {
-      steps,
-      activeKey: "mux",
-      activeLabel: phase === "audio" ? "Audio" : phase === "video" ? "Video" : "Muxing",
-      percent: 0,
-      hasExactPercent: false,
-      pipelinePercent: phase === "audio" ? 76 : phase === "video" ? 82 : 88,
-      stateLabel: "Combining streams",
-    };
-  }
-
-  if (phase === "metadata") {
-    return {
-      steps,
-      activeKey: "metadata",
-      activeLabel: "Metadata",
-      percent: 0,
-      hasExactPercent: false,
-      pipelinePercent: 97,
-      stateLabel: "Writing metadata",
-    };
-  }
-
-  return {
-    steps,
-    activeKey: "download",
-    activeLabel: engine === "ytdlp" ? "yt-dlp" : engine || "Download",
-    percent: 0,
-    hasExactPercent: false,
-    pipelinePercent: 20,
-    stateLabel: "Preparing current step",
-  };
-}
-
 function toggleQueueErrorsOnly() {
   queueErrorsOnly = !queueErrorsOnly;
   const btn = document.getElementById("queueErrorsToggleBtn");
@@ -448,45 +348,35 @@ function renderQueue(items) {
       : '';
     let progressHtml = "";
     if (isRunning || isCancelling || item.status === "cancelled") {
-      const completedEpisodes = Math.max(
-        0,
-        Number(item.current_episode || 0) - (isRunning || isCancelling ? 1 : 0),
-      );
+      const currentEpisode = Number(item.current_episode || 0);
       const epPct =
         item.total_episodes > 0
-          ? (completedEpisodes / item.total_episodes) * 100
+          ? (currentEpisode / item.total_episodes) * 100
           : 0;
       const seInfo = item.current_url
         ? parseSeasonEpisode(item.current_url)
         : "";
-      const combinedPct = Math.min(Math.round(epPct), 100);
-      const stepState = getQueueStepState(
-        runtime,
-        lastFfmpegProgress,
-        item,
-        isCancelling,
-      );
-      const stepPercent = Math.max(0, Math.min(100, stepState.percent || 0));
-      const pipelinePercent = Math.max(
-        0,
-        Math.min(100, Math.round(stepState.pipelinePercent || 0)),
-      );
+      let ffPct = 0;
+      if (isRunning && lastFfmpegProgress.active && item.total_episodes > 0) {
+        ffPct = (lastFfmpegProgress.percent || 0) / item.total_episodes;
+      }
+      const combinedPct = Math.min(Math.round(epPct + ffPct), 100);
       let label;
       if (isCancelling) {
         label =
-          completedEpisodes +
+          currentEpisode +
           "/" +
           item.total_episodes +
-          " episodes completed - stopping after current step";
+          " episodes - finishing current episode...";
       } else if (item.status === "cancelled") {
         label =
-          completedEpisodes +
+          currentEpisode +
           "/" +
           item.total_episodes +
-          " episodes completed (stopped)";
+          " episodes (stopped)";
       } else {
-        let epDetail =
-          completedEpisodes + "/" + item.total_episodes + " episodes completed";
+        let epDetail = currentEpisode + "/" + item.total_episodes + " episodes";
+        if (seInfo) epDetail += " - " + seInfo;
         const liveStats = formatQueueLiveStats(runtime, lastFfmpegProgress);
         if (liveStats) epDetail += " - " + liveStats;
         const etaText = formatEta(

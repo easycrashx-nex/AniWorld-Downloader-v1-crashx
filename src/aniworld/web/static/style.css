@@ -5243,9 +5243,7 @@ input[type="checkbox"] {
 }
 
 .queue-step-progress {
-  margin-top: 10px;
-  display: grid;
-  gap: 8px;
+  display: none;
 }
 
 .queue-progress-info-step {
