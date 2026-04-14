@@ -471,27 +471,6 @@ function renderQueue(items) {
         0,
         Math.min(100, Math.round(stepState.pipelinePercent || 0)),
       );
-      const stepTrack = stepState.steps
-        .map((step) => {
-          const state =
-            step.key === stepState.activeKey
-              ? " is-active"
-              : stepState.steps.findIndex((entry) => entry.key === step.key) <
-                  stepState.steps.findIndex(
-                    (entry) => entry.key === stepState.activeKey,
-                  )
-                ? " is-complete"
-                : "";
-          return (
-            '<span class="queue-step-chip' +
-            state +
-            '">' +
-            escQ(step.label) +
-            "</span>"
-          );
-        })
-        .join("");
-
       let label;
       if (isCancelling) {
         label =
@@ -537,9 +516,6 @@ function renderQueue(items) {
         "<span>" +
         (stepState.hasExactPercent ? stepPercent + "%" : stepState.stateLabel) +
         "</span>" +
-        "</div>" +
-        '<div class="queue-step-track">' +
-        stepTrack +
         "</div>" +
         '<div class="queue-progress-note">' +
         escQ(stepState.stateLabel) +
