@@ -227,7 +227,7 @@
     <h2>Browser Notifications</h2>
     <div class="settings-info-card">
       <span class="field-label">Browser Permission</span>
-      <div class="settings-inline-actions">
+      <div class="settings-inline-actions settings-inline-actions-start">
         <span id="browserNotificationStatus" class="settings-chip"
           >Checking browser...</span
         >
@@ -714,6 +714,14 @@
           <option value="safe">Safe</option>
         </select>
       </div>
+      <div class="settings-field">
+        <label class="field-label">Smart Retry Profile</label>
+        <select id="smartRetryProfile" class="sync-select">
+          <option value="conservative">Conservative</option>
+          <option value="balanced">Balanced</option>
+          <option value="aggressive">Aggressive</option>
+        </select>
+      </div>
       <div class="settings-field settings-field-wide">
         <label class="field-label">Per-Provider Engine Rules</label>
         <input
@@ -729,14 +737,6 @@
           id="providerFallbackOrder"
           placeholder="VOE, Filemoon, Doodstream"
         />
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Smart Retry Profile</label>
-        <select id="smartRetryProfile" class="sync-select">
-          <option value="conservative">Conservative</option>
-          <option value="balanced">Balanced</option>
-          <option value="aggressive">Aggressive</option>
-        </select>
       </div>
       <button onclick="saveDownloadAdvancedSettings()">Save Download Rules</button>
     </div>

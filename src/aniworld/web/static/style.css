@@ -4672,6 +4672,10 @@ input[type="checkbox"] {
   max-width: 100%;
 }
 
+.settings-inline-actions-start {
+  justify-content: flex-start;
+}
+
 .settings-inline-actions-update {
   flex: 1 1 420px;
   justify-content: flex-end;
