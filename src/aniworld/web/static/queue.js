@@ -261,7 +261,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Captcha",
       percent: 0,
       hasExactPercent: false,
-      pipelinePercent: 38,
       stateLabel: "Waiting for captcha",
     };
   }
@@ -273,7 +272,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Cancelling",
       percent: 100,
       hasExactPercent: false,
-      pipelinePercent: 96,
       stateLabel: "Stopping current step",
     };
   }
@@ -293,7 +291,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Preflight",
       percent: 0,
       hasExactPercent: false,
-      pipelinePercent: 12,
       stateLabel: "Resolving stream",
     };
   }
@@ -306,7 +303,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: label,
       percent: rawPercent,
       hasExactPercent: hasTransferPercent,
-      pipelinePercent: hasTransferPercent ? 25 + rawPercent * 0.5 : 38,
       stateLabel: hasTransferPercent ? "Transfer progress" : "Downloading",
     };
   }
@@ -318,7 +314,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: phase === "audio" ? "Audio" : phase === "video" ? "Video" : "Muxing",
       percent: 0,
       hasExactPercent: false,
-      pipelinePercent: phase === "audio" ? 76 : phase === "video" ? 82 : 88,
       stateLabel: "Combining streams",
     };
   }
@@ -330,7 +325,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
       activeLabel: "Metadata",
       percent: 0,
       hasExactPercent: false,
-      pipelinePercent: 97,
       stateLabel: "Writing metadata",
     };
   }
@@ -341,7 +335,6 @@ function getQueueStepState(runtime, progress, item, isCancelling) {
     activeLabel: engine === "ytdlp" ? "yt-dlp" : engine || "Download",
     percent: 0,
     hasExactPercent: false,
-    pipelinePercent: 20,
     stateLabel: "Preparing current step",
   };
 }
@@ -448,20 +441,18 @@ function renderQueue(items) {
       : '';
     let progressHtml = "";
     if (isRunning || isCancelling || item.status === "cancelled") {
+      const completedEpisodes = Math.max(
+        0,
+        Number(item.current_episode || 0) - (isRunning || isCancelling ? 1 : 0),
+      );
       const epPct =
         item.total_episodes > 0
-          ? (item.current_episode / item.total_episodes) * 100
+          ? (completedEpisodes / item.total_episodes) * 100
           : 0;
       const seInfo = item.current_url
         ? parseSeasonEpisode(item.current_url)
         : "";
-
-      // Combine episode progress with in-episode ffmpeg progress
-      let ffPct = 0;
-      if (isRunning && lastFfmpegProgress.active && item.total_episodes > 0) {
-        ffPct = (lastFfmpegProgress.percent || 0) / item.total_episodes;
-      }
-      const combinedPct = Math.min(Math.round(epPct + ffPct), 100);
+      const combinedPct = Math.min(Math.round(epPct), 100);
       const stepState = getQueueStepState(
         runtime,
         lastFfmpegProgress,
@@ -469,10 +460,6 @@ function renderQueue(items) {
         isCancelling,
       );
       const stepPercent = Math.max(0, Math.min(100, stepState.percent || 0));
-      const pipelinePercent = Math.max(
-        0,
-        Math.min(100, Math.round(stepState.pipelinePercent || 0)),
-      );
       const stepTrack = stepState.steps
         .map((step) => {
           const state =
@@ -497,30 +484,19 @@ function renderQueue(items) {
       let label;
       if (isCancelling) {
         label =
-          item.current_episode +
+          completedEpisodes +
           "/" +
           item.total_episodes +
-          " episodes - finishing current episode...";
+          " episodes completed - stopping after current step";
       } else if (item.status === "cancelled") {
         label =
-          item.current_episode +
+          completedEpisodes +
           "/" +
           item.total_episodes +
-          " episodes (stopped)";
+          " episodes completed (stopped)";
       } else {
-        let epDetail = item.current_episode + "/" + item.total_episodes + " episodes";
-        if (seInfo) epDetail += " - " + seInfo;
-        if (lastFfmpegProgress.active && lastFfmpegProgress.percent > 0) {
-          const bw = formatBandwidth(lastFfmpegProgress.bandwidth || "");
-          epDetail +=
-            " (" +
-            lastFfmpegProgress.percent +
-            "%" +
-            (bw ? " @ " + bw : "") +
-            ")";
-        }
-        const liveStats = formatQueueLiveStats(runtime, lastFfmpegProgress);
-        if (liveStats) epDetail += " - " + liveStats;
+        let epDetail =
+          completedEpisodes + "/" + item.total_episodes + " episodes completed";
         const etaText = formatEta(
           estimateQueueEta(item, runtime, lastFfmpegProgress),
         );
@@ -552,9 +528,11 @@ function renderQueue(items) {
         '<div class="queue-step-track">' +
         stepTrack +
         "</div>" +
-        '<div class="queue-progress-bar queue-progress-bar-step"><div class="queue-progress-fill queue-progress-fill-step" style="width:' +
-        pipelinePercent +
-        '%"></div></div>' +
+        (stepState.hasExactPercent
+          ? '<div class="queue-progress-bar queue-progress-bar-step"><div class="queue-progress-fill queue-progress-fill-step" style="width:' +
+            stepPercent +
+            '%"></div></div>'
+          : "") +
         "</div>" +
         "</div>";
     }
