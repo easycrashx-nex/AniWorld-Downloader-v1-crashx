@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import threading as _threading
+from pathlib import Path
 from typing import Tuple
 
 import ffmpeg
