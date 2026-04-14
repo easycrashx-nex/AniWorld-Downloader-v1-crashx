@@ -1186,6 +1186,14 @@ function parseActivityErrors(value) {
   }
 }
 
+function formatActivityDuration(seconds) {
+  const value = Number(seconds || 0);
+  if (!value) return "";
+  if (value < 60) return `${Math.round(value)}s`;
+  if (value < 3600) return `${Math.floor(value / 60)}m ${Math.round(value % 60)}s`;
+  return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`;
+}
+
 function renderActivity(items) {
   if (!activityList) return;
   if (!items.length) {
@@ -1216,6 +1224,15 @@ function renderActivity(items) {
             })
             .join("")}</div>`
         : "";
+      const detailBits = [];
+      if (item.source) detailBits.push(esc(item.source));
+      if (item.username) detailBits.push(`User ${esc(item.username)}`);
+      const durationLabel = formatActivityDuration(item.duration_seconds);
+      if (durationLabel) detailBits.push(durationLabel);
+      if (errors.length) detailBits.push(`${errors.length} error(s)`);
+      const detailHtml = detailBits.length
+        ? `<div class="activity-meta activity-meta-extra">${detailBits.join(" · ")}</div>`
+        : "";
       return `
         <div class="activity-item">
           <div class="activity-row">
@@ -1229,6 +1246,7 @@ function renderActivity(items) {
               item.language || "Unknown",
             )}, ${esc(item.provider || "Unknown")} - ${timeLabel}
           </div>
+          ${detailHtml}
           ${errorHtml}
           ${
             retryBtn || deleteBtn

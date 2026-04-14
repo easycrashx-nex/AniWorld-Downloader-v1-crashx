@@ -21,6 +21,13 @@ const uiTableDensitySelect = document.getElementById("uiTableDensity");
 const uiBackgroundSelect = document.getElementById("uiBackground");
 const bandwidthLimitInput = document.getElementById("bandwidthLimit");
 const downloadBackendSelect = document.getElementById("downloadBackend");
+const downloadSpeedProfileSelect = document.getElementById(
+  "downloadSpeedProfile",
+);
+const downloadEngineRulesInput = document.getElementById("downloadEngineRules");
+const autoProviderSwitchCb = document.getElementById("autoProviderSwitch");
+const rateLimitGuardCb = document.getElementById("rateLimitGuard");
+const preflightCheckCb = document.getElementById("preflightCheck");
 const providerFallbackOrderInput = document.getElementById(
   "providerFallbackOrder",
 );
@@ -210,6 +217,9 @@ function refreshSettingsSelects() {
   if (uiBackgroundSelect) window.refreshCustomSelect(uiBackgroundSelect);
   if (smartRetryProfileSelect) window.refreshCustomSelect(smartRetryProfileSelect);
   if (downloadBackendSelect) window.refreshCustomSelect(downloadBackendSelect);
+  if (downloadSpeedProfileSelect) {
+    window.refreshCustomSelect(downloadSpeedProfileSelect);
+  }
   if (searchDefaultSortSelect)
     window.refreshCustomSelect(searchDefaultSortSelect);
 }
@@ -810,6 +820,22 @@ async function loadSettings() {
       if (downloadBackendSelect) {
         downloadBackendSelect.value = data.download_backend || "auto";
       }
+      if (downloadSpeedProfileSelect) {
+        downloadSpeedProfileSelect.value =
+          data.download_speed_profile || "balanced";
+      }
+      if (downloadEngineRulesInput) {
+        downloadEngineRulesInput.value = data.download_engine_rules || "";
+      }
+      if (autoProviderSwitchCb) {
+        autoProviderSwitchCb.checked = data.auto_provider_switch !== "0";
+      }
+      if (rateLimitGuardCb) {
+        rateLimitGuardCb.checked = data.rate_limit_guard !== "0";
+      }
+      if (preflightCheckCb) {
+        preflightCheckCb.checked = data.preflight_check !== "0";
+      }
       if (providerFallbackOrderInput) {
         providerFallbackOrderInput.value = data.provider_fallback_order || "";
       }
@@ -1241,6 +1267,11 @@ async function saveDownloadAdvancedSettings() {
     await updateSettings({
       bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
       download_backend: downloadBackendSelect?.value || "auto",
+      download_speed_profile: downloadSpeedProfileSelect?.value || "balanced",
+      download_engine_rules: downloadEngineRulesInput?.value || "",
+      auto_provider_switch: autoProviderSwitchCb?.checked || false,
+      rate_limit_guard: rateLimitGuardCb?.checked || false,
+      preflight_check: preflightCheckCb?.checked || false,
       provider_fallback_order: providerFallbackOrderInput?.value || "",
       smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
     });

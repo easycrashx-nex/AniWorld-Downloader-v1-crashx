@@ -706,6 +706,22 @@
           <option value="ytdlp">Prefer yt-dlp</option>
         </select>
       </div>
+      <div class="settings-field">
+        <label class="field-label">Speed Mode</label>
+        <select id="downloadSpeedProfile" class="sync-select">
+          <option value="fast">Fast</option>
+          <option value="balanced">Balanced</option>
+          <option value="safe">Safe</option>
+        </select>
+      </div>
+      <div class="settings-field settings-field-wide">
+        <label class="field-label">Per-Provider Engine Rules</label>
+        <input
+          type="text"
+          id="downloadEngineRules"
+          placeholder="VOE:ytdlp, Vidmoly:ffmpeg"
+        />
+      </div>
       <div class="settings-field settings-field-wide">
         <label class="field-label">Provider Fallback Order</label>
         <input
@@ -724,14 +740,31 @@
       </div>
       <button onclick="saveDownloadAdvancedSettings()">Save Download Rules</button>
     </div>
+    <div class="settings-grid settings-grid-two">
+      <label class="settings-checkbox">
+        <input type="checkbox" id="autoProviderSwitch" />
+        Auto provider switch
+      </label>
+      <label class="settings-checkbox">
+        <input type="checkbox" id="rateLimitGuard" />
+        Rate-limit guard
+      </label>
+      <label class="settings-checkbox">
+        <input type="checkbox" id="preflightCheck" />
+        Preflight check
+      </label>
+    </div>
     <div class="settings-hint">
       Bandwidth limiting is a soft ffmpeg cap. The download engine can let
       yt-dlp pull full streams first and then let ffmpeg write metadata and
       mux the result. Partial repair/missing-stream jobs still use ffmpeg so
       the existing incremental merge flow stays intact. Provider fallback order
       controls which hosts are preferred first when the current provider fails.
-      Smart retry profiles decide how many alternative hosts are tried
-      automatically before a download is marked as failed.
+      Per-provider engine rules override adaptive selection. Smart retry
+      profiles decide how many alternative hosts are tried automatically before
+      a download is marked as failed. Preflight checks resolve the stream before
+      the actual transfer starts, and the rate-limit guard keeps aggressive
+      download settings in check on touchy hosts.
     </div>
 
     <label class="settings-checkbox">

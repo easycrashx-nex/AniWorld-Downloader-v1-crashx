@@ -85,6 +85,7 @@ function refreshQueuePolling() {
 }
 
 let lastFfmpegProgress = {};
+let lastTransferRuntime = {};
 
 function formatBandwidth(bwStr) {
   if (!bwStr) return "";
@@ -118,6 +119,7 @@ async function loadQueue(options = {}) {
       const data = await queueResp.json();
       const items = data.items || [];
       lastFfmpegProgress = data.ffmpeg_progress || {};
+      lastTransferRuntime = data.runtime || {};
       queueHasRunningWork = items.some(
         (item) => item.status === "running" || !!item.current_url,
       );
@@ -204,6 +206,19 @@ function getQueueEpisodeMarker(item) {
   return "";
 }
 
+function formatQueueLiveStats(runtime, progress) {
+  const parts = [];
+  const engine = String(runtime?.engine || progress?.engine || "").trim();
+  const phase = String(runtime?.phase || progress?.phase || "").trim();
+  const host = String(runtime?.host || progress?.host || "").trim();
+  const speed = formatBandwidth(progress?.bandwidth || "");
+  if (engine) parts.push(engine);
+  if (phase) parts.push(phase);
+  if (speed) parts.push(speed);
+  if (host) parts.push(host);
+  return parts.join(" · ");
+}
+
 function toggleQueueErrorsOnly() {
   queueErrorsOnly = !queueErrorsOnly;
   const btn = document.getElementById("queueErrorsToggleBtn");
@@ -276,6 +291,10 @@ function renderQueue(items) {
     const cls = isActive ? "queue-item queue-item-active" : "queue-item";
 
     const isCancelling = item.status === "cancelled" && item.current_url;
+    const runtime =
+      (isRunning || isCancelling) && lastTransferRuntime?.active
+        ? lastTransferRuntime
+        : {};
 
     let statusBadge = "";
     if (item.status === "running")
@@ -342,6 +361,8 @@ function renderQueue(items) {
             (bw ? " @ " + bw : "") +
             ")";
         }
+        const liveStats = formatQueueLiveStats(runtime, lastFfmpegProgress);
+        if (liveStats) epDetail += " - " + liveStats;
         if (queueAverageSecondsPerEpisode) {
           const remainingEpisodes = Math.max(
             0,
@@ -497,6 +518,14 @@ function renderQueue(items) {
     );
     const languageMeta = queueMetaPill("Lang", item.language, "language");
     const providerMeta = queueMetaPill("Provider", item.provider, "provider");
+    const engineMeta =
+      runtime?.engine && (isRunning || isCancelling)
+        ? queueMetaPill("Engine", runtime.engine, "engine")
+        : "";
+    const phaseMeta =
+      runtime?.phase && (isRunning || isCancelling)
+        ? queueMetaPill("Phase", runtime.phase, "source")
+        : "";
     const userMeta = item.username
       ? queueMetaPill("User", item.username, "user")
       : "";
@@ -522,6 +551,8 @@ function renderQueue(items) {
       episodeMeta +
       languageMeta +
       providerMeta +
+      engineMeta +
+      phaseMeta +
       priorityMeta +
       pathHtml +
       userMeta +

@@ -146,6 +146,11 @@ _ENV_LIBRARY_AUTO_REPAIR = "ANIWORLD_LIBRARY_AUTO_REPAIR"
 _ENV_EXPERIMENTAL_SELF_HEAL = "ANIWORLD_EXPERIMENTAL_SELF_HEAL"
 _ENV_SAFE_MODE = "ANIWORLD_SAFE_MODE"
 _ENV_DOWNLOAD_BACKEND = "ANIWORLD_DOWNLOAD_BACKEND"
+_ENV_DOWNLOAD_ENGINE_RULES = "ANIWORLD_DOWNLOAD_ENGINE_RULES"
+_ENV_DOWNLOAD_SPEED_PROFILE = "ANIWORLD_DOWNLOAD_SPEED_PROFILE"
+_ENV_AUTO_PROVIDER_SWITCH = "ANIWORLD_AUTO_PROVIDER_SWITCH"
+_ENV_RATE_LIMIT_GUARD = "ANIWORLD_RATE_LIMIT_GUARD"
+_ENV_PREFLIGHT_CHECK = "ANIWORLD_PREFLIGHT_CHECK"
 
 
 def _experimental_flags():
@@ -891,6 +896,88 @@ def _normalize_download_backend(value):
     return backend if backend in {"auto", "ffmpeg", "ytdlp"} else "auto"
 
 
+def _normalize_download_speed_profile(value):
+    profile = str(value or "balanced").strip().lower()
+    return profile if profile in {"fast", "balanced", "safe"} else "balanced"
+
+
+def _normalize_engine_rules(value):
+    entries = []
+    seen = set()
+    for raw in str(value or "").split(","):
+        chunk = str(raw or "").strip()
+        if not chunk or ":" not in chunk:
+            continue
+        provider, engine = chunk.split(":", 1)
+        provider = provider.strip()
+        engine = engine.strip().lower()
+        match = next(
+            (name for name in WORKING_PROVIDERS if name.lower() == provider.lower()),
+            None,
+        )
+        if not match or engine not in {"ffmpeg", "ytdlp"}:
+            continue
+        key = f"{match}:{engine}"
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append(key)
+    return ", ".join(entries)
+
+
+def _download_engine_rule_map():
+    rules = {}
+    for chunk in _normalize_engine_rules(
+        os.environ.get(_ENV_DOWNLOAD_ENGINE_RULES, "")
+    ).split(","):
+        entry = str(chunk or "").strip()
+        if not entry or ":" not in entry:
+            continue
+        provider, engine = entry.split(":", 1)
+        rules[provider.strip().lower()] = engine.strip().lower()
+    return rules
+
+
+def _download_speed_profile():
+    return _normalize_download_speed_profile(
+        os.environ.get(_ENV_DOWNLOAD_SPEED_PROFILE, "balanced")
+    )
+
+
+def _auto_provider_switch_enabled():
+    return _normalize_pref_bool(os.environ.get(_ENV_AUTO_PROVIDER_SWITCH, "1")) == "1"
+
+
+def _rate_limit_guard_enabled():
+    return _normalize_pref_bool(os.environ.get(_ENV_RATE_LIMIT_GUARD, "1")) == "1"
+
+
+def _preflight_check_enabled():
+    return _normalize_pref_bool(os.environ.get(_ENV_PREFLIGHT_CHECK, "1")) == "1"
+
+
+def _recommended_engine_for_provider(provider_name):
+    provider = str(provider_name or "").strip()
+    lowered = provider.lower()
+    rules = _download_engine_rule_map()
+    if lowered in rules:
+        return {"engine": rules[lowered], "mode": "rule"}
+
+    backend = _normalize_download_backend(os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto"))
+    if backend in {"ffmpeg", "ytdlp"}:
+        return {"engine": backend, "mode": "forced"}
+
+    profile = _download_speed_profile()
+    conservative = _rate_limit_guard_enabled() or profile == "safe"
+    fast_lane = {"voe", "filemoon", "vidhide"}
+    safe_lane = {"vidmoly", "vidoza", "doodstream", "vidara"}
+    if lowered in safe_lane and conservative:
+        return {"engine": "ffmpeg", "mode": "adaptive"}
+    if lowered in fast_lane or profile == "fast":
+        return {"engine": "ytdlp", "mode": "adaptive"}
+    return {"engine": "ffmpeg", "mode": "adaptive"}
+
+
 def _normalize_ui_preset(value):
     preset = str(value or "custom").strip().lower()
     return preset if preset in _UI_THEME_PRESETS else "custom"
@@ -1106,6 +1193,21 @@ def _settings_payload(
         ),
         "download_backend": _normalize_download_backend(
             os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto")
+        ),
+        "download_engine_rules": _normalize_engine_rules(
+            os.environ.get(_ENV_DOWNLOAD_ENGINE_RULES, "")
+        ),
+        "download_speed_profile": _normalize_download_speed_profile(
+            os.environ.get(_ENV_DOWNLOAD_SPEED_PROFILE, "balanced")
+        ),
+        "auto_provider_switch": _normalize_pref_bool(
+            os.environ.get(_ENV_AUTO_PROVIDER_SWITCH, "1")
+        ),
+        "rate_limit_guard": _normalize_pref_bool(
+            os.environ.get(_ENV_RATE_LIMIT_GUARD, "1")
+        ),
+        "preflight_check": _normalize_pref_bool(
+            os.environ.get(_ENV_PREFLIGHT_CHECK, "1")
         ),
         "provider_fallback_order": _normalize_provider_fallback_order(
             os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, "")
@@ -1769,6 +1871,8 @@ _runtime_cache = {}
 _runtime_cache_lock = threading.Lock()
 _runtime_cache_warmer_started = False
 _runtime_cache_warmer_lock = threading.Lock()
+_runtime_cache_refresh_timer = None
+_runtime_cache_refresh_lock = threading.Lock()
 
 
 def _self_heal_enabled():
@@ -1916,6 +2020,11 @@ def _cache_invalidate(*prefixes):
 def _warm_runtime_caches_once():
     """Populate the heaviest runtime caches in the background."""
     try:
+        _get_cached_stats_payload()
+    except Exception as exc:
+        logger.warning("Warmup for stats payload failed: %s", exc)
+
+    try:
         _get_cached_library_snapshot(include_meta=False)
     except Exception as exc:
         logger.warning("Warmup for lightweight library snapshot failed: %s", exc)
@@ -1942,6 +2051,26 @@ def _warm_runtime_caches_startup():
     )
 
 
+def _schedule_runtime_cache_refresh(delay=1.5):
+    global _runtime_cache_refresh_timer
+
+    def _refresh():
+        global _runtime_cache_refresh_timer
+        try:
+            _warm_runtime_caches_once()
+        finally:
+            with _runtime_cache_refresh_lock:
+                _runtime_cache_refresh_timer = None
+
+    with _runtime_cache_refresh_lock:
+        if _runtime_cache_refresh_timer is not None:
+            return
+        timer = threading.Timer(delay, _refresh)
+        timer.daemon = True
+        _runtime_cache_refresh_timer = timer
+        timer.start()
+
+
 def _ensure_runtime_cache_warmer():
     global _runtime_cache_warmer_started
     with _runtime_cache_warmer_lock:
@@ -1951,10 +2080,10 @@ def _ensure_runtime_cache_warmer():
 
     def _worker():
         try:
-            interval = int(os.environ.get("ANIWORLD_CACHE_WARM_INTERVAL", "180"))
+            interval = int(os.environ.get("ANIWORLD_CACHE_WARM_INTERVAL", "45"))
         except ValueError:
-            interval = 180
-        interval = max(60, min(interval, 1800))
+            interval = 45
+        interval = max(20, min(interval, 900))
 
         # Warm once right after startup, then refresh periodically.
         while True:
@@ -2045,6 +2174,16 @@ def _build_diagnostics_payload():
             "bandwidth_limit_kbps": _normalize_bandwidth_limit(
                 os.environ.get(_ENV_BANDWIDTH_LIMIT, "0")
             ),
+            "download_backend": _normalize_download_backend(
+                os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto")
+            ),
+            "download_engine_rules": _normalize_engine_rules(
+                os.environ.get(_ENV_DOWNLOAD_ENGINE_RULES, "")
+            ),
+            "download_speed_profile": _download_speed_profile(),
+            "auto_provider_switch": _auto_provider_switch_enabled(),
+            "rate_limit_guard": _rate_limit_guard_enabled(),
+            "preflight_check": _preflight_check_enabled(),
             "fallback_order": _provider_fallback_order(),
             "library_auto_repair": os.environ.get(_ENV_LIBRARY_AUTO_REPAIR, "0")
             == "1",
@@ -2071,11 +2210,92 @@ def _build_maintenance_payload():
         "sessions": get_download_session_history(80),
         "provider_failures": get_provider_failure_analytics(),
         "safe_mode": _safe_mode_enabled(),
+        "runtime": diagnostics.get("ffmpeg") or {},
+        "downloads": {
+            "engine": _normalize_download_backend(
+                os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto")
+            ),
+            "engine_rules": _normalize_engine_rules(
+                os.environ.get(_ENV_DOWNLOAD_ENGINE_RULES, "")
+            ),
+            "speed_profile": _download_speed_profile(),
+            "auto_provider_switch": _auto_provider_switch_enabled(),
+            "rate_limit_guard": _rate_limit_guard_enabled(),
+            "preflight_check": _preflight_check_enabled(),
+        },
         "webhooks": {
             "enabled": _external_notifications_enabled(),
             "type": _external_notification_type(),
             "url_configured": bool(_external_notifications_url()),
         },
+    }
+
+
+def _maintenance_download_roots():
+    roots = {_resolved_download_path_value()}
+    for entry in get_custom_paths():
+        raw = str(entry.get("path") or "").strip()
+        if raw:
+            roots.add(str(Path(raw).expanduser()))
+    normalized = []
+    for raw in roots:
+        try:
+            resolved = str(Path(raw).expanduser())
+        except Exception:
+            resolved = str(raw)
+        if resolved:
+            normalized.append(resolved)
+    return sorted(set(normalized))
+
+
+def _maintenance_clear_temp_files():
+    removed = []
+    patterns = (
+        "*.temp_audio.mkv",
+        "*.temp_video.mkv",
+        "*.temp_full.mkv",
+        "*.temp_ytdlp.*",
+        "*.new.mkv",
+        "*.part",
+    )
+    for root in _maintenance_download_roots():
+        base = Path(root)
+        if not base.exists():
+            continue
+        for pattern in patterns:
+            try:
+                matches = list(base.rglob(pattern))
+            except Exception:
+                matches = []
+            for candidate in matches:
+                if not candidate.is_file():
+                    continue
+                try:
+                    candidate.unlink()
+                    removed.append(str(candidate))
+                except OSError:
+                    continue
+    return {"removed": len(removed), "samples": removed[:12]}
+
+
+def _maintenance_recover_queue():
+    running = get_running()
+    if not running:
+        return {"recovered": False, "reason": "No running queue item"}
+
+    reason = "maintenance recover action"
+    terminate_ffmpeg_process_tree(reason)
+    update_queue_progress(
+        running["id"],
+        int(running.get("current_episode") or 0),
+        "",
+    )
+    requeue_running_item(running["id"], clear_current_url=True)
+    _emit_ui_event("queue", "dashboard", "nav", "settings")
+    return {
+        "recovered": True,
+        "queue_id": running["id"],
+        "title": running.get("title") or f"Queue #{running['id']}",
     }
 
 
@@ -2091,6 +2311,11 @@ def _emit_ui_event(*channels, min_interval=0.75):
         _cache_invalidate("stats:", "dashboard:")
     if any(channel in normalized for channel in ("library", "settings", "favorites")):
         _cache_invalidate("library:")
+    if any(
+        channel in normalized
+        for channel in ("queue", "autosync", "dashboard", "library", "settings", "favorites")
+    ):
+        _schedule_runtime_cache_refresh()
 
     now = time.monotonic()
     with _ui_event_condition:
@@ -2431,6 +2656,7 @@ def _run_provider_benchmark(episode_url="", language=""):
         redirect_url = ""
         redirect_host = ""
         error_message = ""
+        recommendation = _recommended_engine_for_provider(provider_name)
 
         try:
             redirect_url = str(
@@ -2454,6 +2680,9 @@ def _run_provider_benchmark(episode_url="", language=""):
                 "redirect_url": redirect_url,
                 "redirect_host": redirect_host,
                 "error": error_message,
+                "recommended_engine": recommendation.get("engine") or "ffmpeg",
+                "engine_mode": recommendation.get("mode") or "adaptive",
+                "profile": _download_speed_profile(),
             }
         )
 
@@ -2472,6 +2701,7 @@ def _run_provider_benchmark(episode_url="", language=""):
         "sample": sample,
         "results": ordered,
         "provider_count": len(ordered),
+        "profile": _download_speed_profile(),
     }
 
 
@@ -2500,6 +2730,20 @@ def _download_episode_with_fallback(item, ep_url, selected_path):
                 ep_kwargs["selected_path"] = selected_path
             episode = prov.episode_cls(**ep_kwargs)
             _captcha_mod._local.queue_id = item["id"]
+            if _preflight_check_enabled():
+                provider_url = str(getattr(episode, "provider_url", "") or "").strip()
+                stream_url = str(getattr(episode, "stream_url", "") or "").strip()
+                attempt_details.append(
+                    {
+                        "provider": provider_name,
+                        "message": "Preflight ok",
+                        "provider_url": provider_url,
+                        "stream_host": urlparse(stream_url).netloc if stream_url else "",
+                        "engine": _recommended_engine_for_provider(provider_name).get("engine"),
+                    }
+                )
+                if not stream_url:
+                    raise RuntimeError("Preflight could not resolve a stream URL")
             try:
                 episode.download()
             finally:
@@ -2527,7 +2771,7 @@ def _download_episode_with_fallback(item, ep_url, selected_path):
                 )
                 err.attempt_details = attempt_details
                 raise err
-            if len(tried) == 1:
+            if _auto_provider_switch_enabled() and len(tried) == 1:
                 fallback_candidates = _get_provider_candidates_for_episode(
                     ep_url,
                     item["language"],
@@ -2559,7 +2803,7 @@ def _build_nav_state(username=None):
 
 def _get_cached_library_snapshot(include_meta=True):
     cache_key = f"library:{1 if include_meta else 0}"
-    cached = _cache_get(cache_key, 300.0)
+    cached = _cache_get(cache_key, 900.0)
     if cached is not None:
         return cached
     snapshot = _scan_library_snapshot(include_meta=include_meta)
@@ -2653,7 +2897,7 @@ def _library_title_episode_index(title):
 
 def _get_cached_source_episode_index(series_url):
     cache_key = f"library:source:{series_url}"
-    cached = _cache_get(cache_key, 180.0)
+    cached = _cache_get(cache_key, 900.0)
     if cached is not None:
         return cached
 
@@ -2748,7 +2992,7 @@ def _get_cached_library_compare(refresh=False):
     cache_key = "library:compare"
     if refresh:
         _cache_invalidate(cache_key)
-    cached = _cache_get(cache_key, 300.0)
+    cached = _cache_get(cache_key, 900.0)
     if cached is not None:
         return cached
 
@@ -3086,7 +3330,7 @@ def _run_provider_test(episode_url, language, provider):
 
 def _get_cached_stats_payload(username=None):
     cache_key = "stats:summary:global"
-    cached = _cache_get(cache_key, 45.0)
+    cached = _cache_get(cache_key, 180.0)
     if cached is not None:
         return cached
 
@@ -4399,7 +4643,13 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         items = get_queue()
         ffmpeg_pct = get_ffmpeg_progress()
-        return jsonify({"items": items, "ffmpeg_progress": ffmpeg_pct})
+        return jsonify(
+            {
+                "items": items,
+                "ffmpeg_progress": ffmpeg_pct,
+                "runtime": get_ffmpeg_runtime_state(),
+            }
+        )
 
     @app.route("/api/queue/<int:queue_id>", methods=["DELETE"])
     def api_queue_remove(queue_id):
@@ -4866,6 +5116,20 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             os.environ[_ENV_DOWNLOAD_BACKEND] = _normalize_download_backend(
                 data["download_backend"]
             )
+        if "download_engine_rules" in data:
+            os.environ[_ENV_DOWNLOAD_ENGINE_RULES] = _normalize_engine_rules(
+                data["download_engine_rules"]
+            )
+        if "download_speed_profile" in data:
+            os.environ[_ENV_DOWNLOAD_SPEED_PROFILE] = (
+                _normalize_download_speed_profile(data["download_speed_profile"])
+            )
+        if "auto_provider_switch" in data:
+            _set_bool_env(_ENV_AUTO_PROVIDER_SWITCH, data["auto_provider_switch"])
+        if "rate_limit_guard" in data:
+            _set_bool_env(_ENV_RATE_LIMIT_GUARD, data["rate_limit_guard"])
+        if "preflight_check" in data:
+            _set_bool_env(_ENV_PREFLIGHT_CHECK, data["preflight_check"])
         if "provider_fallback_order" in data:
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = (
                 _normalize_provider_fallback_order(data["provider_fallback_order"])
@@ -5684,6 +5948,28 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         _emit_ui_event("dashboard", "settings")
         return jsonify({"ok": True, "snapshots": created})
 
+    @app.route("/api/maintenance/recover-queue", methods=["POST"])
+    def api_maintenance_recover_queue():
+        payload = _maintenance_recover_queue()
+        _record_user_event(
+            "maintenance.recover_queue",
+            subject_type="maintenance",
+            subject=(payload.get("title") or "queue-recover"),
+            details=payload,
+        )
+        return jsonify({"ok": True, **payload})
+
+    @app.route("/api/maintenance/clear-temp-files", methods=["POST"])
+    def api_maintenance_clear_temp_files():
+        payload = _maintenance_clear_temp_files()
+        _record_user_event(
+            "maintenance.clear_temp_files",
+            subject_type="maintenance",
+            subject="temp-cleanup",
+            details={"removed": payload.get("removed", 0)},
+        )
+        return jsonify({"ok": True, **payload})
+
     @app.route("/api/sessions")
     def api_sessions():
         try:
@@ -5767,6 +6053,39 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             )
             os.environ[_ENV_DOWNLOAD_BACKEND] = _normalize_download_backend(
                 settings_payload.get("download_backend", os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto"))
+            )
+            os.environ[_ENV_DOWNLOAD_ENGINE_RULES] = _normalize_engine_rules(
+                settings_payload.get(
+                    "download_engine_rules",
+                    os.environ.get(_ENV_DOWNLOAD_ENGINE_RULES, ""),
+                )
+            )
+            os.environ[_ENV_DOWNLOAD_SPEED_PROFILE] = _normalize_download_speed_profile(
+                settings_payload.get(
+                    "download_speed_profile",
+                    os.environ.get(_ENV_DOWNLOAD_SPEED_PROFILE, "balanced"),
+                )
+            )
+            _set_bool_env(
+                _ENV_AUTO_PROVIDER_SWITCH,
+                settings_payload.get(
+                    "auto_provider_switch",
+                    os.environ.get(_ENV_AUTO_PROVIDER_SWITCH, "1"),
+                ),
+            )
+            _set_bool_env(
+                _ENV_RATE_LIMIT_GUARD,
+                settings_payload.get(
+                    "rate_limit_guard",
+                    os.environ.get(_ENV_RATE_LIMIT_GUARD, "1"),
+                ),
+            )
+            _set_bool_env(
+                _ENV_PREFLIGHT_CHECK,
+                settings_payload.get(
+                    "preflight_check",
+                    os.environ.get(_ENV_PREFLIGHT_CHECK, "1"),
+                ),
             )
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = _normalize_provider_fallback_order(
                 settings_payload.get("provider_fallback_order", os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, ""))
@@ -6257,7 +6576,7 @@ def start_web_ui(
     )
     app.config["WEB_HOST"] = host
     app.config["WEB_PORT"] = port
-    if os.getenv("ANIWORLD_CACHE_WARM_ON_START", "1") == "1":
+    if os.getenv("ANIWORLD_CACHE_WARM_ON_START", "0") == "1":
         _warm_runtime_caches_startup()
     _ensure_runtime_cache_warmer()
     display_host = "localhost" if host == "127.0.0.1" else host

@@ -158,6 +158,11 @@ _ffmpeg_progress = {
     "speed": "",
     "bandwidth": "",
     "active": False,
+    "engine": "",
+    "phase": "",
+    "host": "",
+    "mode": "",
+    "profile": "",
 }
 _ffmpeg_runtime = {
     "active": False,
@@ -167,6 +172,11 @@ _ffmpeg_runtime = {
     "last_progress_at": 0.0,
     "stall_timeout": 0,
     "reason": "",
+    "engine": "",
+    "phase": "",
+    "host": "",
+    "mode": "",
+    "profile": "",
     "_process": None,
 }
 
@@ -174,6 +184,101 @@ _ffmpeg_runtime = {
 def _download_backend_mode():
     backend = str(os.getenv("ANIWORLD_DOWNLOAD_BACKEND", "auto") or "auto").strip().lower()
     return backend if backend in {"auto", "ffmpeg", "ytdlp"} else "auto"
+
+
+def _download_speed_profile():
+    profile = str(os.getenv("ANIWORLD_DOWNLOAD_SPEED_PROFILE", "balanced") or "balanced").strip().lower()
+    return profile if profile in {"fast", "balanced", "safe"} else "balanced"
+
+
+def _rate_limit_guard_enabled():
+    return str(os.getenv("ANIWORLD_RATE_LIMIT_GUARD", "1") or "1").strip() == "1"
+
+
+def _preflight_check_enabled():
+    return str(os.getenv("ANIWORLD_PREFLIGHT_CHECK", "1") or "1").strip() == "1"
+
+
+def _auto_provider_switch_enabled():
+    return str(os.getenv("ANIWORLD_AUTO_PROVIDER_SWITCH", "1") or "1").strip() == "1"
+
+
+def _provider_engine_rules():
+    rules = {}
+    raw = str(os.getenv("ANIWORLD_DOWNLOAD_ENGINE_RULES", "") or "")
+    for part in raw.split(","):
+        chunk = str(part or "").strip()
+        if not chunk or ":" not in chunk:
+            continue
+        provider, engine = chunk.split(":", 1)
+        provider = provider.strip()
+        engine = engine.strip().lower()
+        if provider and engine in {"ffmpeg", "ytdlp"}:
+            rules[provider.lower()] = engine
+    return rules
+
+
+def _adaptive_engine_for_provider(provider_name):
+    provider = str(provider_name or "").strip()
+    rules = _provider_engine_rules()
+    if provider.lower() in rules:
+        return rules[provider.lower()], "rule"
+
+    mode = _download_backend_mode()
+    if mode in {"ffmpeg", "ytdlp"}:
+        return mode, "forced"
+
+    profile = _download_speed_profile()
+    conservative = _rate_limit_guard_enabled() or profile == "safe"
+    fast_lane = {"voe", "filemoon", "vidhide"}
+    safe_lane = {"vidmoly", "vidoza", "doodstream", "vidara"}
+    lowered = provider.lower()
+    if lowered in safe_lane and conservative:
+        return "ffmpeg", "adaptive"
+    if lowered in fast_lane:
+        return "ytdlp", "adaptive"
+    if profile == "fast":
+        return "ytdlp", "adaptive"
+    return "ffmpeg", "adaptive"
+
+
+def _engine_attempt_order(provider_name, full_stream_needed):
+    primary, mode = _adaptive_engine_for_provider(provider_name)
+    order = [primary]
+    if full_stream_needed:
+        fallback = "ffmpeg" if primary == "ytdlp" else "ytdlp"
+        if fallback not in order:
+            order.append(fallback)
+    return order, mode
+
+
+def _fragment_concurrency():
+    profile = _download_speed_profile()
+    if profile == "safe":
+        return 1
+    if profile == "fast":
+        return 2 if _rate_limit_guard_enabled() else 4
+    return 1 if _rate_limit_guard_enabled() else 2
+
+
+def _set_transfer_runtime(engine="", phase="", host="", mode="", profile="", active=True):
+    with _ffmpeg_progress_lock:
+        if engine:
+            _ffmpeg_progress["engine"] = engine
+            _ffmpeg_runtime["engine"] = engine
+        if phase:
+            _ffmpeg_progress["phase"] = phase
+            _ffmpeg_runtime["phase"] = phase
+        if host:
+            _ffmpeg_progress["host"] = host
+            _ffmpeg_runtime["host"] = host
+        if mode:
+            _ffmpeg_progress["mode"] = mode
+            _ffmpeg_runtime["mode"] = mode
+        if profile:
+            _ffmpeg_progress["profile"] = profile
+            _ffmpeg_runtime["profile"] = profile
+        _ffmpeg_progress["active"] = bool(active)
 
 
 def _yt_dlp_available():
@@ -212,6 +317,11 @@ def get_ffmpeg_runtime_state():
             "last_progress_at": float(_ffmpeg_runtime.get("last_progress_at") or 0.0),
             "stall_timeout": int(_ffmpeg_runtime.get("stall_timeout") or 0),
             "reason": _ffmpeg_runtime.get("reason") or "",
+            "engine": _ffmpeg_runtime.get("engine") or "",
+            "phase": _ffmpeg_runtime.get("phase") or "",
+            "host": _ffmpeg_runtime.get("host") or "",
+            "mode": _ffmpeg_runtime.get("mode") or "",
+            "profile": _ffmpeg_runtime.get("profile") or "",
         }
 
 
@@ -224,6 +334,11 @@ def _reset_ffmpeg_runtime_state():
         last_progress_at=0.0,
         stall_timeout=0,
         reason="",
+        engine="",
+        phase="",
+        host="",
+        mode="",
+        profile="",
         _process=None,
     )
 
@@ -311,6 +426,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
         600  # 10 minutes without progress → kill (must exceed reconnect_delay_max=300)
     )
 
+    runtime_reason = ""
     debug_mode = os.getenv("ANIWORLD_DEBUG_MODE", "0") == "1"
     is_tty = sys.stderr.isatty()
 
@@ -380,7 +496,12 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     started_at = time.time()
     with _ffmpeg_progress_lock:
         _ffmpeg_progress.update(
-            percent=0.0, time="", speed="", bandwidth="", active=True
+            percent=0.0,
+            time="",
+            speed="",
+            bandwidth="",
+            active=True,
+            phase="downloading",
         )
         _ffmpeg_runtime.update(
             active=True,
@@ -390,6 +511,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
             last_progress_at=started_at,
             stall_timeout=STALL_TIMEOUT,
             reason="",
+            phase="downloading",
             _process=process,
         )
 
@@ -469,6 +591,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                         speed=cur_speed_str,
                         bandwidth=cur_bw_str or prev_bw,
                         active=True,
+                        phase="downloading",
                     )
                     _ffmpeg_runtime["last_progress_at"] = time.time()
 
@@ -510,7 +633,12 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
         with _ffmpeg_progress_lock:
             runtime_reason = _ffmpeg_runtime.get("reason") or ""
             _ffmpeg_progress.update(
-                percent=0.0, time="", speed="", bandwidth="", active=False
+                percent=0.0,
+                time="",
+                speed="",
+                bandwidth="",
+                active=False,
+                phase="",
             )
             _reset_ffmpeg_runtime_state()
 
@@ -547,6 +675,7 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
     import threading
 
     STALL_TIMEOUT = 420
+    runtime_reason = ""
     cmd = [
         sys.executable,
         "-m",
@@ -562,7 +691,7 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
         "--output",
         output_template,
         "--concurrent-fragments",
-        "4",
+        str(_fragment_concurrency()),
         "--force-generic-extractor",
     ]
 
@@ -607,7 +736,12 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
 
     with _ffmpeg_progress_lock:
         _ffmpeg_progress.update(
-            percent=0.0, time="", speed="", bandwidth="", active=True
+            percent=0.0,
+            time="",
+            speed="",
+            bandwidth="",
+            active=True,
+            phase="downloading",
         )
         _ffmpeg_runtime.update(
             active=True,
@@ -617,6 +751,7 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
             last_progress_at=started_at,
             stall_timeout=STALL_TIMEOUT,
             reason="",
+            phase="downloading",
             _process=process,
         )
 
@@ -657,6 +792,7 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
                         speed=speed,
                         bandwidth=speed,
                         active=status != "finished",
+                        phase="muxing" if status == "finished" else "downloading",
                     )
                     _ffmpeg_runtime["last_progress_at"] = time.time()
 
@@ -722,6 +858,7 @@ def _cleanup_ytdlp_outputs(output_template):
 
 
 def _tag_downloaded_stream(input_path, output_path, audio_code, wants_clean_video, sub_video_code):
+    _set_transfer_runtime(phase="metadata", active=True)
     stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
     if (not wants_clean_video) and sub_video_code:
         stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
@@ -801,11 +938,31 @@ def download(self):
             ep_label = os.path.splitext(self._file_name)[0] if self._file_name else ""
 
             full_stream_needed = need_audio and need_video
-            download_backend = _download_backend_mode()
-            use_ytdlp = (
-                full_stream_needed
-                and download_backend in {"auto", "ytdlp"}
-                and _yt_dlp_available()
+            provider_name = str(getattr(self, "selected_provider", "") or "")
+            engine_order, engine_mode = _engine_attempt_order(
+                provider_name,
+                full_stream_needed,
+            )
+            if not _yt_dlp_available():
+                engine_order = [engine for engine in engine_order if engine != "ytdlp"]
+            if not engine_order:
+                engine_order = ["ffmpeg"]
+            engine_choice = engine_order[min(attempt - 1, len(engine_order) - 1)]
+            use_ytdlp = full_stream_needed and engine_choice == "ytdlp"
+            stream_host = ""
+            try:
+                from urllib.parse import urlparse
+
+                stream_host = urlparse(str(self.stream_url or "")).netloc
+            except Exception:
+                stream_host = ""
+            _set_transfer_runtime(
+                engine=engine_choice,
+                host=stream_host,
+                mode=engine_mode,
+                profile=_download_speed_profile(),
+                phase="preflight" if _preflight_check_enabled() else "downloading",
+                active=True,
             )
 
             temp_audio = self._episode_path.with_suffix(".temp_audio.mkv")
@@ -859,6 +1016,7 @@ def download(self):
                     )
 
                 if self._episode_path.exists():
+                    _set_transfer_runtime(phase="muxing", active=True)
                     inputs = [
                         ffmpeg.input(str(self._episode_path)),
                         ffmpeg.input(str(temp_full)),
@@ -877,6 +1035,7 @@ def download(self):
 
             if need_audio:
                 logger.debug("[DOWNLOADING] audio stream")
+                _set_transfer_runtime(engine="ffmpeg", phase="audio", active=True)
                 video_codec = get_video_codec()
                 bandwidth_kwargs = _bandwidth_limit_output_kwargs()
                 _run_ffmpeg_with_progress(
@@ -892,6 +1051,7 @@ def download(self):
 
             if need_video:
                 logger.debug("[DOWNLOADING] video stream")
+                _set_transfer_runtime(engine="ffmpeg", phase="video", active=True)
                 video_codec = get_video_codec()
                 bandwidth_kwargs = _bandwidth_limit_output_kwargs()
                 _run_ffmpeg_with_progress(
@@ -910,6 +1070,7 @@ def download(self):
                 )
 
             logger.debug("[MUXING] combining streams")
+            _set_transfer_runtime(engine="ffmpeg", phase="muxing", active=True)
             inputs = (
                 [ffmpeg.input(str(self._episode_path))]
                 if self._episode_path.exists()

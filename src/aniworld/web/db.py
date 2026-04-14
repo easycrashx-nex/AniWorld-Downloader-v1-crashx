@@ -1799,7 +1799,12 @@ def get_download_history(limit=40, username=None):
     try:
         rows = conn.execute(
             "SELECT queue_id AS id, title, series_url, language, provider, status, total_episodes, "
-            "source, created_at, completed_at, username, custom_path_id, errors "
+            "source, created_at, completed_at, "
+            "CASE "
+            "WHEN completed_at IS NOT NULL AND created_at IS NOT NULL "
+            "THEN CAST((julianday(completed_at) - julianday(created_at)) * 86400 AS INTEGER) "
+            "ELSE 0 END AS duration_seconds, "
+            "username, custom_path_id, errors "
             "FROM download_archive "
             "WHERE COALESCE(username, '') = ? "
             "ORDER BY COALESCE(completed_at, created_at) DESC, queue_id DESC LIMIT ?",

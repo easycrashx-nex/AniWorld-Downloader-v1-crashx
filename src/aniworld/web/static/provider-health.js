@@ -210,6 +210,7 @@ function renderProviderBenchmark(data) {
       <strong>${escProviderHealth(sample.title || "Sample episode")}</strong>
       <span>${escProviderHealth(sample.language || "-")}</span>
       <span>${escProviderHealth(sample.episode_url || "-")}</span>
+      <span>${escProviderHealth(`Profile ${data?.profile || "balanced"}`)}</span>
     </div>
     <div class="provider-benchmark-cards">
       ${results
@@ -232,6 +233,7 @@ function renderProviderBenchmark(data) {
               <div class="provider-benchmark-meta">
                 <span>${escProviderHealth((item.status || "unknown").toUpperCase())}</span>
                 <span>${escProviderHealth(item.redirect_host || "No redirect host")}</span>
+                <span>${escProviderHealth(`${item.recommended_engine || "ffmpeg"} · ${item.engine_mode || "adaptive"}`)}</span>
               </div>
               ${
                 item.error

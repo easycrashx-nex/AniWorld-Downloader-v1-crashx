@@ -3,6 +3,12 @@ const maintenanceSessionList = document.getElementById("maintenanceSessionList")
 const providerTestResult = document.getElementById("providerTestResult");
 const maintenanceWarmCacheBtn = document.getElementById("maintenanceWarmCacheBtn");
 const maintenanceSnapshotBtn = document.getElementById("maintenanceSnapshotBtn");
+const maintenanceRecoverQueueBtn = document.getElementById(
+  "maintenanceRecoverQueueBtn",
+);
+const maintenanceClearTempsBtn = document.getElementById(
+  "maintenanceClearTempsBtn",
+);
 const providerTestRunBtn = document.getElementById("providerTestRunBtn");
 
 let maintenanceRequest = null;
@@ -37,6 +43,8 @@ function renderMaintenanceSummary(data) {
   const queue = diagnostics.queue || {};
   const disk = diagnostics.disk_guard || {};
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  const runtime = data.runtime || {};
+  const downloads = data.downloads || {};
   maintenanceSummary.innerHTML = `
     <div class="diagnostics-card">
       <span class="library-summary-label">Safe Mode</span>
@@ -62,6 +70,16 @@ function renderMaintenanceSummary(data) {
       <span class="library-summary-label">Webhooks</span>
       <strong>${data.webhooks?.enabled ? "Enabled" : "Disabled"}</strong>
       <span class="library-summary-note">${data.webhooks?.type || "generic"} · ${data.webhooks?.url_configured ? "URL set" : "no URL"}</span>
+    </div>
+    <div class="diagnostics-card">
+      <span class="library-summary-label">Active Engine</span>
+      <strong>${escMaintenance(runtime.engine || "Idle")}</strong>
+      <span class="library-summary-note">${escMaintenance(runtime.phase || "No active transfer")}</span>
+    </div>
+    <div class="diagnostics-card">
+      <span class="library-summary-label">Download Profile</span>
+      <strong>${escMaintenance(downloads.speed_profile || "balanced")}</strong>
+      <span class="library-summary-note">${escMaintenance(downloads.engine || "auto")} · ${downloads.auto_provider_switch ? "auto switch" : "fixed provider"}</span>
     </div>`;
 }
 
@@ -77,7 +95,9 @@ function renderMaintenanceSessions(items) {
     .map((item) => {
       const errors = Array.isArray(item.errors) ? item.errors : [];
       const latestError = errors.length
-        ? errors[errors.length - 1].error || errors[errors.length - 1].message || "Unknown error"
+        ? errors[errors.length - 1].error ||
+          errors[errors.length - 1].message ||
+          "Unknown error"
         : "";
       return `
         <article class="maintenance-session-card">
@@ -151,7 +171,8 @@ async function runProviderTest() {
     return;
   }
 
-  providerTestResult.innerHTML = '<div class="stats-empty">Running provider test...</div>';
+  providerTestResult.innerHTML =
+    '<div class="stats-empty">Running provider test...</div>';
   try {
     const resp = await fetch("/api/provider-test", {
       method: "POST",
@@ -183,13 +204,37 @@ async function runProviderTest() {
 
 if (maintenanceWarmCacheBtn) {
   maintenanceWarmCacheBtn.addEventListener("click", function () {
-    runMaintenanceAction("/api/maintenance/warm-cache", "Runtime cache warmup started");
+    runMaintenanceAction(
+      "/api/maintenance/warm-cache",
+      "Runtime cache warmup started",
+    );
   });
 }
 
 if (maintenanceSnapshotBtn) {
   maintenanceSnapshotBtn.addEventListener("click", function () {
-    runMaintenanceAction("/api/maintenance/provider-snapshot", "Provider score snapshot collected");
+    runMaintenanceAction(
+      "/api/maintenance/provider-snapshot",
+      "Provider score snapshot collected",
+    );
+  });
+}
+
+if (maintenanceRecoverQueueBtn) {
+  maintenanceRecoverQueueBtn.addEventListener("click", function () {
+    runMaintenanceAction(
+      "/api/maintenance/recover-queue",
+      "Queue worker recovery triggered",
+    );
+  });
+}
+
+if (maintenanceClearTempsBtn) {
+  maintenanceClearTempsBtn.addEventListener("click", function () {
+    runMaintenanceAction(
+      "/api/maintenance/clear-temp-files",
+      "Temporary download files cleaned",
+    );
   });
 }
 
@@ -200,9 +245,12 @@ if (providerTestRunBtn) {
 loadMaintenance();
 
 if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
-  window.LiveUpdates.subscribe(["queue", "dashboard", "settings", "autosync", "library"], function () {
-    loadMaintenance();
-  });
+  window.LiveUpdates.subscribe(
+    ["queue", "dashboard", "settings", "autosync", "library"],
+    function () {
+      loadMaintenance();
+    },
+  );
 }
 
 setInterval(function () {
