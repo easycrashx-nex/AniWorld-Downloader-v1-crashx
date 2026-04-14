@@ -130,6 +130,10 @@ class ProviderData:
         return self._data[lang_tuple]
 
 
+class DownloadCancelledError(RuntimeError):
+    """Raised when an active download is intentionally stopped."""
+
+
 # -----------------------------------------------------------------------------
 # Episode actions (moved from models/*/episode.py)
 # -----------------------------------------------------------------------------
@@ -504,6 +508,7 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
 
     finally:
         with _ffmpeg_progress_lock:
+            runtime_reason = _ffmpeg_runtime.get("reason") or ""
             _ffmpeg_progress.update(
                 percent=0.0, time="", speed="", bandwidth="", active=False
             )
@@ -512,6 +517,11 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     reader_thread.join(timeout=5)
     process.wait()
     if process.returncode != 0:
+        if runtime_reason and any(
+            token in runtime_reason.lower()
+            for token in ("cancel", "manual stop", "stall timeout")
+        ):
+            raise DownloadCancelledError(runtime_reason)
         detail = (
             "\n".join(stderr_lines[-20:])
             if stderr_lines
@@ -660,6 +670,7 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
                 stderr_lines.append(line_str)
     finally:
         with _ffmpeg_progress_lock:
+            runtime_reason = _ffmpeg_runtime.get("reason") or ""
             _ffmpeg_progress.update(
                 percent=0.0, time="", speed="", bandwidth="", active=False
             )
@@ -668,6 +679,11 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
     reader_thread.join(timeout=5)
     process.wait()
     if process.returncode != 0:
+        if runtime_reason and any(
+            token in runtime_reason.lower()
+            for token in ("cancel", "manual stop", "stall timeout")
+        ):
+            raise DownloadCancelledError(runtime_reason)
         detail = (
             "\n".join(stderr_lines[-20:])
             if stderr_lines
@@ -917,6 +933,20 @@ def download(self):
 
             # If download succeeds, exit loop
             break
+
+        except DownloadCancelledError:
+            # Intentional stops must not fall into the normal retry loop.
+            for suffix in (
+                ".temp_full.mkv",
+                ".temp_audio.mkv",
+                ".temp_video.mkv",
+                ".new.mkv",
+            ):
+                temp = self._episode_path.with_suffix(suffix)
+                if temp.exists():
+                    temp.unlink()
+            _cleanup_ytdlp_outputs(temp_ytdlp_template)
+            raise
 
         except Exception as e:
             # Clean up temp files from failed attempt
