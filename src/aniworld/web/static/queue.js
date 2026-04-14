@@ -154,6 +154,39 @@ function formatEta(seconds) {
   return `${rounded}s remaining`;
 }
 
+function estimateQueueEta(item, runtime, progress) {
+  const totalEpisodes = Number(item?.total_episodes || 0);
+  const currentEpisode = Number(item?.current_episode || 0);
+  if (!totalEpisodes || currentEpisode < 0) return 0;
+
+  const episodesAfterCurrent = Math.max(0, totalEpisodes - currentEpisode);
+  const avgEpisodeSeconds = Number(queueAverageSecondsPerEpisode || 0);
+  const startedAt = Number(runtime?.started_at || 0);
+  const progressPercent = Number(progress?.percent || 0);
+  const nowSeconds = Date.now() / 1000;
+
+  let estimatedEpisodeSeconds = 0;
+  if (startedAt > 0 && progressPercent >= 3) {
+    const elapsedSeconds = Math.max(0, nowSeconds - startedAt);
+    const progressRatio = Math.min(0.99, Math.max(progressPercent / 100, 0.03));
+    if (elapsedSeconds >= 8) {
+      estimatedEpisodeSeconds = elapsedSeconds / progressRatio;
+    }
+  }
+
+  if (!estimatedEpisodeSeconds && avgEpisodeSeconds > 0) {
+    estimatedEpisodeSeconds = avgEpisodeSeconds;
+  }
+  if (!estimatedEpisodeSeconds) return 0;
+
+  const currentRemainingSeconds =
+    progressPercent > 0
+      ? estimatedEpisodeSeconds * Math.max(0, 1 - progressPercent / 100)
+      : estimatedEpisodeSeconds;
+
+  return currentRemainingSeconds + episodesAfterCurrent * estimatedEpisodeSeconds;
+}
+
 function queueActionButton(className, label, onClick, title, iconOnly = false) {
   return (
     '<button class="' +
@@ -208,14 +241,8 @@ function getQueueEpisodeMarker(item) {
 
 function formatQueueLiveStats(runtime, progress) {
   const parts = [];
-  const engine = String(runtime?.engine || progress?.engine || "").trim();
-  const phase = String(runtime?.phase || progress?.phase || "").trim();
-  const host = String(runtime?.host || progress?.host || "").trim();
   const speed = formatBandwidth(progress?.bandwidth || "");
-  if (engine) parts.push(engine);
-  if (phase) parts.push(phase);
   if (speed) parts.push(speed);
-  if (host) parts.push(host);
   return parts.join(" · ");
 }
 
@@ -363,16 +390,10 @@ function renderQueue(items) {
         }
         const liveStats = formatQueueLiveStats(runtime, lastFfmpegProgress);
         if (liveStats) epDetail += " - " + liveStats;
-        if (queueAverageSecondsPerEpisode) {
-          const remainingEpisodes = Math.max(
-            0,
-            item.total_episodes - item.current_episode,
-          );
-          const etaText = formatEta(
-            remainingEpisodes * queueAverageSecondsPerEpisode,
-          );
-          if (etaText) epDetail += " - " + etaText;
-        }
+        const etaText = formatEta(
+          estimateQueueEta(item, runtime, lastFfmpegProgress),
+        );
+        if (etaText) epDetail += " - " + etaText;
         label = epDetail;
       }
       progressHtml =
