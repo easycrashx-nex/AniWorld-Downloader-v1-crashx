@@ -1,5 +1,6 @@
 import getpass
 import hashlib
+import importlib.util
 import os
 import platform
 import re
@@ -163,6 +164,15 @@ _ffmpeg_runtime = {
     "reason": "",
     "_process": None,
 }
+
+
+def _download_backend_mode():
+    backend = str(os.getenv("ANIWORLD_DOWNLOAD_BACKEND", "auto") or "auto").strip().lower()
+    return backend if backend in {"auto", "ffmpeg", "ytdlp"} else "auto"
+
+
+def _yt_dlp_available():
+    return importlib.util.find_spec("yt_dlp") is not None
 
 
 def _bandwidth_limit_output_kwargs():
@@ -510,6 +520,203 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
         raise RuntimeError(f"ffmpeg error (rc={process.returncode}): {detail}")
 
 
+def _parse_percent_number(raw):
+    cleaned = re.sub(r"[^0-9.]", "", str(raw or ""))
+    if not cleaned:
+        return 0.0
+    try:
+        return max(0.0, min(float(cleaned), 100.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
+    """Download a direct media URL via yt-dlp and surface progress through the existing runtime state."""
+    import queue
+    import threading
+
+    STALL_TIMEOUT = 420
+    cmd = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--ignore-config",
+        "--force-overwrites",
+        "--no-part",
+        "--newline",
+        "--no-warnings",
+        "--progress",
+        "--progress-template",
+        "download:%(progress.status)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
+        "--output",
+        output_template,
+        "--concurrent-fragments",
+        "4",
+        "--force-generic-extractor",
+    ]
+
+    for key, value in (headers or {}).items():
+        cmd.extend(["--add-header", f"{key}:{value}"])
+
+    cmd.append(url)
+
+    popen_kwargs = {
+        "args": cmd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.STDOUT,
+        "universal_newlines": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "bufsize": 1,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    process = subprocess.Popen(**popen_kwargs)
+    line_queue = queue.Queue()
+
+    def _reader():
+        try:
+            for raw_line in process.stdout:
+                line_queue.put((raw_line or "").strip())
+        finally:
+            line_queue.put(None)
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
+    started_at = time.time()
+    last_change = time.monotonic()
+    stderr_lines = []
+    last_percent = 0.0
+
+    with _ffmpeg_progress_lock:
+        _ffmpeg_progress.update(
+            percent=0.0, time="", speed="", bandwidth="", active=True
+        )
+        _ffmpeg_runtime.update(
+            active=True,
+            pid=process.pid,
+            label=label or "",
+            started_at=started_at,
+            last_progress_at=started_at,
+            stall_timeout=STALL_TIMEOUT,
+            reason="",
+            _process=process,
+        )
+
+    try:
+        while True:
+            try:
+                line_str = line_queue.get(timeout=1.0)
+            except queue.Empty:
+                if time.monotonic() - last_change > STALL_TIMEOUT:
+                    logger.warning(
+                        "[yt-dlp] Stall detected - no progress for "
+                        f"{STALL_TIMEOUT}s. Killing process."
+                    )
+                    with _ffmpeg_progress_lock:
+                        _ffmpeg_runtime["reason"] = "stall timeout"
+                    _kill_ffmpeg_process_tree(process)
+                    break
+                continue
+
+            if line_str is None:
+                break
+
+            if line_str.startswith("download:"):
+                _, payload = line_str.split("download:", 1)
+                parts = payload.split("|")
+                status = (parts[0] if len(parts) > 0 else "").strip().lower()
+                percent = _parse_percent_number(parts[1] if len(parts) > 1 else "")
+                speed = (parts[2] if len(parts) > 2 else "").strip()
+                eta = (parts[3] if len(parts) > 3 else "").strip()
+                eta_text = ""
+                if eta and eta.upper() not in {"NA", "N/A", "UNKNOWN"}:
+                    eta_text = f"ETA {eta}"
+
+                with _ffmpeg_progress_lock:
+                    _ffmpeg_progress.update(
+                        percent=round(percent, 1),
+                        time=eta_text,
+                        speed=speed,
+                        bandwidth=speed,
+                        active=status != "finished",
+                    )
+                    _ffmpeg_runtime["last_progress_at"] = time.time()
+
+                if status == "finished" or percent > last_percent:
+                    last_change = time.monotonic()
+                    last_percent = percent
+                continue
+
+            if line_str:
+                logger.debug(f"[yt-dlp] {line_str}")
+                stderr_lines.append(line_str)
+    finally:
+        with _ffmpeg_progress_lock:
+            _ffmpeg_progress.update(
+                percent=0.0, time="", speed="", bandwidth="", active=False
+            )
+            _reset_ffmpeg_runtime_state()
+
+    reader_thread.join(timeout=5)
+    process.wait()
+    if process.returncode != 0:
+        detail = (
+            "\n".join(stderr_lines[-20:])
+            if stderr_lines
+            else f"exit code {process.returncode}"
+        )
+        raise RuntimeError(f"yt-dlp error (rc={process.returncode}): {detail}")
+
+
+def _find_ytdlp_output(output_template):
+    path = Path(output_template)
+    pattern = path.name.replace("%(ext)s", "*")
+    candidates = [
+        candidate
+        for candidate in path.parent.glob(pattern)
+        if candidate.is_file()
+        and not candidate.name.endswith(".part")
+        and candidate.name != path.name
+    ]
+    if not candidates:
+        if path.exists():
+            return path
+        return None
+    candidates.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    return candidates[0]
+
+
+def _cleanup_ytdlp_outputs(output_template):
+    path = Path(output_template)
+    pattern = path.name.replace("%(ext)s", "*")
+    for candidate in path.parent.glob(pattern):
+        if candidate.is_file():
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+
+
+def _tag_downloaded_stream(input_path, output_path, audio_code, wants_clean_video, sub_video_code):
+    stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
+    if (not wants_clean_video) and sub_video_code:
+        stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
+    _run_ffmpeg_with_progress(
+        ffmpeg.input(str(input_path)).output(
+            str(output_path),
+            c="copy",
+            **stream_metadata,
+        )
+    )
+
+
 def download(self):
     """Download required audio/video streams for an episode (AniWorld + s.to) with retry logic."""
     if platform.system() == "Windows":
@@ -577,30 +784,62 @@ def download(self):
             ep_label = os.path.splitext(self._file_name)[0] if self._file_name else ""
 
             full_stream_needed = need_audio and need_video
+            download_backend = _download_backend_mode()
+            use_ytdlp = (
+                full_stream_needed
+                and download_backend in {"auto", "ytdlp"}
+                and _yt_dlp_available()
+            )
 
             temp_audio = self._episode_path.with_suffix(".temp_audio.mkv")
             temp_video = self._episode_path.with_suffix(".temp_video.mkv")
             temp_full = self._episode_path.with_suffix(".temp_full.mkv")
+            temp_ytdlp_template = str(self._episode_path.with_suffix(".temp_ytdlp.%(ext)s"))
 
             if full_stream_needed:
-                logger.debug("[DOWNLOADING] full preset (audio + video together)")
-
-                stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
-                if (not wants_clean_video) and sub_video_code:
-                    stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
-                bandwidth_kwargs = _bandwidth_limit_output_kwargs()
-
-                video_codec = get_video_codec()
-                _run_ffmpeg_with_progress(
-                    ffmpeg.input(self.stream_url, **input_kwargs).output(
-                        str(temp_full),
-                        vcodec=video_codec,
-                        acodec=video_codec,
-                        **stream_metadata,
-                        **bandwidth_kwargs,
-                    ),
-                    label=ep_label,
+                logger.debug(
+                    "[DOWNLOADING] full preset (audio + video together) via %s",
+                    "yt-dlp" if use_ytdlp else "ffmpeg",
                 )
+
+                if use_ytdlp:
+                    raw_temp = None
+                    try:
+                        _run_ytdlp_with_progress(
+                            self.stream_url,
+                            temp_ytdlp_template,
+                            headers=headers,
+                            label=ep_label,
+                        )
+                        raw_temp = _find_ytdlp_output(temp_ytdlp_template)
+                        if not raw_temp or not raw_temp.exists():
+                            raise RuntimeError("yt-dlp finished without creating an output file")
+                        _tag_downloaded_stream(
+                            raw_temp,
+                            temp_full,
+                            audio_code,
+                            wants_clean_video,
+                            sub_video_code,
+                        )
+                    finally:
+                        _cleanup_ytdlp_outputs(temp_ytdlp_template)
+                else:
+                    stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
+                    if (not wants_clean_video) and sub_video_code:
+                        stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
+                    bandwidth_kwargs = _bandwidth_limit_output_kwargs()
+
+                    video_codec = get_video_codec()
+                    _run_ffmpeg_with_progress(
+                        ffmpeg.input(self.stream_url, **input_kwargs).output(
+                            str(temp_full),
+                            vcodec=video_codec,
+                            acodec=video_codec,
+                            **stream_metadata,
+                            **bandwidth_kwargs,
+                        ),
+                        label=ep_label,
+                    )
 
                 if self._episode_path.exists():
                     inputs = [
@@ -689,6 +928,7 @@ def download(self):
                 temp = self._episode_path.with_suffix(suffix)
                 if temp.exists():
                     temp.unlink()
+            _cleanup_ytdlp_outputs(temp_ytdlp_template)
 
             logger.error(f"Download attempt {attempt}/{max_retries} failed: {e}")
             if attempt >= max_retries:

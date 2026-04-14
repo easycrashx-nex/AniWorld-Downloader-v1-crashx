@@ -20,6 +20,7 @@ const uiNavSizeSelect = document.getElementById("uiNavSize");
 const uiTableDensitySelect = document.getElementById("uiTableDensity");
 const uiBackgroundSelect = document.getElementById("uiBackground");
 const bandwidthLimitInput = document.getElementById("bandwidthLimit");
+const downloadBackendSelect = document.getElementById("downloadBackend");
 const providerFallbackOrderInput = document.getElementById(
   "providerFallbackOrder",
 );
@@ -208,6 +209,7 @@ function refreshSettingsSelects() {
   if (uiTableDensitySelect) window.refreshCustomSelect(uiTableDensitySelect);
   if (uiBackgroundSelect) window.refreshCustomSelect(uiBackgroundSelect);
   if (smartRetryProfileSelect) window.refreshCustomSelect(smartRetryProfileSelect);
+  if (downloadBackendSelect) window.refreshCustomSelect(downloadBackendSelect);
   if (searchDefaultSortSelect)
     window.refreshCustomSelect(searchDefaultSortSelect);
 }
@@ -805,6 +807,9 @@ async function loadSettings() {
       if (bandwidthLimitInput) {
         bandwidthLimitInput.value = data.bandwidth_limit_kbps || "0";
       }
+      if (downloadBackendSelect) {
+        downloadBackendSelect.value = data.download_backend || "auto";
+      }
       if (providerFallbackOrderInput) {
         providerFallbackOrderInput.value = data.provider_fallback_order || "";
       }
@@ -1235,6 +1240,7 @@ async function saveDownloadAdvancedSettings() {
   try {
     await updateSettings({
       bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
+      download_backend: downloadBackendSelect?.value || "auto",
       provider_fallback_order: providerFallbackOrderInput?.value || "",
       smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
     });

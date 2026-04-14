@@ -12,6 +12,7 @@ dependencies = [
   "niquests",
   "npyscreen",
   "ffmpeg-python",
+  "yt-dlp",
   "python-dotenv",
   "rich",
   "fake-useragent",

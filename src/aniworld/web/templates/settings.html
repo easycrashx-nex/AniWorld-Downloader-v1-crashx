@@ -698,6 +698,14 @@
           placeholder="0 = unlimited"
         />
       </div>
+      <div class="settings-field">
+        <label class="field-label">Download Engine</label>
+        <select id="downloadBackend" class="sync-select">
+          <option value="auto">Auto (yt-dlp when it fits)</option>
+          <option value="ffmpeg">FFmpeg only</option>
+          <option value="ytdlp">Prefer yt-dlp</option>
+        </select>
+      </div>
       <div class="settings-field settings-field-wide">
         <label class="field-label">Provider Fallback Order</label>
         <input
@@ -717,10 +725,13 @@
       <button onclick="saveDownloadAdvancedSettings()">Save Download Rules</button>
     </div>
     <div class="settings-hint">
-      Bandwidth limiting is a soft ffmpeg cap. Provider fallback order controls
-      which hosts are preferred first when the current provider fails. Smart
-      retry profiles decide how many alternative hosts are tried automatically
-      before a download is marked as failed.
+      Bandwidth limiting is a soft ffmpeg cap. The download engine can let
+      yt-dlp pull full streams first and then let ffmpeg write metadata and
+      mux the result. Partial repair/missing-stream jobs still use ffmpeg so
+      the existing incremental merge flow stays intact. Provider fallback order
+      controls which hosts are preferred first when the current provider fails.
+      Smart retry profiles decide how many alternative hosts are tried
+      automatically before a download is marked as failed.
     </div>
 
     <label class="settings-checkbox">

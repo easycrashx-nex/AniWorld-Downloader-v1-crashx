@@ -145,6 +145,7 @@ _ENV_DISK_WARN_PERCENT = "ANIWORLD_DISK_WARN_PERCENT"
 _ENV_LIBRARY_AUTO_REPAIR = "ANIWORLD_LIBRARY_AUTO_REPAIR"
 _ENV_EXPERIMENTAL_SELF_HEAL = "ANIWORLD_EXPERIMENTAL_SELF_HEAL"
 _ENV_SAFE_MODE = "ANIWORLD_SAFE_MODE"
+_ENV_DOWNLOAD_BACKEND = "ANIWORLD_DOWNLOAD_BACKEND"
 
 
 def _experimental_flags():
@@ -885,6 +886,11 @@ def _normalize_smart_retry_profile(value):
     )
 
 
+def _normalize_download_backend(value):
+    backend = str(value or "auto").strip().lower()
+    return backend if backend in {"auto", "ffmpeg", "ytdlp"} else "auto"
+
+
 def _normalize_ui_preset(value):
     preset = str(value or "custom").strip().lower()
     return preset if preset in _UI_THEME_PRESETS else "custom"
@@ -1097,6 +1103,9 @@ def _settings_payload(
         "sync_provider": os.environ.get(_ENV_SYNC_PROVIDER, "VOE"),
         "bandwidth_limit_kbps": _normalize_bandwidth_limit(
             os.environ.get(_ENV_BANDWIDTH_LIMIT, "0")
+        ),
+        "download_backend": _normalize_download_backend(
+            os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto")
         ),
         "provider_fallback_order": _normalize_provider_fallback_order(
             os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, "")
@@ -4853,6 +4862,10 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             os.environ[_ENV_BANDWIDTH_LIMIT] = _normalize_bandwidth_limit(
                 data["bandwidth_limit_kbps"]
             )
+        if "download_backend" in data:
+            os.environ[_ENV_DOWNLOAD_BACKEND] = _normalize_download_backend(
+                data["download_backend"]
+            )
         if "provider_fallback_order" in data:
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = (
                 _normalize_provider_fallback_order(data["provider_fallback_order"])
@@ -5072,6 +5085,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 in {
                     "download_path",
                     "bandwidth_limit_kbps",
+                    "download_backend",
                     "provider_fallback_order",
                     "disk_warn_gb",
                     "disk_warn_percent",
@@ -5750,6 +5764,9 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             ).strip()
             os.environ[_ENV_BANDWIDTH_LIMIT] = _normalize_bandwidth_limit(
                 settings_payload.get("bandwidth_limit_kbps", os.environ.get(_ENV_BANDWIDTH_LIMIT, "0"))
+            )
+            os.environ[_ENV_DOWNLOAD_BACKEND] = _normalize_download_backend(
+                settings_payload.get("download_backend", os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto"))
             )
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = _normalize_provider_fallback_order(
                 settings_payload.get("provider_fallback_order", os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, ""))
