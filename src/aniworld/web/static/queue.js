@@ -361,6 +361,18 @@ function renderQueue(items) {
         ffPct = (lastFfmpegProgress.percent || 0) / item.total_episodes;
       }
       const combinedPct = Math.min(Math.round(epPct + ffPct), 100);
+      const phase = runtime?.phase ? String(runtime.phase) : "";
+      const engine = runtime?.engine ? String(runtime.engine) : "";
+      const stepState = {
+        activeLabel: engine || phase || "Download",
+        hasExactPercent: !!(isRunning && lastFfmpegProgress.active),
+        stateLabel: phase || "Downloading",
+      };
+      const stepPercent = Math.max(
+        0,
+        Math.min(100, Number(lastFfmpegProgress.percent || 0)),
+      );
+      const pipelinePercent = stepPercent;
       let label;
       if (isCancelling) {
         label =
