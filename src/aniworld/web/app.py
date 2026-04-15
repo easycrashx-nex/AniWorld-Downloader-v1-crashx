@@ -983,6 +983,11 @@ def _normalize_ui_preset(value):
     return preset if preset in _UI_THEME_PRESETS else "custom"
 
 
+def _normalize_ui_locale(value):
+    locale = str(value or "en").strip().lower()
+    return locale if locale in {"en", "de"} else "en"
+
+
 def _normalize_ui_scale(value):
     scale = str(value or "100").strip()
     return scale if scale in {"90", "95", "100", "105", "110"} else "100"
@@ -1153,6 +1158,7 @@ def _normalize_search_default_year(value):
 
 def _settings_payload(
     ui_preset="custom",
+    ui_locale="en",
     ui_mode="cozy",
     ui_scale="100",
     ui_theme="ocean",
@@ -1226,6 +1232,7 @@ def _settings_payload(
         ),
         "safe_mode": _normalize_pref_bool(os.environ.get(_ENV_SAFE_MODE, "0")),
         "ui_preset": _normalize_ui_preset(ui_preset),
+        "ui_locale": _normalize_ui_locale(ui_locale),
         "ui_mode": _normalize_ui_mode(ui_mode),
         "ui_scale": _normalize_ui_scale(ui_scale),
         "ui_theme": _normalize_ui_theme(ui_theme),
@@ -4020,6 +4027,9 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "ui_mode": _normalize_ui_mode(
                     get_user_preference(username, "ui_mode", "cozy")
                 ),
+                "ui_locale": _normalize_ui_locale(
+                    get_user_preference(username, "ui_locale", "en")
+                ),
                 "ui_scale": get_user_preference(username, "ui_scale", "100"),
                 "ui_theme": _normalize_ui_theme(
                     get_user_preference(username, "ui_theme", "ocean")
@@ -4082,6 +4092,9 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 "experimental_flags": _experimental_flags(),
                 "ui_mode": _normalize_ui_mode(
                     get_user_preference(None, "ui_mode", "cozy")
+                ),
+                "ui_locale": _normalize_ui_locale(
+                    get_user_preference(None, "ui_locale", "en")
                 ),
                 "ui_scale": get_user_preference(None, "ui_scale", "100"),
                 "ui_theme": _normalize_ui_theme(
@@ -5015,6 +5028,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     def api_settings():
         username, _ = _get_current_user_info()
         ui_preset = get_user_preference(username, "ui_preset", "custom")
+        ui_locale = get_user_preference(username, "ui_locale", "en")
         ui_mode = get_user_preference(username, "ui_mode", "cozy")
         ui_scale = get_user_preference(username, "ui_scale", "100")
         ui_theme = get_user_preference(username, "ui_theme", "ocean")
@@ -5075,6 +5089,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         )
         payload = _settings_payload(
             ui_preset=ui_preset,
+            ui_locale=ui_locale,
             ui_mode=ui_mode,
             ui_scale=ui_scale,
             ui_theme=ui_theme,
@@ -5176,6 +5191,10 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         if "ui_preset" in data:
             set_user_preference(
                 username, "ui_preset", _normalize_ui_preset(data["ui_preset"])
+            )
+        if "ui_locale" in data:
+            set_user_preference(
+                username, "ui_locale", _normalize_ui_locale(data["ui_locale"])
             )
         if "ui_mode" in data:
             ui_mode = _normalize_ui_mode(data["ui_mode"])
@@ -5362,6 +5381,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "sync_language",
                     "sync_provider",
                     "ui_preset",
+                    "ui_locale",
                     "ui_mode",
                     "ui_scale",
                     "ui_theme",
@@ -6000,6 +6020,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             "version": VERSION,
             "settings": _settings_payload(
                 ui_preset=get_user_preference(username, "ui_preset", "custom"),
+                ui_locale=get_user_preference(username, "ui_locale", "en"),
                 ui_mode=get_user_preference(username, "ui_mode", "cozy"),
                 ui_scale=get_user_preference(username, "ui_scale", "100"),
                 ui_theme=get_user_preference(username, "ui_theme", "ocean"),

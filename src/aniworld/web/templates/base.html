@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ 'de' if ui_locale|default('en') == 'de' else 'en' }}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -33,12 +33,14 @@
     data-ui-nav-size="{{ ui_nav_size|default('standard') }}"
     data-ui-table-density="{{ ui_table_density|default('standard') }}"
     data-ui-background="{{ ui_background|default('dynamic') }}"
+    data-ui-locale="{{ ui_locale|default('en') }}"
     data-current-user="{% if current_user %}{{ current_user.username }}{% endif %}"
   >
     <script>
       window.ANIWORLD_BOOT_SETTINGS = {
         ui: {
           mode: {{ ui_mode|default('cozy')|tojson }},
+          locale: {{ ui_locale|default('en')|tojson }},
           scale: {{ ui_scale|default('100')|tojson }},
           theme: {{ ui_theme|default('ocean')|tojson }},
           radius: {{ ui_radius|default('soft')|tojson }},
@@ -324,6 +326,7 @@
     <script>
       window.ANIWORLD_EXPERIMENTAL = {{ experimental_flags|tojson }};
     </script>
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
     <script src="{{ url_for('static', filename='live-updates.js') }}"></script>
     <script src="{{ url_for('static', filename='queue.js') }}"></script>
 

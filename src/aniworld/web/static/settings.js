@@ -9,6 +9,7 @@ const experimentalSelfHealCb = document.getElementById("experimentalSelfHeal");
 const safeModeCb = document.getElementById("safeMode");
 const autoOpenCaptchaTabCb = document.getElementById("autoOpenCaptchaTab");
 const uiPresetSelect = document.getElementById("uiPreset");
+const uiLocaleSelect = document.getElementById("uiLocale");
 const uiModeSelect = document.getElementById("uiMode");
 const uiScaleSelect = document.getElementById("uiScale");
 const uiThemeSelect = document.getElementById("uiTheme");
@@ -205,6 +206,7 @@ function refreshSettingsSelects() {
   if (syncLanguageSelect) window.refreshCustomSelect(syncLanguageSelect);
   if (syncProviderSelect) window.refreshCustomSelect(syncProviderSelect);
   if (uiPresetSelect) window.refreshCustomSelect(uiPresetSelect);
+  if (uiLocaleSelect) window.refreshCustomSelect(uiLocaleSelect);
   if (uiModeSelect) window.refreshCustomSelect(uiModeSelect);
   if (uiScaleSelect) window.refreshCustomSelect(uiScaleSelect);
   if (uiThemeSelect) window.refreshCustomSelect(uiThemeSelect);
@@ -798,6 +800,7 @@ async function loadSettings() {
       }
       updateExternalNotificationState();
       if (uiPresetSelect) uiPresetSelect.value = data.ui_preset || "custom";
+      if (uiLocaleSelect) uiLocaleSelect.value = data.ui_locale || "en";
       if (uiModeSelect) uiModeSelect.value = data.ui_mode || "cozy";
       if (uiScaleSelect) uiScaleSelect.value = data.ui_scale || "100";
       if (uiThemeSelect) uiThemeSelect.value = data.ui_theme || "ocean";
@@ -1080,6 +1083,23 @@ async function saveExperimentalSelfHeal() {
     );
   } catch (e) {
     showToast("Failed to save self-heal setting: " + e.message);
+  }
+}
+
+async function saveUiLocale() {
+  if (!uiLocaleSelect) return;
+  try {
+    await updateSettings({ ui_locale: uiLocaleSelect.value });
+    if (window.AniworldI18n && typeof window.AniworldI18n.setLocale === "function") {
+      window.AniworldI18n.setLocale(uiLocaleSelect.value);
+    }
+    showToast(
+      uiLocaleSelect.value === "de"
+        ? "Oberflächensprache gespeichert"
+        : "UI language saved",
+    );
+  } catch (e) {
+    showToast("Failed to save UI language: " + e.message);
   }
 }
 

@@ -389,6 +389,13 @@
     <h2>UI Settings</h2>
     <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
       <div class="settings-field">
+        <label class="field-label">UI Language</label>
+        <select id="uiLocale" onchange="saveUiLocale()" class="sync-select">
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+        </select>
+      </div>
+      <div class="settings-field">
         <label class="field-label">Theme Preset</label>
         <select id="uiPreset" onchange="applyUiPreset()" class="sync-select">
           <option value="custom">Custom</option>
