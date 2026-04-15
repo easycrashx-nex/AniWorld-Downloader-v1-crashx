@@ -96,8 +96,8 @@ Du solltest beobachten:
 - freien Speicherplatz
 - Schreibrechte im Download-Ziel
 - Diagnostics-Seite
-- Cache Warmup bei grossen Libraries
-- VPN-/Tunnel-Zustand, falls der Server davon abhaengt
+- Cache Warmup bei großen Libraries
+- VPN-/Tunnel-Zustand, falls der Server davon abhängt
 
 ## 7. Empfohlene Server-Defaults
 

@@ -1,6 +1,6 @@
 # Wiki Index
 
-Dies ist die deutsche Dokumentationsspur fuer den angepassten AniWorld Downloader Build in diesem Repository.
+Dies ist die deutsche Dokumentationsspur für den angepassten AniWorld Downloader Build in diesem Repository.
 
 Die englische Dokumentation bleibt der Hauptstand:
 
@@ -32,7 +32,7 @@ Die englische Dokumentation bleibt der Hauptstand:
   Frische Einrichtung auf Windows, Linux und macOS.
 
 - [Usage Guide](USAGE.md)
-  Erklaert die Web-UI, die Seiten und die typischen Workflows.
+  Erklärt die Web-UI, die Seiten und die typischen Workflows.
 
 - [Customization Guide](CUSTOMIZATION.md)
   `.env`, Web-UI-Settings, Themes, Background Effects, Notifications, Diagnostics, Disk Guard, VPN-/Tunnel-Sichtbarkeit und experimentelle Features.
@@ -59,7 +59,7 @@ Die englische Dokumentation bleibt der Hauptstand:
 ## Build-spezifische Hinweise
 
 - Queue und Timeline sind getrennt. `Clear Finished` leert nicht die Timeline.
-- Das experimentelle Self-Heal kann einen haengenden ffmpeg-Download wieder in die Queue legen, statt den Job zu verlieren.
+- Das experimentelle Self-Heal kann einen hängenden ffmpeg-Download wieder in die Queue legen, statt den Job zu verlieren.
 - Favorites, Search History, UI-Settings und Browser-Notification-Settings sind pro Account.
 - Stats und Provider Score History sind global.
 - Browser-Notifications funktionieren bei offenem Tab. Service Worker / PWA Push wird absichtlich nicht genutzt.

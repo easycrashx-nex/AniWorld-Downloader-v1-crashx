@@ -18,7 +18,7 @@ Diese Anleitung beschreibt `.env`, Web-UI-Settings und Build-spezifische Anpassu
 - Queue / Timeline Archiv
 - Diagnostics Snapshots
 
-### Nur temporaer, wenn nur in der Web-UI geaendert
+### Nur temporär, wenn nur in der Web-UI geändert
 
 Wenn du sie restart-sicher willst, auch in `.env` oder Docker-Env setzen:
 
@@ -74,7 +74,7 @@ ANIWORLD_EXPERIMENTAL_SELF_HEAL=0
 
 ## 4. UI Settings
 
-Der Build enthaelt u. a.:
+Der Build enthält u. a.:
 
 - Density
 - UI Scale
@@ -90,7 +90,7 @@ Der Build enthaelt u. a.:
 
 ## 5. Default Search Filters
 
-Verfuegbar:
+Verfügbar:
 
 - default sort
 - default genres
@@ -113,7 +113,7 @@ Konfigurierbar:
 
 Wichtig:
 
-- Browser-Permission noetig
+- Browser-Permission nötig
 - funktioniert bei offenem Tab
 - keine Service-Worker-Pushes
 
@@ -133,9 +133,9 @@ Typische erkannte Setups:
 - OpenVPN / tun
 - Tailscale
 - PPP-Tunnel
-- Gluetun-aehnliche Setups
+- Gluetun-ähnliche Setups
 
-Das experimentelle Self-Heal wird ebenfalls in Settings und Diagnostics sichtbar gemacht. Wenn es aktiviert ist, beobachtet es laufende ffmpeg-Downloads auf harte Hänger, beendet den hängenden Prozessbaum und legt denselben Queue-Job wieder in `queued`, statt ihn zu verlieren. Standardmaessig bleibt es aus, weil die Recovery bei kaputten Streams zusaetzliche Last erzeugen kann.
+Das experimentelle Self-Heal wird ebenfalls in Settings und Diagnostics sichtbar gemacht. Wenn es aktiviert ist, beobachtet es laufende ffmpeg-Downloads auf harte Hänger, beendet den hängenden Prozessbaum und legt denselben Queue-Job wieder in `queued`, statt ihn zu verlieren. Standardmäßig bleibt es aus, weil die Recovery bei kaputten Streams zusätzliche Last erzeugen kann.
 
 ## 8. Experimentelles Self-Heal
 
@@ -143,21 +143,21 @@ Aktivierbar in:
 
 - `Settings > Development`
 
-oder ueber `.env` / Docker-Env:
+oder über `.env` / Docker-Env:
 
 ```env
 ANIWORLD_EXPERIMENTAL_SELF_HEAL=1
 ```
 
-Es ist gedacht fuer:
+Es ist gedacht für:
 
-- echte ffmpeg-Haenger
+- echte ffmpeg-Hänger
 - Queue-Rettung ohne Server-Neustart
 
 Es ist nicht gedacht als:
 
 - allgemeiner AI-Debugger
-- Ersatz fuer normale Retry-/Fallback-Logik
+- Ersatz für normale Retry-/Fallback-Logik
 
 ## 9. Library- und Modal-Helfer
 
@@ -168,7 +168,7 @@ Aktuell enthalten:
 - exakte Missing-Episode-Labels
 - `Queue Missing`
 - `Auto-Repair Missing`
-- Modal-Aktion fuer nur undownloadete Folgen passend zur aktuellen Sprache
+- Modal-Aktion für nur undownloadete Folgen passend zur aktuellen Sprache
 
 ## 10. Provider
 
@@ -182,4 +182,4 @@ Der Build bietet aktuell:
 - Vidoza
 - Doodstream
 
-Die echte Verfuegbarkeit haengt weiter von Quelle, Sprache und Episode ab.
+Die echte Verfügbarkeit hängt weiter von Quelle, Sprache und Episode ab.

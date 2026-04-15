@@ -4,7 +4,7 @@ Diese Anleitung beschreibt den aktuellen Web-UI-Flow dieses Builds.
 
 ## Browse
 
-Browse enthaelt:
+Browse enthält:
 
 - Home
 - Library
@@ -12,14 +12,14 @@ Browse enthaelt:
 
 ### Home
 
-Home ist fuer:
+Home ist für:
 
 - Quellwechsel zwischen AniWorld und SerienStream / S.TO
 - Suche
 - Quick Genres
 - Advanced Search Filter
 - Search History
-- Oeffnen des Serien-Modals
+- Öffnen des Serien-Modals
 
 ### Library
 
@@ -29,7 +29,7 @@ Library kann:
 - fehlende Episoden gegen Quelle vergleichen
 - exakte fehlende Episodenlabels anzeigen
 - `Queue Missing` und `Auto-Repair Missing`
-- sichtbare Serien markieren und direkt zu Auto-Sync hinzufuegen
+- sichtbare Serien markieren und direkt zu Auto-Sync hinzufügen
 
 ### Favorites
 
@@ -37,7 +37,7 @@ Favorites ist eine eigene Seite und nicht mehr mit Home vermischt.
 
 ## Stats
 
-Stats enthaelt:
+Stats enthält:
 
 - Stats
 - Timeline
@@ -49,7 +49,7 @@ Zeigt:
 
 - globale Downloadzahlen
 - Episodenzahlen
-- Provider-Qualitaet
+- Provider-Qualität
 - Storage-Summary
 - Activity Chart
 
@@ -62,17 +62,17 @@ Timeline ist das Archiv:
 - cancelled
 - Fehlerdetails
 - Retry
-- Delete einzelner Timeline-Eintraege
+- Delete einzelner Timeline-Einträge
 
 Wichtig:
 
 - Timeline ist getrennt von Queue
 - `Clear Finished` leert nicht die Timeline
-- einzelne Timeline-Eintraege koennen direkt geloescht werden
+- einzelne Timeline-Einträge können direkt gelöscht werden
 
 ### Radar
 
-Zeigt neue Aktivitaet / frische Releases.
+Zeigt neue Aktivität / frische Releases.
 
 ## Queue
 
@@ -85,11 +85,11 @@ Du siehst dort:
 - Retry / Cancel / Clear Finished
 - Captcha-Hinweise
 
-Wenn `Experimental stuck download self-heal` in den Settings aktiviert ist, kann der Downloader einen echten ffmpeg-Haenger erkennen, den haengenden Prozessbaum beenden und denselben Job wieder in `queued` setzen. Das ist nur fuer harte Stalls gedacht, nicht fuer normale Provider-Fehler.
+Wenn `Experimental stuck download self-heal` in den Settings aktiviert ist, kann der Downloader einen echten ffmpeg-Hänger erkennen, den hängenden Prozessbaum beenden und denselben Job wieder in `queued` setzen. Das ist nur für harte Stalls gedacht, nicht für normale Provider-Fehler.
 
 ## Settings
 
-Settings enthaelt:
+Settings enthält:
 
 - Settings
 - Auto-Sync
@@ -124,8 +124,8 @@ Auto-Sync kann:
 - einzelne Jobs syncen
 - selektierte Jobs syncen
 - alle Jobs syncen
-- nur gueltige Sprachen/Provider pro Serie anbieten
-- Library-Selektionen direkt uebernehmen
+- nur gültige Sprachen/Provider pro Serie anbieten
+- Library-Selektionen direkt übernehmen
 
 ### Provider Health
 
@@ -148,7 +148,7 @@ Diagnostics zeigt:
 - Cache Warmup und Cache-Alter
 - Disk Guard Infos
 - Server / Bind / LAN / Open URL Infos
-- Self-Heal-Status fuer stuck-download recovery, wenn aktiviert
+- Self-Heal-Status für stuck-download recovery, wenn aktiviert
 
 ## Serien-Modal
 
@@ -160,7 +160,7 @@ Das Modal bietet:
 - Auto-Sync Toggle
 - Season Browser
 - Sprach-Flaggen pro Folge
-- Aktion zum Auswaehlen nur der noch nicht geladenen Folgen fuer die aktuelle Sprache
+- Aktion zum Auswählen nur der noch nicht geladenen Folgen für die aktuelle Sprache
 
 ## Multi-User
 

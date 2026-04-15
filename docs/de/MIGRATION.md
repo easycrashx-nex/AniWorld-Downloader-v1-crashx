@@ -94,7 +94,7 @@ mv ~/.aniworld ~/.aniworld.backup
 
 Danach erstellt der neue Build einen frischen `.aniworld`-Ordner.
 
-### Hard Reset: alten App-Datenordner loeschen
+### Hard Reset: alten App-Datenordner löschen
 
 Nur machen, wenn du den alten lokalen Stand wirklich komplett loswerden willst.
 
@@ -110,7 +110,7 @@ Linux / macOS:
 rm -rf ~/.aniworld
 ```
 
-Wenn du `.aniworld` loeschst, verlierst du die alten lokalen:
+Wenn du `.aniworld` löschst, verlierst du die alten lokalen:
 
 - Accounts
 - gespeicherten Settings
@@ -124,7 +124,7 @@ Wenn du `.aniworld` loeschst, verlierst du die alten lokalen:
 
 ## 6. Bestehende Daten behalten
 
-Dann `.aniworld` nicht loeschen oder umbenennen. Der neue Build nutzt:
+Dann `.aniworld` nicht löschen oder umbenennen. Der neue Build nutzt:
 
 - Accounts
 - Favorites
@@ -141,27 +141,27 @@ docker-compose up -d --build
 Wichtig:
 
 - bestehende Daten-Volumes behalten
-- Download-Mounts nicht aendern, wenn du Daten behalten willst
+- Download-Mounts nicht ändern, wenn du Daten behalten willst
 
 ## 8. Checkliste nach dem Umstieg
 
-- Web-UI oeffnet
+- Web-UI öffnet
 - Login funktioniert
 - Settings laden
-- Queue laedt
+- Queue lädt
 - Timeline zeigt Archiv
-- Library laedt
-- Auto-Sync laedt
-- Diagnostics laedt
-- Provider Health History laedt
+- Library lädt
+- Auto-Sync lädt
+- Diagnostics lädt
+- Provider Health History lädt
 
-## 9. Empfohlener Weg fuer die meisten Nutzer
+## 9. Empfohlener Weg für die meisten Nutzer
 
-Wenn du moeglichst sauber umsteigen willst:
+Wenn du möglichst sauber umsteigen willst:
 
 1. `.aniworld` sichern
 2. Download-Ordner sichern
 3. altes `aniworld` per `pip uninstall -y aniworld` entfernen
-4. wenn du wirklich frisch starten willst, `.aniworld` umbenennen oder loeschen
+4. wenn du wirklich frisch starten willst, `.aniworld` umbenennen oder löschen
 5. diesen Custom-Build neu installieren
-6. nur dann ein Backup zurueckspielen, wenn du die alten Daten bewusst behalten willst
+6. nur dann ein Backup zurückspielen, wenn du die alten Daten bewusst behalten willst

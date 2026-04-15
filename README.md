@@ -98,6 +98,17 @@ python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/Aniworld
 aniworld -w -wA
 ```
 
+If macOS blocks the global install, use:
+
+```bash
+mkdir -p aniworld && cd aniworld
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
 This replaces an older installed `aniworld` package with this custom GitHub build.
 It does not delete your existing app data in `%USERPROFILE%\.aniworld` or `~/.aniworld`.
 
@@ -142,13 +153,27 @@ aniworld -w -wA
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
 ```
 
+If macOS blocks installs into the system/Homebrew Python environment, use:
+
+```bash
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+cd aniworld
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
+chmod +x ./aniworld ./install-launcher.sh
+./install-launcher.sh
+./aniworld -w
+```
+
 After the one-time launcher install, future terminals can use:
 
 ```bash
 aniworld -w -wA
 ```
 
-If you prefer a virtual environment, you can still use one, but it is optional and not required for this repository.
+If you prefer a virtual environment, you can still use one, but it is optional and not required for this repository. On macOS, it can also be the practical fallback when global `pip install` is blocked.
 
 Expose the Web UI to your LAN if needed:
 

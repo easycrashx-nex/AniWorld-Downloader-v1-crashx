@@ -58,6 +58,7 @@ brew install python ffmpeg
 Optional:
 
 - IINA if you want macOS-native playback integration
+- a virtual environment if your macOS Python setup blocks global `pip install`
 
 ## 3. Important folders
 
@@ -107,6 +108,17 @@ aniworld -w -wA
 
 ```bash
 python3 -m pip uninstall -y aniworld
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+aniworld -w -wA
+```
+
+If macOS blocks the global install, use this instead:
+
+```bash
+mkdir -p aniworld && cd aniworld
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
 python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
 aniworld -w -wA
 ```
@@ -187,6 +199,20 @@ aniworld -w -wA
 git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
 ```
 
+If macOS blocks installs into the system/Homebrew Python environment, use the venv variant:
+
+```bash
+git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+cd aniworld
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
+chmod +x ./aniworld ./install-launcher.sh
+./install-launcher.sh
+./aniworld -w
+```
+
 With local accounts:
 
 ```bash
@@ -204,6 +230,12 @@ After the one-time launcher install, future terminals can use:
 ```bash
 aniworld -w -wA
 ```
+
+Notes:
+
+- On some macOS setups, global `pip install` is blocked by the system or by an externally managed Python environment.
+- In that case, use the venv block above instead of forcing a global install.
+- Once the venv is activated, `aniworld` works normally inside that shell session.
 
 ## 8. First launch behavior
 
