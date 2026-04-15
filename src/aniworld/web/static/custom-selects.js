@@ -2,6 +2,20 @@
   const registry = new Map();
   let openState = null;
 
+  function shouldPreferNativeSelects() {
+    const body = document.body;
+    if (body) {
+      if (body.dataset.deviceClass === "mobile") return true;
+      if (
+        body.dataset.deviceInput === "touch" &&
+        body.dataset.deviceHover !== "1"
+      ) {
+        return true;
+      }
+    }
+    return window.matchMedia("(pointer: coarse)").matches;
+  }
+
   function closeState(state) {
     if (!state) return;
     state.shell.classList.remove("is-open");
@@ -13,6 +27,24 @@
     registry.forEach((state) => {
       if (state !== exceptState) closeState(state);
     });
+  }
+
+  function teardownSelect(select) {
+    const state = registry.get(select);
+    if (!state) return;
+    closeState(state);
+    if (state.observer) state.observer.disconnect();
+    select.classList.remove("custom-select-native");
+    if (state.originalTabIndex == null) {
+      select.removeAttribute("tabindex");
+    } else {
+      select.setAttribute("tabindex", state.originalTabIndex);
+    }
+    if (state.shell.parentNode) {
+      state.shell.parentNode.insertBefore(select, state.shell);
+    }
+    state.shell.remove();
+    registry.delete(select);
   }
 
   function syncShellState(select, state) {
@@ -128,6 +160,10 @@
       return;
     }
 
+    if (shouldPreferNativeSelects()) {
+      return;
+    }
+
     const shell = document.createElement("div");
     shell.className = "custom-select-shell";
     if (select.className) {
@@ -168,6 +204,7 @@
       lastDisabled: !!select.disabled,
       lastDisplay: select.style.display || "",
       observer: null,
+      originalTabIndex: select.getAttribute("tabindex"),
     };
 
     trigger.addEventListener("click", () => {
@@ -197,6 +234,7 @@
   }
 
   function initCustomSelects(root = document) {
+    if (shouldPreferNativeSelects()) return;
     const selects = [];
     if (root instanceof HTMLSelectElement) {
       selects.push(root);
@@ -209,6 +247,14 @@
       }
     }
     selects.forEach(enhanceSelect);
+  }
+
+  function syncSelectPresentation(root = document) {
+    if (shouldPreferNativeSelects()) {
+      Array.from(registry.keys()).forEach((select) => teardownSelect(select));
+      return;
+    }
+    initCustomSelects(root);
   }
 
   document.addEventListener("pointerdown", (event) => {
@@ -235,6 +281,10 @@
   window.initCustomSelects = initCustomSelects;
   window.refreshCustomSelect = function refreshCustomSelect(select) {
     if (!select) return;
+    if (shouldPreferNativeSelects()) {
+      teardownSelect(select);
+      return;
+    }
     if (!registry.has(select)) {
       enhanceSelect(select);
       return;
@@ -243,7 +293,7 @@
   };
 
   window.refreshCustomSelects = function refreshCustomSelects(root = document) {
-    initCustomSelects(root);
+    syncSelectPresentation(root);
     registry.forEach((state, select) => {
       if (!document.documentElement.contains(state.shell)) {
         if (state.observer) state.observer.disconnect();
@@ -294,4 +344,8 @@
       { once: true },
     );
   }
+
+  document.addEventListener("aniworld:device-change", () => {
+    syncSelectPresentation(document);
+  });
 })();

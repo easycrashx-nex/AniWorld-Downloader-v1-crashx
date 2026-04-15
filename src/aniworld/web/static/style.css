@@ -6017,6 +6017,164 @@ input[type="checkbox"] {
   }
 }
 
+body[data-device-input="touch"] .top-bar-link,
+body[data-device-input="touch"] .top-bar-user,
+body[data-device-input="touch"] .nav-dropdown-link,
+body[data-device-input="touch"] .nav-dropdown-button,
+body[data-device-input="touch"] .btn-primary,
+body[data-device-input="touch"] .btn-secondary,
+body[data-device-input="touch"] .queue-action-btn,
+body[data-device-input="touch"] .queue-icon-btn,
+body[data-device-input="touch"] .autosync-action-btn,
+body[data-device-input="touch"] .modal-actions button,
+body[data-device-input="touch"] .modal-inline-actions button {
+  min-height: 48px;
+}
+
+body[data-device-class="mobile"] .top-bar {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+body[data-device-class="mobile"] .top-bar-right {
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 100%;
+  overflow: visible;
+  padding-bottom: 4px;
+}
+
+body[data-device-class="mobile"] .top-bar-link,
+body[data-device-class="mobile"] .top-bar-user {
+  width: 100%;
+  justify-content: space-between;
+}
+
+body[data-device-class="mobile"] .nav-menu {
+  width: 100%;
+}
+
+body[data-device-class="mobile"] .nav-menu::after {
+  display: none;
+}
+
+body[data-device-class="mobile"] .nav-menu-trigger {
+  width: 100%;
+  justify-content: space-between;
+}
+
+body[data-device-class="mobile"] .nav-dropdown,
+body[data-device-class="mobile"] .nav-dropdown-right {
+  position: static;
+  min-width: 0;
+  margin-top: 8px;
+  transform: none;
+  box-shadow: none;
+}
+
+body[data-device-class="mobile"] .nav-menu:hover .nav-dropdown {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body[data-device-class="mobile"] .nav-menu.is-open .nav-dropdown,
+body[data-device-class="mobile"] .nav-menu:focus-within .nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+body[data-device-class="mobile"] .app-shell {
+  padding: 14px;
+}
+
+body[data-device-class="mobile"] .container,
+body[data-device-class="mobile"] .settings-container,
+body[data-device-class="mobile"] .library-container {
+  padding: 24px 0 40px;
+}
+
+body[data-device-class="mobile"] .modal,
+body[data-device-class="mobile"] .queue-modal,
+body[data-device-class="mobile"] .captcha-modal {
+  margin: 12px auto;
+  padding: 22px;
+}
+
+body[data-device-class="mobile"] .search-bar,
+body[data-device-class="mobile"] .modal-actions,
+body[data-device-class="mobile"] .modal-inline-actions,
+body[data-device-class="mobile"] .settings-row,
+body[data-device-class="mobile"] .add-user-row,
+body[data-device-class="mobile"] .dashboard-inline-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body[data-device-class="mobile"] .search-bar button,
+body[data-device-class="mobile"] .modal-actions button,
+body[data-device-class="mobile"] .modal-inline-actions button,
+body[data-device-class="mobile"] .settings-row button,
+body[data-device-class="mobile"] .add-user-row button {
+  width: 100%;
+}
+
+body[data-device-class="mobile"] .settings-info-grid,
+body[data-device-class="mobile"] .settings-row-download-rules,
+body[data-device-class="mobile"] .search-filters,
+body[data-device-class="mobile"] .dashboard-grid,
+body[data-device-class="mobile"] .stats-grid,
+body[data-device-class="mobile"] .stats-detail-grid,
+body[data-device-class="mobile"] .overview-grid,
+body[data-device-class="mobile"] .insight-switcher,
+body[data-device-class="mobile"] .favorites-grid,
+body[data-device-class="mobile"] .library-toolbar,
+body[data-device-class="mobile"] .chart-bars,
+body[data-device-class="mobile"] .autosync-card-stats,
+body[data-device-class="mobile"] .settings-grid,
+body[data-device-class="mobile"] .settings-grid-two {
+  grid-template-columns: 1fr;
+}
+
+body[data-device-class="mobile"] .section-heading,
+body[data-device-class="mobile"] .episodes-header,
+body[data-device-class="mobile"] .queue-toolbar,
+body[data-device-class="mobile"] .modal-content-header,
+body[data-device-class="mobile"] .modal-content-actions,
+body[data-device-class="mobile"] .season-header,
+body[data-device-class="mobile"] .season-toolbar,
+body[data-device-class="mobile"] .season-toolbar-meta,
+body[data-device-class="mobile"] .episode-topline,
+body[data-device-class="mobile"] .episode-meta-row,
+body[data-device-class="mobile"] .modal-actions-cta,
+body[data-device-class="mobile"] .modal-action-buttons,
+body[data-device-class="mobile"] .autosync-card-head,
+body[data-device-class="mobile"] .autosync-card-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body[data-device-class="mobile"] .modal-header,
+body[data-device-class="mobile"] .modal-hero,
+body[data-device-class="mobile"] .modal-favorite-row,
+body[data-device-class="mobile"] .modal-secondary-grid,
+body[data-device-class="mobile"] .modal-download-grid,
+body[data-device-class="mobile"] .modal-content-panel,
+body[data-device-class="mobile"] .maintenance-test-grid,
+body[data-device-class="mobile"] .maintenance-status-grid {
+  grid-template-columns: 1fr;
+}
+
+body[data-device-class="mobile"] .results,
+body[data-device-class="mobile"] .browse-grid {
+  grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+}
+
+body[data-device-class="mobile"] .queue-modal {
+  width: min(100%, calc(100vw - 24px));
+}
+
 body[data-ui-density="airy"] .top-bar {
   padding: 18px 24px;
 }

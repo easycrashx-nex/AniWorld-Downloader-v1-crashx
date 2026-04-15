@@ -350,6 +350,52 @@
     );
   }
 
+  function detectClientDevice() {
+    const width =
+      window.innerWidth ||
+      document.documentElement.clientWidth ||
+      screen.width ||
+      0;
+    const ua = navigator.userAgent || "";
+    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+    const hoverCapable = window.matchMedia("(hover: hover)").matches;
+    const touchPoints = Number(navigator.maxTouchPoints || 0);
+    const touchLike = coarsePointer || touchPoints > 0;
+    const phoneUa =
+      /iPhone|iPod|Windows Phone|webOS|BlackBerry|Opera Mini/i.test(ua) ||
+      /Android.+Mobile/i.test(ua);
+    const tabletUa =
+      /iPad|Tablet|Silk/i.test(ua) || /Android(?!.*Mobile)/i.test(ua);
+
+    let deviceClass = "desktop";
+    if (phoneUa || (touchLike && width <= 860)) {
+      deviceClass = "mobile";
+    } else if (tabletUa || (touchLike && width <= 1180)) {
+      deviceClass = "tablet";
+    }
+
+    const inputClass = touchLike ? "touch" : "mouse";
+    const previousClass = document.body.dataset.deviceClass || "";
+    const previousInput = document.body.dataset.deviceInput || "";
+
+    document.body.setAttribute("data-device-class", deviceClass);
+    document.body.setAttribute("data-device-input", inputClass);
+    document.body.setAttribute("data-device-hover", hoverCapable ? "1" : "0");
+
+    if (previousClass !== deviceClass || previousInput !== inputClass) {
+      document.dispatchEvent(
+        new CustomEvent("aniworld:device-change", {
+          detail: {
+            deviceClass,
+            inputClass,
+            hoverCapable,
+            width,
+          },
+        }),
+      );
+    }
+  }
+
   async function loadShellSettings() {
     if (shellSettingsRequest) return shellSettingsRequest;
     shellSettingsRequest = (async () => {
@@ -415,11 +461,19 @@
   }
 
   function closeNavMenus() {
-    navMenus.forEach((menu) => menu.classList.remove("is-open"));
+    navMenus.forEach((menu) => {
+      menu.classList.remove("is-open");
+      const trigger = menu.querySelector(".nav-menu-trigger");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    });
   }
 
-  function isCompactNav() {
-    return window.matchMedia("(max-width: 720px)").matches;
+  function usesTapNavigation() {
+    const isNarrow = window.matchMedia("(max-width: 720px)").matches;
+    const touchOnly =
+      document.body.dataset.deviceInput === "touch" &&
+      document.body.dataset.deviceHover !== "1";
+    return isNarrow || touchOnly;
   }
 
   navMenus.forEach((menu) => {
@@ -427,11 +481,15 @@
     if (!trigger) return;
 
     trigger.addEventListener("click", (event) => {
-      if (!isCompactNav()) return;
+      if (!usesTapNavigation()) return;
       if (!menu.classList.contains("is-open")) {
         event.preventDefault();
         closeNavMenus();
         menu.classList.add("is-open");
+        trigger.setAttribute("aria-expanded", "true");
+      } else {
+        menu.classList.remove("is-open");
+        trigger.setAttribute("aria-expanded", "false");
       }
     });
   });
@@ -462,11 +520,18 @@
     showToast: showGlobalToast,
   };
   if (typeof window.showToast !== "function") {
-    window.showToast = showGlobalToast;
+  window.showToast = showGlobalToast;
   }
+  detectClientDevice();
   loadNotifications();
   loadNavState();
   loadShellSettings();
+
+  window.addEventListener("resize", detectClientDevice);
+  window.addEventListener("orientationchange", detectClientDevice);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", detectClientDevice);
+  }
 
   if (window.LiveUpdates && typeof window.LiveUpdates.subscribe === "function") {
     window.LiveUpdates.subscribe(["nav"], () => loadNavState());
