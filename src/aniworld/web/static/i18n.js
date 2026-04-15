@@ -5,6 +5,7 @@
   const originalTextNodes = new WeakMap();
   const originalTitle = document.title;
   const originalLang = document.documentElement.getAttribute("lang") || "en";
+  let isApplyingTranslations = false;
   let currentLocale =
     (window.ANIWORLD_BOOT_SETTINGS &&
       window.ANIWORLD_BOOT_SETTINGS.ui &&
@@ -338,24 +339,27 @@
   }
 
   function applyTranslations(root = document.body) {
-    if (!root) return;
-    document.title = currentLocale === "en" ? originalTitle : translateText(originalTitle, currentLocale);
-    const textWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-    let textNode = textWalker.nextNode();
-    while (textNode) {
-      translateTextNode(textNode);
-      textNode = textWalker.nextNode();
-    }
-    const elementRoot = root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement;
-    if (!elementRoot) return;
-    [elementRoot, ...elementRoot.querySelectorAll("*")].forEach((el) => {
-      ATTRIBUTE_NAMES.forEach((attr) => translateAttribute(el, attr));
-      translateButtonLikeValue(el);
-    });
-    document.documentElement.setAttribute("lang", currentLocale === "de" ? "de" : originalLang);
-    body.dataset.uiLocale = currentLocale;
-    if (typeof window.refreshCustomSelects === "function") {
-      window.refreshCustomSelects(document);
+    if (!root || isApplyingTranslations) return;
+    isApplyingTranslations = true;
+    try {
+      document.title =
+        currentLocale === "en" ? originalTitle : translateText(originalTitle, currentLocale);
+      const textWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      let textNode = textWalker.nextNode();
+      while (textNode) {
+        translateTextNode(textNode);
+        textNode = textWalker.nextNode();
+      }
+      const elementRoot = root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement;
+      if (!elementRoot) return;
+      [elementRoot, ...elementRoot.querySelectorAll("*")].forEach((el) => {
+        ATTRIBUTE_NAMES.forEach((attr) => translateAttribute(el, attr));
+        translateButtonLikeValue(el);
+      });
+      document.documentElement.setAttribute("lang", currentLocale === "de" ? "de" : originalLang);
+      body.dataset.uiLocale = currentLocale;
+    } finally {
+      isApplyingTranslations = false;
     }
   }
 
@@ -365,6 +369,9 @@
       window.ANIWORLD_BOOT_SETTINGS.ui.locale = currentLocale;
     }
     applyTranslations(document.body);
+    if (typeof window.refreshCustomSelects === "function") {
+      window.refreshCustomSelects(document);
+    }
     document.dispatchEvent(
       new CustomEvent("aniworld:locale-change", {
         detail: { locale: currentLocale },
@@ -373,16 +380,8 @@
   }
 
   const observer = new MutationObserver((mutations) => {
-    if (currentLocale === "en") return;
+    if (currentLocale === "en" || isApplyingTranslations) return;
     for (const mutation of mutations) {
-      if (mutation.type === "characterData") {
-        translateTextNode(mutation.target);
-        continue;
-      }
-      if (mutation.type === "attributes") {
-        applyTranslations(mutation.target);
-        continue;
-      }
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType === Node.TEXT_NODE) {
           translateTextNode(node);
@@ -396,9 +395,6 @@
   observer.observe(document.body, {
     childList: true,
     subtree: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ATTRIBUTE_NAMES,
   });
 
   window.AniworldI18n = {
