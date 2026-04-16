@@ -89,16 +89,23 @@ const updateLocalCommitValue = document.getElementById("updateLocalCommitValue")
 const updateRemoteCommitValue = document.getElementById(
   "updateRemoteCommitValue",
 );
+const updateInstallModeValue = document.getElementById("updateInstallModeValue");
+const updateActionValue = document.getElementById("updateActionValue");
 const updateStatusNote = document.getElementById("updateStatusNote");
 const updateCheckBtn = document.getElementById("updateCheckBtn");
 const restartAppBtn = document.getElementById("restartAppBtn");
 const updateApplyBtn = document.getElementById("updateApplyBtn");
+const autoUpdateEnabledCb = document.getElementById("autoUpdateEnabled");
+const autoUpdateHint = document.getElementById("autoUpdateHint");
 const settingsUpdateOverlay = document.getElementById("settingsUpdateOverlay");
 const settingsUpdateOverlayMessage = document.getElementById(
   "settingsUpdateOverlayMessage",
 );
 const settingsUpdateOverlayPhase = document.getElementById(
   "settingsUpdateOverlayPhase",
+);
+const settingsUpdateOverlayCommand = document.getElementById(
+  "settingsUpdateOverlayCommand",
 );
 const settingsUpdateOverlaySpinner = document.getElementById(
   "settingsUpdateOverlaySpinner",
@@ -137,8 +144,10 @@ let updatePollTimer = null;
 let updateOverlayDismissed = false;
 let restartInFlight = false;
 let updateCheckInFlight = false;
+let restartReloadTimer = null;
 const UPDATE_POLL_IDLE_MS = 300000;
 const UPDATE_POLL_ACTIVE_MS = 2500;
+const RESTART_RELOAD_INTERVAL_MS = 5000;
 const SYNC_LANGUAGE_OPTIONS = ["German Dub", "English Sub", "German Sub"];
 const UI_PRESETS = {
   control: {
@@ -383,6 +392,15 @@ function formatUpdateTimestamp(value) {
   return date.toLocaleString();
 }
 
+function formatIdleSeconds(value) {
+  const total = Math.max(0, Number(value || 0));
+  if (!Number.isFinite(total) || total <= 0) return "0m";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${Math.max(1, minutes)}m`;
+}
+
 function setUpdateOverlayVisible(visible) {
   if (!settingsUpdateOverlay) return;
   settingsUpdateOverlay.hidden = !visible;
@@ -391,6 +409,33 @@ function setUpdateOverlayVisible(visible) {
 function setUpdateSpinnerVisible(visible) {
   if (!settingsUpdateOverlaySpinner) return;
   settingsUpdateOverlaySpinner.hidden = !visible;
+}
+
+function clearRestartReloadProbe() {
+  if (restartReloadTimer) {
+    clearTimeout(restartReloadTimer);
+    restartReloadTimer = null;
+  }
+}
+
+function scheduleRestartReloadProbe(delayMs = RESTART_RELOAD_INTERVAL_MS) {
+  clearRestartReloadProbe();
+  const probe = async () => {
+    try {
+      const resp = await fetch("/api/update/status", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (resp.ok) {
+        window.location.reload();
+        return;
+      }
+    } catch (e) {
+      // Server still restarting. Keep probing.
+    }
+    restartReloadTimer = setTimeout(probe, RESTART_RELOAD_INTERVAL_MS);
+  };
+  restartReloadTimer = setTimeout(probe, delayMs);
 }
 
 function scheduleUpdatePolling(intervalMs = UPDATE_POLL_IDLE_MS) {
@@ -406,9 +451,19 @@ function renderUpdateStatus(data) {
   const supported = !!data?.supported;
   const active = !!data?.active;
   const updateAvailable = !!data?.update_available;
+  const canManage = !!data?.can_manage;
   const canApply = !!data?.can_apply;
+  const actionAvailable = !!data?.action_available;
   const dirty = !!data?.dirty;
   const restartRequired = !!data?.restart_required;
+  const supportsApply = !!data?.supports_apply;
+  const supportsAutoUpdate = !!data?.supports_auto_update;
+  const autoUpdateEnabled = !!data?.auto_update_enabled;
+  const downloadsBusy = !!data?.downloads_busy;
+  const installLabel = data?.install_label || "Unknown install";
+  const actionLabel = data?.action_label || "Update Now";
+  const actionHint = String(data?.action_hint || "");
+  const manualCommand = String(data?.manual_command || "");
   const phase = String(data?.phase || "idle");
   const message = String(
     data?.message || data?.reason || "No update data available.",
@@ -431,10 +486,18 @@ function renderUpdateStatus(data) {
     updateRemoteCommitValue.textContent = data?.remote_short || "-";
     updateRemoteCommitValue.title = data?.remote_commit || "";
   }
+  if (updateInstallModeValue) {
+    updateInstallModeValue.textContent = installLabel;
+  }
+  if (updateActionValue) {
+    updateActionValue.textContent =
+      supported && updateAvailable ? actionLabel : supportsApply ? "Update Now" : actionLabel;
+  }
 
   if (updateStatusNote) {
     const details = [];
     if (message) details.push(message);
+    if (actionHint && !active && !restartRequired) details.push(actionHint);
     if (data?.remote_url) details.push("Remote: " + data.remote_url);
     if (data?.last_checked_at) {
       details.push("Last checked: " + formatUpdateTimestamp(data.last_checked_at));
@@ -444,7 +507,39 @@ function renderUpdateStatus(data) {
     if (data?.restart_required) {
       details.push("Restart required to load the new code.");
     }
+    if (autoUpdateEnabled) {
+      if (!supportsAutoUpdate) {
+        details.push("Automatic updates are not available for this install mode.");
+      } else if (downloadsBusy) {
+        details.push("Automatic updates are waiting for the current download to finish.");
+      } else {
+        details.push(
+          "Automatic updates wait for " +
+            formatIdleSeconds(data?.auto_update_idle_seconds) +
+            " of download idle time. Current idle: " +
+            formatIdleSeconds(data?.download_idle_seconds),
+        );
+      }
+    }
     updateStatusNote.textContent = details.filter(Boolean).join(" ");
+  }
+
+  if (autoUpdateEnabledCb) {
+    autoUpdateEnabledCb.checked = autoUpdateEnabled;
+    autoUpdateEnabledCb.disabled =
+      !canManage || active || restartInFlight || !supportsAutoUpdate;
+    autoUpdateEnabledCb.title = !canManage
+      ? "Only admins can change automatic updates"
+      : !supportsAutoUpdate
+        ? "Automatic updates are not available for this installation mode"
+        : "";
+  }
+  if (autoUpdateHint) {
+    autoUpdateHint.textContent = supportsAutoUpdate
+      ? "Automatic updates wait for " +
+        formatIdleSeconds(data?.auto_update_idle_seconds) +
+        " of download idle time and never start while a transfer is active."
+      : "Automatic updates are disabled for installation modes that need a manual redeploy or reinstall.";
   }
 
   if (updateCheckBtn) {
@@ -453,9 +548,9 @@ function renderUpdateStatus(data) {
       active || updateCheckInFlight ? "Checking..." : "Check Now";
   }
   if (restartAppBtn) {
-    restartAppBtn.disabled = active || restartInFlight || !supported || !canApply;
+    restartAppBtn.disabled = active || restartInFlight || !canManage;
     restartAppBtn.textContent = restartInFlight ? "Restarting..." : "Restart";
-    restartAppBtn.title = !canApply
+    restartAppBtn.title = !canManage
       ? "Only admins can restart the downloader"
       : active
         ? "Wait for the running update to finish first"
@@ -466,14 +561,18 @@ function renderUpdateStatus(data) {
       active ||
       restartInFlight ||
       !supported ||
-      !canApply ||
+      !actionAvailable ||
       !updateAvailable ||
       dirty;
-    updateApplyBtn.textContent = active ? "Updating..." : "Update Now";
-    updateApplyBtn.title = !canApply
-      ? "Only admins can apply updates"
+    updateApplyBtn.textContent = active ? "Updating..." : actionLabel;
+    updateApplyBtn.title = !canManage
+      ? "Only admins can manage updates"
       : dirty
         ? "Commit or stash local changes before updating"
+        : !updateAvailable
+          ? "This installation is already on the latest version"
+          : !actionAvailable
+            ? actionHint || "Updates for this install mode must be handled outside the web UI"
         : "";
   }
 
@@ -483,10 +582,16 @@ function renderUpdateStatus(data) {
   if (settingsUpdateOverlayPhase) {
     settingsUpdateOverlayPhase.textContent =
       phase === "done"
-        ? "Finished"
-        : phase === "error"
+      ? "Finished"
+      : phase === "error"
           ? "Update failed"
+          : phase === "manual"
+            ? "Manual action required"
           : phase.charAt(0).toUpperCase() + phase.slice(1);
+  }
+  if (settingsUpdateOverlayCommand) {
+    settingsUpdateOverlayCommand.hidden = !manualCommand || active;
+    settingsUpdateOverlayCommand.textContent = manualCommand;
   }
   setUpdateSpinnerVisible(active || updateCheckInFlight);
   if (active) updateOverlayDismissed = false;
@@ -497,14 +602,14 @@ function renderUpdateStatus(data) {
     active ||
     (!updateOverlayDismissed &&
       supported &&
-      (phase === "done" || phase === "error" || restartRequired));
+      (phase === "done" || phase === "error" || phase === "manual" || restartRequired));
   if (settingsUpdateOverlayClose) {
     settingsUpdateOverlayClose.hidden =
-      active || !(phase === "done" || phase === "error" || restartRequired);
+      active || !(phase === "done" || phase === "error" || phase === "manual" || restartRequired);
   }
   if (settingsUpdateOverlayRestart) {
     settingsUpdateOverlayRestart.hidden =
-      active || restartInFlight || !restartRequired || !canApply;
+      active || restartInFlight || !restartRequired || !canManage;
   }
   setUpdateOverlayVisible(shouldShowOverlay);
 }
@@ -537,6 +642,7 @@ async function loadUpdateStatus(force = false) {
 
 async function startWebUpdate() {
   if (!updateApplyBtn || updateApplyBtn.disabled) return;
+  clearRestartReloadProbe();
   updateOverlayDismissed = false;
   setUpdateOverlayVisible(true);
   renderUpdateStatus({
@@ -565,6 +671,12 @@ async function startWebUpdate() {
       showToast(data.error || "Update could not be started");
       return;
     }
+    if (data?.phase === "manual" && !data?.active) {
+      renderUpdateStatus(data);
+      showToast(data.message || "Manual redeploy required");
+      scheduleUpdatePolling();
+      return;
+    }
     renderUpdateStatus(data);
     showToast("Update started");
     if (updatePollTimer) clearInterval(updatePollTimer);
@@ -590,6 +702,7 @@ async function startWebUpdate() {
 
 async function restartDownloaderFromSettings() {
   if (!restartAppBtn || restartAppBtn.disabled) return;
+  clearRestartReloadProbe();
   restartInFlight = true;
   updateOverlayDismissed = false;
   if (updateCheckBtn) updateCheckBtn.disabled = true;
@@ -631,7 +744,14 @@ async function restartDownloaderFromSettings() {
       settingsUpdateOverlayMessage.textContent =
         data.message || "Restarting downloader. Reload this page in a few seconds.";
     }
+    if (settingsUpdateOverlayCommand) {
+      settingsUpdateOverlayCommand.hidden = true;
+      settingsUpdateOverlayCommand.textContent = "";
+    }
     showToast("Restart started");
+    scheduleRestartReloadProbe(
+      Number(data?.reload_after_seconds || 5) * 1000,
+    );
   } catch (e) {
     restartInFlight = false;
     renderUpdateStatus({
@@ -797,6 +917,9 @@ async function loadSettings() {
       }
       if (externalNotifySystemCb) {
         externalNotifySystemCb.checked = data.external_notify_system !== "0";
+      }
+      if (autoUpdateEnabledCb) {
+        autoUpdateEnabledCb.checked = data.auto_update_enabled === "1";
       }
       updateExternalNotificationState();
       if (uiPresetSelect) uiPresetSelect.value = data.ui_preset || "custom";
@@ -1100,6 +1223,21 @@ async function saveUiLocale() {
     );
   } catch (e) {
     showToast("Failed to save UI language: " + e.message);
+  }
+}
+
+async function saveAutoUpdateEnabled() {
+  if (!autoUpdateEnabledCb) return;
+  try {
+    await updateSettings({
+      auto_update_enabled: autoUpdateEnabledCb.checked,
+    });
+    await loadUpdateStatus(false);
+    showToast(
+      "Automatic updates " + (autoUpdateEnabledCb.checked ? "enabled" : "disabled"),
+    );
+  } catch (e) {
+    showToast("Failed to save automatic updates: " + e.message);
   }
 }
 

@@ -4782,6 +4782,25 @@ input[type="checkbox"] {
   font-weight: 700;
 }
 
+.settings-update-command {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  text-align: left;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-update-command[hidden] {
+  display: none !important;
+}
+
 .settings-update-spinner {
   width: 44px;
   height: 44px;

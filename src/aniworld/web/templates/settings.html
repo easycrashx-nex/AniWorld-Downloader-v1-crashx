@@ -66,12 +66,32 @@
         <span class="field-label">GitHub Commit</span>
         <strong id="updateRemoteCommitValue" class="settings-static-value">-</strong>
       </div>
+      <div class="settings-info-card">
+        <span class="field-label">Install Mode</span>
+        <strong id="updateInstallModeValue" class="settings-static-value">-</strong>
+      </div>
+      <div class="settings-info-card">
+        <span class="field-label">Update Action</span>
+        <strong id="updateActionValue" class="settings-static-value">-</strong>
+      </div>
     </div>
     <div class="settings-info-card">
       <span class="field-label">Update Notes</span>
       <div id="updateStatusNote" class="settings-update-note">
         Checking the current repository state...
       </div>
+    </div>
+    <label class="settings-checkbox">
+      <input
+        type="checkbox"
+        id="autoUpdateEnabled"
+        onchange="saveAutoUpdateEnabled()"
+      />
+      Install updates automatically after download idle time
+    </label>
+    <div class="settings-hint" id="autoUpdateHint">
+      Automatic updates wait for a longer idle window and never start during an
+      active download.
     </div>
     <div class="settings-restart-banner" id="settingsRestartBanner" hidden>
       <div>
@@ -924,6 +944,7 @@
       <div id="settingsUpdateOverlayPhase" class="settings-update-phase">
         Checking repository state
       </div>
+      <pre id="settingsUpdateOverlayCommand" class="settings-update-command" hidden></pre>
       <div class="settings-update-actions">
         <button
           type="button"

@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from collections import deque
+from importlib.metadata import distribution
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
@@ -151,6 +152,14 @@ _ENV_DOWNLOAD_SPEED_PROFILE = "ANIWORLD_DOWNLOAD_SPEED_PROFILE"
 _ENV_AUTO_PROVIDER_SWITCH = "ANIWORLD_AUTO_PROVIDER_SWITCH"
 _ENV_RATE_LIMIT_GUARD = "ANIWORLD_RATE_LIMIT_GUARD"
 _ENV_PREFLIGHT_CHECK = "ANIWORLD_PREFLIGHT_CHECK"
+_ENV_UPDATE_REMOTE_URL = "ANIWORLD_UPDATE_REMOTE_URL"
+_ENV_UPDATE_REMOTE_BRANCH = "ANIWORLD_UPDATE_REMOTE_BRANCH"
+_ENV_UPDATE_LOCAL_COMMIT = "ANIWORLD_UPDATE_LOCAL_COMMIT"
+_ENV_DOCKER_REDEPLOY_CMD = "ANIWORLD_DOCKER_REDEPLOY_CMD"
+
+_AUTO_UPDATE_IDLE_SECONDS = 20 * 60
+_AUTO_UPDATE_LOOP_SECONDS = 60
+_AUTO_UPDATE_REMOTE_CHECK_SECONDS = 15 * 60
 
 
 def _experimental_flags():
@@ -426,6 +435,12 @@ _update_runtime_state = {
     "last_checked_at": None,
     "requested_by": None,
 }
+_auto_update_worker_started = False
+_download_activity_lock = threading.Lock()
+_download_activity_state = {
+    "last_activity_at": time.time(),
+    "reason": "startup",
+}
 
 
 def _set_update_runtime(**kwargs):
@@ -436,6 +451,39 @@ def _set_update_runtime(**kwargs):
 def _get_update_runtime():
     with _update_runtime_lock:
         return dict(_update_runtime_state)
+
+
+def _mark_download_activity(reason="activity"):
+    with _download_activity_lock:
+        _download_activity_state.update(
+            {
+                "last_activity_at": time.time(),
+                "reason": str(reason or "activity"),
+            }
+        )
+
+
+def _get_download_activity():
+    with _download_activity_lock:
+        return dict(_download_activity_state)
+
+
+def _downloads_busy():
+    running = get_running()
+    if running:
+        return True
+    runtime = get_ffmpeg_runtime_state()
+    return bool(runtime.get("active"))
+
+
+def _download_idle_seconds():
+    if _downloads_busy():
+        return 0
+    activity = _get_download_activity()
+    last_activity_at = float(activity.get("last_activity_at") or 0.0)
+    if last_activity_at <= 0:
+        return 0
+    return max(0, int(time.time() - last_activity_at))
 
 
 def _resolve_repo_root():
@@ -479,10 +527,45 @@ def _resolve_repo_root():
     return None
 
 
-def _run_git_command(args, cwd, timeout=30):
+def _inside_docker():
+    if str(os.environ.get("container") or "").strip().lower() in {
+        "docker",
+        "podman",
+        "containerd",
+    }:
+        return True
+    for marker in (Path("/.dockerenv"), Path("/run/.containerenv")):
+        try:
+            if marker.exists():
+                return True
+        except Exception:
+            continue
+    try:
+        cgroup = Path("/proc/1/cgroup")
+        if cgroup.exists():
+            text = cgroup.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(token in text for token in ("docker", "kubepods", "containerd", "podman")):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _read_installed_direct_url():
+    try:
+        dist = distribution("aniworld")
+        text = dist.read_text("direct_url.json")
+        if text:
+            return json.loads(text)
+    except Exception:
+        return None
+    return None
+
+
+def _run_command(args, cwd=None, timeout=30):
     result = subprocess.run(
         args,
-        cwd=str(cwd),
+        cwd=str(cwd) if cwd else None,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -495,72 +578,354 @@ def _run_git_command(args, cwd, timeout=30):
     }
 
 
-def _git_update_snapshot(force=False):
+def _run_git_command(args, cwd, timeout=30):
+    return _run_command(args, cwd=cwd, timeout=timeout)
+
+
+def _normalize_git_remote_url(value):
+    url = str(value or "").strip()
+    if url.startswith("git+"):
+        url = url[4:]
+    return url
+
+
+def _resolve_remote_git_commit(remote_url, ref=None):
+    clean_url = _normalize_git_remote_url(remote_url)
+    if not clean_url:
+        return "", "No remote repository URL was configured."
+
+    refs = []
+    requested_ref = str(ref or "").strip()
+    if requested_ref:
+        refs.append(requested_ref)
+    refs.append("HEAD")
+
+    last_error = ""
+    seen = set()
+    for candidate in refs:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        result = _run_command(
+            ["git", "ls-remote", clean_url, candidate],
+            timeout=25,
+        )
+        if result["code"] == 0 and result["stdout"]:
+            return result["stdout"].split()[0].strip(), ""
+        last_error = result["stderr"] or result["stdout"] or "Could not check the remote repository."
+    return "", last_error
+
+
+def _build_pip_git_spec(remote_url, revision=None):
+    clean_url = str(remote_url or "").strip()
+    if not clean_url:
+        return ""
+    spec = clean_url if clean_url.startswith("git+") else f"git+{clean_url}"
+    requested_revision = str(revision or "").strip()
+    if requested_revision:
+        spec = f"{spec}@{requested_revision}"
+    if "#egg=" not in spec:
+        spec = f"{spec}#egg=aniworld"
+    return spec
+
+
+def _docker_redeploy_command(repo_root=None):
+    configured = str(os.environ.get(_ENV_DOCKER_REDEPLOY_CMD) or "").strip()
+    if configured:
+        return configured
+    candidate_root = None
+    try:
+        candidate_root = Path(repo_root).resolve() if repo_root else None
+    except Exception:
+        candidate_root = None
+    compose_names = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+    if candidate_root and any((candidate_root / name).exists() for name in compose_names):
+        return "docker compose up -d --build"
+    return "Redeploy the container image from your Docker host or container platform."
+
+
+def _remote_update_snapshot(
+    *,
+    install_mode,
+    install_label,
+    remote_url,
+    branch,
+    local_commit,
+    repo_root="",
+    dirty=False,
+    supports_apply=False,
+    supports_auto_update=False,
+    apply_strategy="manual",
+    action_label="Update Now",
+    action_hint="",
+    manual_command="",
+    pip_upgrade_spec="",
+):
+    clean_remote = _normalize_git_remote_url(remote_url)
+    clean_local = str(local_commit or "").strip()
+    clean_branch = str(branch or "").strip() or "main"
+
+    if not clean_remote:
+        return {
+            "supported": False,
+            "install_mode": install_mode,
+            "install_label": install_label,
+            "repo_root": str(repo_root or ""),
+            "reason": "No remote update source could be detected for this installation.",
+            "supports_apply": False,
+            "supports_auto_update": False,
+            "apply_strategy": "manual",
+            "action_label": action_label,
+            "action_hint": action_hint,
+            "manual_action_available": bool(manual_command),
+            "manual_command": manual_command,
+            "checked_at": int(time.time()),
+        }
+
+    if not clean_local:
+        return {
+            "supported": False,
+            "install_mode": install_mode,
+            "install_label": install_label,
+            "repo_root": str(repo_root or ""),
+            "remote_url": clean_remote,
+            "branch": clean_branch,
+            "reason": "The current local commit is unknown, so update checks are unavailable.",
+            "supports_apply": False,
+            "supports_auto_update": False,
+            "apply_strategy": "manual",
+            "action_label": action_label,
+            "action_hint": action_hint,
+            "manual_action_available": bool(manual_command),
+            "manual_command": manual_command,
+            "checked_at": int(time.time()),
+        }
+
+    remote_hash, remote_error = _resolve_remote_git_commit(clean_remote, clean_branch)
+    snapshot = {
+        "supported": True,
+        "install_mode": install_mode,
+        "install_label": install_label,
+        "repo_root": str(repo_root or ""),
+        "branch": clean_branch,
+        "remote_url": clean_remote,
+        "local_commit": clean_local,
+        "remote_commit": remote_hash,
+        "local_short": clean_local[:7],
+        "remote_short": remote_hash[:7],
+        "dirty": bool(dirty),
+        "update_available": bool(remote_hash and remote_hash != clean_local),
+        "reason": remote_error if not remote_hash else "",
+        "supports_apply": bool(supports_apply),
+        "supports_auto_update": bool(supports_auto_update),
+        "apply_strategy": apply_strategy,
+        "action_label": action_label,
+        "action_hint": action_hint,
+        "manual_action_available": bool(manual_command),
+        "manual_command": manual_command,
+        "pip_upgrade_spec": pip_upgrade_spec,
+        "checked_at": int(time.time()),
+    }
+    return snapshot
+
+
+def _git_repo_update_snapshot(repo_root):
+    branch_info = _run_git_command(["git", "branch", "--show-current"], repo_root, 12)
+    if branch_info["code"] != 0 or not branch_info["stdout"]:
+        return {
+            "supported": False,
+            "install_mode": "git",
+            "install_label": "Git checkout",
+            "repo_root": str(repo_root),
+            "reason": branch_info["stderr"] or "Could not detect the current git branch.",
+            "supports_apply": False,
+            "supports_auto_update": False,
+            "apply_strategy": "manual",
+            "action_label": "Update Now",
+            "action_hint": "",
+            "manual_action_available": False,
+            "manual_command": "",
+            "checked_at": int(time.time()),
+        }
+
+    branch = branch_info["stdout"].strip()
+    local_rev = _run_git_command(["git", "rev-parse", "HEAD"], repo_root, 12)
+    remote_url = _run_git_command(["git", "remote", "get-url", "origin"], repo_root, 12)
+    dirty = _run_git_command(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        repo_root,
+        18,
+    )
+    return _remote_update_snapshot(
+        install_mode="git",
+        install_label="Git checkout",
+        remote_url=remote_url["stdout"] or "",
+        branch=branch,
+        local_commit=local_rev["stdout"] or "",
+        repo_root=str(repo_root),
+        dirty=bool(dirty["stdout"]),
+        supports_apply=True,
+        supports_auto_update=True,
+        apply_strategy="git",
+        action_label="Update Now",
+        action_hint="",
+    )
+
+
+def _pip_vcs_update_snapshot(
+    direct_url,
+    *,
+    install_mode="pip",
+    install_label="Pip install",
+    supports_apply=True,
+    supports_auto_update=True,
+    apply_strategy="pip_vcs",
+    action_label="Update Now",
+    action_hint="",
+    manual_command="",
+):
+    vcs_info = (direct_url or {}).get("vcs_info") or {}
+    remote_url = (direct_url or {}).get("url") or os.environ.get(_ENV_UPDATE_REMOTE_URL, "")
+    branch = (
+        vcs_info.get("requested_revision")
+        or os.environ.get(_ENV_UPDATE_REMOTE_BRANCH, "")
+        or "main"
+    )
+    local_commit = (
+        vcs_info.get("commit_id")
+        or os.environ.get(_ENV_UPDATE_LOCAL_COMMIT, "")
+    )
+    return _remote_update_snapshot(
+        install_mode=install_mode,
+        install_label=install_label,
+        remote_url=remote_url,
+        branch=branch,
+        local_commit=local_commit,
+        supports_apply=supports_apply,
+        supports_auto_update=supports_auto_update,
+        apply_strategy=apply_strategy,
+        action_label=action_label,
+        action_hint=action_hint,
+        manual_command=manual_command,
+        pip_upgrade_spec=_build_pip_git_spec(remote_url, branch) if supports_apply else "",
+    )
+
+
+def _docker_update_snapshot(repo_root=None, direct_url=None):
+    redeploy_command = _docker_redeploy_command(repo_root)
+    action_hint = (
+        "This downloader is running in Docker. Update it by redeploying the container image "
+        "from your host after the current workload is idle."
+    )
+
+    if repo_root:
+        base = _git_repo_update_snapshot(repo_root)
+        base.update(
+            {
+                "install_mode": "docker",
+                "install_label": "Docker container",
+                "supports_apply": False,
+                "supports_auto_update": False,
+                "apply_strategy": "docker_redeploy",
+                "action_label": "Redeploy",
+                "action_hint": action_hint,
+                "manual_action_available": True,
+                "manual_command": redeploy_command,
+                "dirty": False,
+            }
+        )
+        return base
+
+    direct = direct_url or _read_installed_direct_url()
+    vcs_info = (direct or {}).get("vcs_info") or {}
+    if vcs_info.get("vcs") == "git":
+        return _pip_vcs_update_snapshot(
+            direct,
+            install_mode="docker",
+            install_label="Docker container",
+            supports_apply=False,
+            supports_auto_update=False,
+            apply_strategy="docker_redeploy",
+            action_label="Redeploy",
+            action_hint=action_hint,
+            manual_command=redeploy_command,
+        )
+
+    remote_url = str(os.environ.get(_ENV_UPDATE_REMOTE_URL) or "").strip()
+    local_commit = str(os.environ.get(_ENV_UPDATE_LOCAL_COMMIT) or "").strip()
+    if remote_url and local_commit:
+        return _remote_update_snapshot(
+            install_mode="docker",
+            install_label="Docker container",
+            remote_url=remote_url,
+            branch=os.environ.get(_ENV_UPDATE_REMOTE_BRANCH, "main"),
+            local_commit=local_commit,
+            supports_apply=False,
+            supports_auto_update=False,
+            apply_strategy="docker_redeploy",
+            action_label="Redeploy",
+            action_hint=action_hint,
+            manual_command=redeploy_command,
+        )
+
+    return {
+        "supported": False,
+        "install_mode": "docker",
+        "install_label": "Docker container",
+        "repo_root": str(repo_root or ""),
+        "reason": (
+            "Docker was detected, but no remote update source metadata is available. "
+            "Set ANIWORLD_UPDATE_REMOTE_URL and ANIWORLD_UPDATE_LOCAL_COMMIT to enable checks."
+        ),
+        "supports_apply": False,
+        "supports_auto_update": False,
+        "apply_strategy": "docker_redeploy",
+        "action_label": "Redeploy",
+        "action_hint": action_hint,
+        "manual_action_available": True,
+        "manual_command": redeploy_command,
+        "checked_at": int(time.time()),
+    }
+
+
+def _update_source_snapshot(force=False):
     if not force:
         cached = _cache_get("system:update_status", 300)
         if cached is not None:
             return cached
 
     repo_root = _resolve_repo_root()
-    if not repo_root:
-        snapshot = {
-            "supported": False,
-            "reason": "No git repository was detected for this installation.",
-        }
-        _cache_set("system:update_status", snapshot)
-        return snapshot
+    direct_url = _read_installed_direct_url()
 
-    branch_info = _run_git_command(["git", "branch", "--show-current"], repo_root, 12)
-    if branch_info["code"] != 0 or not branch_info["stdout"]:
-        snapshot = {
-            "supported": False,
-            "reason": branch_info["stderr"] or "Could not detect the current git branch.",
-            "repo_root": str(repo_root),
-        }
-        _cache_set("system:update_status", snapshot)
-        return snapshot
-
-    branch = branch_info["stdout"]
-    local_rev = _run_git_command(["git", "rev-parse", "HEAD"], repo_root, 12)
-    remote_url = _run_git_command(
-        ["git", "remote", "get-url", "origin"], repo_root, 12
-    )
-    dirty = _run_git_command(
-        ["git", "status", "--porcelain", "--untracked-files=no"], repo_root, 18
-    )
-    remote_rev = _run_git_command(
-        ["git", "ls-remote", "--heads", "origin", branch], repo_root, 25
-    )
-
-    remote_hash = ""
-    if remote_rev["code"] == 0 and remote_rev["stdout"]:
-        remote_hash = remote_rev["stdout"].split()[0].strip()
-
-    snapshot = {
-        "supported": True,
-        "repo_root": str(repo_root),
-        "branch": branch,
-        "remote_url": remote_url["stdout"] or "",
-        "local_commit": local_rev["stdout"] or "",
-        "remote_commit": remote_hash,
-        "local_short": (local_rev["stdout"] or "")[:7],
-        "remote_short": remote_hash[:7],
-        "dirty": bool(dirty["stdout"]),
-        "update_available": bool(
-            remote_hash and local_rev["stdout"] and remote_hash != local_rev["stdout"]
-        ),
-        "reason": "",
-        "checked_at": int(time.time()),
-    }
-    if remote_rev["code"] != 0:
-        snapshot["reason"] = remote_rev["stderr"] or "Could not check the remote repository."
-
+    if _inside_docker():
+        snapshot = _docker_update_snapshot(repo_root=repo_root, direct_url=direct_url)
+    elif repo_root:
+        snapshot = _git_repo_update_snapshot(repo_root)
+    else:
+        vcs_info = (direct_url or {}).get("vcs_info") or {}
+        if vcs_info.get("vcs") == "git":
+            snapshot = _pip_vcs_update_snapshot(direct_url)
+        else:
+            snapshot = {
+                "supported": False,
+                "install_mode": "unknown",
+                "install_label": "Unknown install",
+                "reason": "No supported update source was detected for this installation.",
+                "supports_apply": False,
+                "supports_auto_update": False,
+                "apply_strategy": "manual",
+                "action_label": "Update Now",
+                "action_hint": "",
+                "manual_action_available": False,
+                "manual_command": "",
+                "checked_at": int(time.time()),
+            }
     _cache_set("system:update_status", snapshot)
     return snapshot
 
 
-def _update_status_payload(force=False, can_apply=False):
-    snapshot = _git_update_snapshot(force=force)
+def _update_status_payload(force=False, can_manage=False):
+    snapshot = _update_source_snapshot(force=force)
     runtime = _get_update_runtime()
     payload = dict(snapshot)
     payload.update(
@@ -574,7 +939,22 @@ def _update_status_payload(force=False, can_apply=False):
             "last_error": runtime.get("last_error") or "",
             "last_checked_at": runtime.get("last_checked_at"),
             "requested_by": runtime.get("requested_by"),
-            "can_apply": bool(can_apply and snapshot.get("supported")),
+            "can_manage": bool(can_manage),
+            "can_apply": bool(can_manage and snapshot.get("supports_apply")),
+            "action_available": bool(
+                can_manage
+                and (
+                    snapshot.get("supports_apply")
+                    or snapshot.get("manual_action_available")
+                )
+            ),
+            "auto_update_enabled": _normalize_pref_bool(
+                _global_pref("auto_update_enabled", "0")
+            )
+            == "1",
+            "downloads_busy": _downloads_busy(),
+            "download_idle_seconds": _download_idle_seconds(),
+            "auto_update_idle_seconds": _AUTO_UPDATE_IDLE_SECONDS,
         }
     )
     return payload
@@ -594,61 +974,92 @@ def _run_update_worker(requested_by=None):
             requested_by=requested_by,
         )
 
-        snapshot = _git_update_snapshot(force=True)
+        snapshot = _update_source_snapshot(force=True)
         repo_root = snapshot.get("repo_root")
-        if not snapshot.get("supported") or not repo_root:
+        if not snapshot.get("supported"):
             raise RuntimeError(snapshot.get("reason") or "Updates are not available here.")
+        if not snapshot.get("supports_apply"):
+            raise RuntimeError(
+                snapshot.get("action_hint")
+                or "This installation must be updated outside the web UI."
+            )
         if snapshot.get("dirty"):
             raise RuntimeError(
                 "The git worktree has local changes. Commit or stash them before using the updater."
             )
 
-        branch = snapshot.get("branch") or "main"
-        _set_update_runtime(
-            phase="fetching",
-            message=f"Fetching latest changes from origin/{branch}...",
-            last_checked_at=int(time.time()),
-        )
-        fetch_result = _run_git_command(
-            ["git", "fetch", "--quiet", "origin", branch],
-            repo_root,
-            120,
-        )
-        if fetch_result["code"] != 0:
-            raise RuntimeError(fetch_result["stderr"] or "git fetch failed")
-
-        snapshot = _git_update_snapshot(force=True)
-        if not snapshot.get("update_available"):
+        python_exe = sys.executable or ""
+        if snapshot.get("apply_strategy") == "git":
+            if not repo_root:
+                raise RuntimeError("The git repository root is unavailable for this installation.")
+            branch = snapshot.get("branch") or "main"
             _set_update_runtime(
-                active=False,
-                phase="done",
-                message="Already on the latest GitHub version.",
-                finished_at=int(time.time()),
+                phase="fetching",
+                message=f"Fetching latest changes from origin/{branch}...",
                 last_checked_at=int(time.time()),
             )
-            return
+            fetch_result = _run_git_command(
+                ["git", "fetch", "--quiet", "origin", branch],
+                repo_root,
+                120,
+            )
+            if fetch_result["code"] != 0:
+                raise RuntimeError(fetch_result["stderr"] or "git fetch failed")
 
-        _set_update_runtime(
-            phase="pulling",
-            message="Downloading and applying the update...",
-        )
-        pull_result = _run_git_command(
-            ["git", "pull", "--ff-only", "origin", branch],
-            repo_root,
-            180,
-        )
-        if pull_result["code"] != 0:
-            raise RuntimeError(pull_result["stderr"] or "git pull failed")
+            snapshot = _update_source_snapshot(force=True)
+            if not snapshot.get("update_available"):
+                _set_update_runtime(
+                    active=False,
+                    phase="done",
+                    message="Already on the latest GitHub version.",
+                    finished_at=int(time.time()),
+                    last_checked_at=int(time.time()),
+                )
+                return
 
-        python_exe = sys.executable or ""
-        if python_exe:
+            _set_update_runtime(
+                phase="pulling",
+                message="Downloading and applying the update...",
+            )
+            pull_result = _run_git_command(
+                ["git", "pull", "--ff-only", "origin", branch],
+                repo_root,
+                180,
+            )
+            if pull_result["code"] != 0:
+                raise RuntimeError(pull_result["stderr"] or "git pull failed")
+
+            if python_exe:
+                _set_update_runtime(
+                    phase="installing",
+                    message="Refreshing the Python installation...",
+                )
+                pip_result = subprocess.run(
+                    [python_exe, "-m", "pip", "install", "-e", str(repo_root)],
+                    cwd=str(repo_root),
+                    capture_output=True,
+                    text=True,
+                    timeout=240,
+                    check=False,
+                )
+                if pip_result.returncode != 0:
+                    raise RuntimeError(
+                        (pip_result.stderr or pip_result.stdout or "pip install failed").strip()
+                    )
+        elif snapshot.get("apply_strategy") == "pip_vcs":
+            if not python_exe:
+                raise RuntimeError("Python executable not available for pip upgrade.")
+            pip_upgrade_spec = str(snapshot.get("pip_upgrade_spec") or "").strip()
+            if not pip_upgrade_spec:
+                raise RuntimeError("No pip upgrade source was detected for this installation.")
             _set_update_runtime(
                 phase="installing",
-                message="Refreshing the Python installation...",
+                message="Downloading and installing the updated package...",
+                last_checked_at=int(time.time()),
             )
             pip_result = subprocess.run(
-                [python_exe, "-m", "pip", "install", "-e", str(repo_root)],
-                cwd=str(repo_root),
+                [python_exe, "-m", "pip", "install", "--upgrade", pip_upgrade_spec],
+                cwd=str(repo_root) if repo_root else None,
                 capture_output=True,
                 text=True,
                 timeout=240,
@@ -656,10 +1067,15 @@ def _run_update_worker(requested_by=None):
             )
             if pip_result.returncode != 0:
                 raise RuntimeError(
-                    (pip_result.stderr or pip_result.stdout or "pip install failed").strip()
+                    (pip_result.stderr or pip_result.stdout or "pip upgrade failed").strip()
                 )
+        else:
+            raise RuntimeError(
+                snapshot.get("action_hint")
+                or "This installation cannot be updated directly from the web UI."
+            )
 
-        _git_update_snapshot(force=True)
+        _update_source_snapshot(force=True)
         _set_update_runtime(
             active=False,
             phase="done",
@@ -712,6 +1128,73 @@ def _start_restart_worker():
     )
     thread.start()
     return True
+
+
+def _auto_update_enabled():
+    return _normalize_pref_bool(_global_pref("auto_update_enabled", "0")) == "1"
+
+
+def _auto_update_worker():
+    last_remote_probe_at = 0
+    while True:
+        try:
+            time.sleep(_AUTO_UPDATE_LOOP_SECONDS)
+            if not _auto_update_enabled():
+                continue
+
+            runtime = _get_update_runtime()
+            if runtime.get("active") or runtime.get("restart_required"):
+                continue
+
+            snapshot = _update_source_snapshot(force=False)
+            if not snapshot.get("supports_auto_update"):
+                continue
+
+            if _downloads_busy():
+                continue
+
+            if _download_idle_seconds() < _AUTO_UPDATE_IDLE_SECONDS:
+                continue
+
+            now = time.time()
+            if now - last_remote_probe_at < _AUTO_UPDATE_REMOTE_CHECK_SECONDS:
+                if not snapshot.get("update_available"):
+                    continue
+            else:
+                snapshot = _update_source_snapshot(force=True)
+                last_remote_probe_at = now
+
+            if not snapshot.get("update_available"):
+                continue
+
+            if _start_update_worker(requested_by="auto-updater"):
+                logger.info("Started automatic updater after %.0f seconds of download idle time", _download_idle_seconds())
+                record_audit_event(
+                    "system.update_auto_requested",
+                    username="",
+                    subject_type="system",
+                    subject=snapshot.get("install_mode") or "auto-update",
+                    details={
+                        "install_mode": snapshot.get("install_mode"),
+                        "branch": snapshot.get("branch"),
+                        "remote_url": snapshot.get("remote_url"),
+                    },
+                )
+        except Exception:
+            logger.exception("Automatic update worker failed")
+
+
+def _ensure_auto_update_worker():
+    global _auto_update_worker_started
+    if _auto_update_worker_started:
+        return
+    _auto_update_worker_started = True
+    thread = threading.Thread(
+        target=_auto_update_worker,
+        daemon=True,
+        name="aniworld-auto-update",
+    )
+    thread.start()
 
 
 def _disk_guard_snapshot():
@@ -1292,6 +1775,9 @@ def _settings_payload(
         ),
         "external_notify_system": _normalize_pref_bool(
             _global_pref("external_notify_system", "1")
+        ),
+        "auto_update_enabled": _normalize_pref_bool(
+            _global_pref("auto_update_enabled", "0")
         ),
         "disk_guard": _disk_guard_snapshot(),
     }
@@ -3379,6 +3865,7 @@ def _queue_worker():
                     item = get_next_queued()
                     if item:
                         set_queue_status(item["id"], "running")
+                        _mark_download_activity("queue-started")
                         _emit_ui_event("queue", "dashboard", "nav")
 
             if not item:
@@ -3477,6 +3964,7 @@ def _queue_worker():
                 if is_queue_cancelled(item["id"]):
                     logger.info(f"Download cancelled for queue item {item['id']}")
                     update_queue_progress(item["id"], i + 1, "")
+                    _mark_download_activity("queue-cancelled")
                     _emit_ui_event("queue", "dashboard", "nav", min_interval=0.35)
                     break
 
@@ -3489,6 +3977,7 @@ def _queue_worker():
                     "failed" if errors and len(errors) == len(episodes) else "completed"
                 )
                 set_queue_status(item["id"], status)
+                _mark_download_activity(f"queue-{status}")
                 if status == "completed" and item.get("series_url"):
                     touch_series_last_downloaded(item.get("series_url"))
                 record_audit_event(
@@ -4165,6 +4654,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         _ensure_queue_worker()
         _ensure_autosync_worker()
         _ensure_self_heal_worker()
+        _ensure_auto_update_worker()
 
     @app.after_request
     def _set_security_headers(response):
@@ -5334,6 +5824,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "smart_retry_profile",
                     _normalize_smart_retry_profile(data["smart_retry_profile"]),
                 )
+            if "auto_update_enabled" in data:
+                _set_global_pref(
+                    "auto_update_enabled",
+                    _normalize_pref_bool(data["auto_update_enabled"]),
+                )
             if "external_notifications_enabled" in data:
                 _set_global_pref(
                     "external_notifications_enabled",
@@ -5407,6 +5902,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "browser_notify_system",
                     "auto_open_captcha_tab",
                     "smart_retry_profile",
+                    "auto_update_enabled",
                     "external_notifications_enabled",
                     "external_notification_type",
                     "external_notification_url",
@@ -5428,13 +5924,13 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     @app.route("/api/update/status")
     def api_update_status():
         _, is_admin = _get_current_user_info()
-        return jsonify(_update_status_payload(force=False, can_apply=is_admin))
+        return jsonify(_update_status_payload(force=False, can_manage=is_admin))
 
     @app.route("/api/update/check", methods=["POST"])
     def api_update_check():
         _, is_admin = _get_current_user_info()
         _set_update_runtime(last_checked_at=int(time.time()))
-        payload = _update_status_payload(force=True, can_apply=is_admin)
+        payload = _update_status_payload(force=True, can_manage=is_admin)
         return jsonify(payload)
 
     @app.route("/api/update/apply", methods=["POST"])
@@ -5442,15 +5938,31 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         username, is_admin = _get_current_user_info()
         if not is_admin:
             return jsonify({"error": "Only admins can apply updates."}), 403
+        snapshot = _update_source_snapshot(force=True)
+        if snapshot.get("manual_action_available") and not snapshot.get("supports_apply"):
+            payload = _update_status_payload(force=False, can_manage=True)
+            payload.update(
+                {
+                    "active": False,
+                    "phase": "manual",
+                    "message": snapshot.get("action_hint")
+                    or "This installation must be updated outside the web UI.",
+                }
+            )
+            return jsonify(payload)
         if not _start_update_worker(requested_by=username):
             return jsonify({"error": "An update is already running."}), 409
         _record_user_event(
             "system.update_requested",
             subject_type="system",
-            subject="git-update",
-            details={"requested_by": username},
+            subject=snapshot.get("install_mode") or "web-update",
+            details={
+                "requested_by": username,
+                "install_mode": snapshot.get("install_mode"),
+                "apply_strategy": snapshot.get("apply_strategy"),
+            },
         )
-        return jsonify(_update_status_payload(force=True, can_apply=True))
+        return jsonify(_update_status_payload(force=True, can_manage=True))
 
     @app.route("/api/system/restart", methods=["POST"])
     def api_system_restart():
@@ -5471,6 +5983,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             {
                 "ok": True,
                 "message": "Restarting downloader. Reload this page in a few seconds.",
+                "reload_after_seconds": 5,
             }
         )
 
