@@ -1260,8 +1260,9 @@ async function saveAutoOpenCaptchaTab() {
       auto_open_captcha_tab: autoOpenCaptchaTabCb.checked,
     });
     showToast(
-      "Automatic captcha tab opening " +
-        (autoOpenCaptchaTabCb.checked ? "enabled" : "disabled"),
+      autoOpenCaptchaTabCb.checked
+        ? "Automatic visible captcha tab opening enabled"
+        : "Automatic captcha tab opening disabled; captcha stays hidden until opened manually",
     );
   } catch (e) {
     showToast("Failed to save captcha tab setting: " + e.message);

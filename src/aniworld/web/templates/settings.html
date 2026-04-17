@@ -234,12 +234,13 @@
         id="autoOpenCaptchaTab"
         onchange="saveAutoOpenCaptchaTab()"
       />
-      Auto open captcha in a new tab
+      Auto open visible captcha tab
     </label>
     <div class="settings-hint">
-      Tries to open the captcha solve page automatically when a running queue
-      item requires manual interaction. This depends on your browser popup
-      rules.
+      When enabled, the solve page opens automatically in a new visible tab as
+      soon as a running queue item needs manual captcha interaction. When
+      disabled, the captcha browser stays hidden in the background and only
+      opens when you press <code>Solve Captcha</code> yourself.
     </div>
   </div>
 
@@ -730,7 +731,7 @@
         <select id="downloadBackend" class="sync-select">
           <option value="auto">Auto (yt-dlp when it fits)</option>
           <option value="ffmpeg">FFmpeg only</option>
-          <option value="ytdlp">Prefer yt-dlp</option>
+          <option value="ytdlp">yt-dlp only</option>
         </select>
       </div>
       <div class="settings-field">
