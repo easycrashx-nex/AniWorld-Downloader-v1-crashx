@@ -716,6 +716,9 @@ async function restartDownloaderFromSettings() {
   if (settingsUpdateOverlayClose) {
     settingsUpdateOverlayClose.hidden = true;
   }
+  if (settingsUpdateOverlayRestart) {
+    settingsUpdateOverlayRestart.hidden = true;
+  }
   setUpdateOverlayVisible(true);
   try {
     const resp = await fetch("/api/system/restart", {

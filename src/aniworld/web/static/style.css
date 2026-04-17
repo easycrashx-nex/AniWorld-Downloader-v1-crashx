@@ -4808,11 +4808,31 @@ input[type="checkbox"] {
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.12);
   border-top-color: var(--blue);
-  animation: spin 0.9s linear infinite;
+  border-right-color: color-mix(in srgb, var(--purple) 70%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 20px color-mix(in srgb, var(--blue) 18%, transparent);
+  animation:
+    spin 0.9s linear infinite,
+    settings-update-spinner-pulse 1.8s ease-in-out infinite;
 }
 
 .settings-update-spinner[hidden] {
   display: none;
+}
+
+@keyframes settings-update-spinner-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04),
+      0 0 12px color-mix(in srgb, var(--blue) 10%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 28px color-mix(in srgb, var(--purple) 20%, transparent);
+  }
 }
 
 .settings-restart-banner {
