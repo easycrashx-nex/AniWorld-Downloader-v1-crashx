@@ -4571,6 +4571,10 @@ input[type="checkbox"] {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.settings-update-grid + .settings-info-card {
+  margin-top: 16px;
+}
+
 .settings-stack {
   display: grid;
   gap: 12px;
