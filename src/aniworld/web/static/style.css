@@ -6003,8 +6003,11 @@ input[type="checkbox"] {
   .nav-dropdown,
   .nav-dropdown-right {
     position: static;
+    display: none;
     min-width: 0;
     margin-top: 8px;
+    opacity: 0;
+    visibility: hidden;
     transform: none;
     box-shadow: none;
   }
@@ -6017,6 +6020,7 @@ input[type="checkbox"] {
 
   .nav-menu.is-open .nav-dropdown,
   .nav-menu:focus-within .nav-dropdown {
+    display: grid;
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -6085,8 +6089,11 @@ body[data-device-class="mobile"] .nav-menu-trigger {
 body[data-device-class="mobile"] .nav-dropdown,
 body[data-device-class="mobile"] .nav-dropdown-right {
   position: static;
+  display: none;
   min-width: 0;
   margin-top: 8px;
+  opacity: 0;
+  visibility: hidden;
   transform: none;
   box-shadow: none;
 }
@@ -6099,6 +6106,7 @@ body[data-device-class="mobile"] .nav-menu:hover .nav-dropdown {
 
 body[data-device-class="mobile"] .nav-menu.is-open .nav-dropdown,
 body[data-device-class="mobile"] .nav-menu:focus-within .nav-dropdown {
+  display: grid;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;

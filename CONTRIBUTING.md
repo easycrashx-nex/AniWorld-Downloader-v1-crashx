@@ -17,6 +17,7 @@ Contributions should preserve those goals and avoid regressing the current Web-f
 Please:
 
 - read [README.md](README.md)
+- read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - read the documentation index in [docs/WIKI.md](docs/WIKI.md)
 - check whether the requested change already exists in the current customized build
 
