@@ -47,6 +47,7 @@ const providerQualityList = document.getElementById("providerQualityList");
 const activityChart = document.getElementById("activityChart");
 const releaseList = document.getElementById("releaseList");
 const radarSummaryGrid = document.getElementById("radarSummaryGrid");
+const radarCalendarGrid = document.getElementById("radarCalendarGrid");
 const radarFilterGroup = document.getElementById("radarFilterGroup");
 const radarToolbarNote = document.getElementById("radarToolbarNote");
 const favoriteToggleBtn = document.getElementById("favoriteToggleBtn");
@@ -135,6 +136,7 @@ let favoritesRequest = null;
 let timelineRequest = null;
 let radarRequest = null;
 let radarFilter = "unseen";
+let radarDateFilter = "";
 let currentSearchResults = [];
 const searchResultMetaCache = new Map();
 const SEARCH_GENRE_PRESETS = {
@@ -1326,9 +1328,158 @@ function formatRadarEpisodeMarker(item) {
   return `S${formatStatNumber(item.season)}E${formatStatNumber(item.episode)}`;
 }
 
+function parseRadarReleaseDate(value) {
+  const match = String(value || "").match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const year = Number(match[3]);
+  const date = new Date(year, month, day);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function formatRadarDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatRadarMonthLabel(date) {
+  return date.toLocaleString(undefined, { month: "long", year: "numeric" });
+}
+
+function formatRadarDayLabel(date) {
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function buildRadarReleaseCalendar(items) {
+  const releases = Array.isArray(items) ? items : [];
+  const datedItems = releases
+    .map((item) => {
+      const parsed = parseRadarReleaseDate(item.date);
+      if (!parsed) return null;
+      return { ...item, parsedDate: parsed, dateKey: formatRadarDateKey(parsed) };
+    })
+    .filter(Boolean);
+
+  const releaseMap = new Map();
+  datedItems.forEach((item) => {
+    if (!releaseMap.has(item.dateKey)) releaseMap.set(item.dateKey, []);
+    releaseMap.get(item.dateKey).push(item);
+  });
+
+  const anchor = datedItems.length
+    ? new Date(
+        Math.max.apply(
+          null,
+          datedItems.map((item) => item.parsedDate.getTime()),
+        ),
+      )
+    : new Date();
+  anchor.setDate(1);
+
+  const months = [];
+  for (let offset = 2; offset >= 0; offset -= 1) {
+    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth() - offset, 1);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    const startWeekday = (monthStart.getDay() + 6) % 7;
+    const days = [];
+
+    for (let i = 0; i < startWeekday; i += 1) {
+      days.push({ empty: true, key: `empty-${offset}-${i}` });
+    }
+
+    for (let day = 1; day <= monthEnd.getDate(); day += 1) {
+      const current = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+      const dateKey = formatRadarDateKey(current);
+      days.push({
+        key: dateKey,
+        day,
+        date: current,
+        releases: releaseMap.get(dateKey) || [],
+      });
+    }
+
+    months.push({
+      key: `${monthStart.getFullYear()}-${monthStart.getMonth()}`,
+      label: formatRadarMonthLabel(monthStart),
+      days,
+    });
+  }
+
+  return months;
+}
+
+function renderRadarCalendar(items) {
+  if (!radarCalendarGrid) return;
+  const months = buildRadarReleaseCalendar(items);
+  if (!months.length) {
+    radarCalendarGrid.innerHTML =
+      '<div class="stats-empty">No calendar data available.</div>';
+    return;
+  }
+  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  radarCalendarGrid.innerHTML = months
+    .map((month) => {
+      const dayCells = month.days
+        .map((entry) => {
+          if (entry.empty) {
+            return '<div class="radar-day radar-day-empty" aria-hidden="true"></div>';
+          }
+          const count = entry.releases.length;
+          const isActive = radarDateFilter === entry.key;
+          const hasReleases = count > 0;
+          const tooltip = hasReleases
+            ? `${formatRadarDayLabel(entry.date)}\n${count} release(s)\n${entry.releases
+                .slice(0, 4)
+                .map((item) => `${item.title} ${formatRadarEpisodeMarker(item)}`)
+                .join("\n")}`
+            : formatRadarDayLabel(entry.date);
+          return `
+            <button
+              type="button"
+              class="radar-day ${hasReleases ? "radar-day-hot" : ""} ${isActive ? "is-active" : ""}"
+              data-radar-date="${entry.key}"
+              title="${esc(tooltip)}"
+            >
+              <span class="radar-day-number">${entry.day}</span>
+              <span class="radar-day-count">${hasReleases ? count : ""}</span>
+            </button>`;
+        })
+        .join("");
+      return `
+        <section class="radar-month-card">
+          <div class="radar-month-head">
+            <strong>${esc(month.label)}</strong>
+            ${
+              radarDateFilter
+                ? '<button type="button" class="btn-secondary btn-small radar-clear-date-btn" onclick="clearRadarDateFilter()">Clear Date</button>'
+                : ""
+            }
+          </div>
+          <div class="radar-weekdays">
+            ${weekdayLabels.map((label) => `<span>${label}</span>`).join("")}
+          </div>
+          <div class="radar-month-grid">
+            ${dayCells}
+          </div>
+        </section>`;
+    })
+    .join("");
+}
+
 function getFilteredReleases(items, seenMap) {
   return (items || []).filter((item) => {
     const isSeen = !!seenMap[releaseKey(item)];
+    const parsed = parseRadarReleaseDate(item.date);
+    const dateKey = parsed ? formatRadarDateKey(parsed) : "";
+    if (radarDateFilter && dateKey !== radarDateFilter) return false;
     if (radarFilter === "seen") return isSeen;
     if (radarFilter === "unseen") return !isSeen;
     return true;
@@ -1400,22 +1551,36 @@ function renderRadarFilterState(items, seenMap) {
       unseenCount > 0
         ? `${formatStatNumber(unseenCount)} unseen episode(s) in the current feed`
         : "No unseen releases left right now";
+    if (radarDateFilter) {
+      radarToolbarNote.textContent += ` · filtered to ${radarDateFilter}`;
+    }
     return;
   }
   if (radarFilter === "seen") {
     radarToolbarNote.textContent = `${formatStatNumber(seenCount)} episode(s) already marked as seen`;
+    if (radarDateFilter) {
+      radarToolbarNote.textContent += ` · filtered to ${radarDateFilter}`;
+    }
     return;
   }
   radarToolbarNote.textContent = `${formatStatNumber(releases.length)} episode(s) in the current radar feed`;
+  if (radarDateFilter) {
+    radarToolbarNote.textContent += ` · filtered to ${radarDateFilter}`;
+  }
 }
 
 function renderReleases(items) {
   if (!releaseList) return;
   const releases = Array.isArray(items) ? items : [];
+  renderRadarCalendar(releases);
   if (!releases.length) {
     if (radarSummaryGrid) {
       radarSummaryGrid.innerHTML =
         '<div class="stats-empty">No radar summary available.</div>';
+    }
+    if (radarCalendarGrid) {
+      radarCalendarGrid.innerHTML =
+        '<div class="stats-empty">No calendar data available.</div>';
     }
     if (radarToolbarNote) {
       radarToolbarNote.textContent = "No release data is currently available.";
@@ -1913,6 +2078,16 @@ function setRadarFilter(nextFilter) {
   renderReleases(dashboardData?.releases || []);
 }
 
+function setRadarDateFilter(nextDateKey) {
+  radarDateFilter = radarDateFilter === nextDateKey ? "" : nextDateKey;
+  renderReleases(dashboardData?.releases || []);
+}
+
+function clearRadarDateFilter() {
+  radarDateFilter = "";
+  renderReleases(dashboardData?.releases || []);
+}
+
 function openRadarRelease(url) {
   if (!url) return;
   window.open(url, "_blank", "noopener");
@@ -2259,6 +2434,14 @@ if (radarFilterGroup) {
     const button = event.target.closest("[data-filter]");
     if (!button) return;
     setRadarFilter(button.dataset.filter || "unseen");
+  });
+}
+
+if (radarCalendarGrid) {
+  radarCalendarGrid.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-radar-date]");
+    if (!button) return;
+    setRadarDateFilter(button.dataset.radarDate || "");
   });
 }
 

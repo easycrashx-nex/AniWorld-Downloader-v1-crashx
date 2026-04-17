@@ -5474,7 +5474,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         results = _cached_browse("new_episodes", fetch_new_episodes)
         if results is None:
             return jsonify({"error": "Failed to fetch new episodes"}), 500
-        return jsonify({"results": results[:12]})
+        return jsonify({"results": results[:180]})
 
     @app.route("/api/downloaded-folders")
     def api_downloaded_folders():

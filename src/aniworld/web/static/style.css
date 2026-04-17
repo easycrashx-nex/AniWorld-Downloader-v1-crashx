@@ -2252,6 +2252,113 @@ h1 {
   line-height: 1.5;
 }
 
+.radar-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.radar-month-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.radar-month-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.radar-month-head strong {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.radar-weekdays,
+.radar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.radar-weekdays span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.radar-day {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-strong);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.radar-day:hover,
+.radar-day:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.radar-day-hot {
+  border-color: color-mix(in srgb, var(--blue) 22%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--blue) 11%, rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.04)
+  );
+}
+
+.radar-day.is-active {
+  border-color: color-mix(in srgb, var(--gold) 28%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gold) 14%, rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.04)
+  );
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--gold) 10%, transparent);
+}
+
+.radar-day-empty {
+  min-height: 44px;
+}
+
+.radar-day-number {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.radar-day-count {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .radar-release-list {
   gap: 14px;
 }
@@ -5094,6 +5201,10 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 1200px) {
+  .radar-calendar-grid {
+    grid-template-columns: 1fr;
+  }
+
   .radar-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5134,6 +5245,11 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 720px) {
+  .radar-month-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .radar-summary-grid {
     grid-template-columns: 1fr;
   }
@@ -6436,6 +6552,7 @@ body[data-device-class="mobile"] .add-user-row button {
 body[data-device-class="mobile"] .settings-info-grid,
 body[data-device-class="mobile"] .settings-row-download-rules,
 body[data-device-class="mobile"] .radar-summary-grid,
+body[data-device-class="mobile"] .radar-calendar-grid,
 body[data-device-class="mobile"] .search-filters,
 body[data-device-class="mobile"] .dashboard-grid,
 body[data-device-class="mobile"] .stats-grid,
@@ -6463,6 +6580,7 @@ body[data-device-class="mobile"] .season-toolbar-meta,
 body[data-device-class="mobile"] .episode-topline,
 body[data-device-class="mobile"] .episode-meta-row,
 body[data-device-class="mobile"] .release-card-topline,
+body[data-device-class="mobile"] .radar-month-head,
 body[data-device-class="mobile"] .modal-actions-cta,
 body[data-device-class="mobile"] .modal-action-buttons,
 body[data-device-class="mobile"] .autosync-card-head,
