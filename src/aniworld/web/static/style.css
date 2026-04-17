@@ -2125,6 +2125,217 @@ h1 {
   gap: 8px;
 }
 
+.radar-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.radar-panel-hero {
+  gap: 20px;
+}
+
+.radar-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.radar-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.radar-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  min-width: 0;
+}
+
+.radar-summary-card-primary {
+  border-color: color-mix(in srgb, var(--blue) 24%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--blue) 10%, rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.035)
+  );
+}
+
+.radar-summary-card-accent {
+  border-color: color-mix(in srgb, var(--gold) 24%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gold) 10%, rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.035)
+  );
+}
+
+.radar-summary-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.radar-summary-value {
+  color: var(--text);
+  font-size: 1.75rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.radar-summary-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.radar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.radar-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.radar-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.radar-filter-chip:hover,
+.radar-filter-chip:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+}
+
+.radar-filter-chip.is-active {
+  background: color-mix(in srgb, var(--blue) 14%, rgba(255, 255, 255, 0.04));
+  border-color: color-mix(in srgb, var(--blue) 26%, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.radar-toolbar-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.radar-release-list {
+  gap: 14px;
+}
+
+.release-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+  padding: 18px 20px;
+}
+
+.release-card-new {
+  border-color: color-mix(in srgb, var(--gold) 22%, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 16px 28px color-mix(in srgb, var(--gold) 8%, transparent);
+}
+
+.release-card-seen {
+  opacity: 0.92;
+}
+
+.release-card-main,
+.release-card-side {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.release-card-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.release-card-date {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.release-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.release-state-new {
+  background: rgba(246, 197, 98, 0.16);
+  color: var(--gold);
+}
+
+.release-state-seen {
+  background: rgba(86, 182, 255, 0.12);
+  color: var(--blue);
+}
+
+.release-episode-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-weight: 800;
+  justify-self: end;
+}
+
+.release-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .release-badges {
   display: flex;
   gap: 8px;
@@ -4883,6 +5094,22 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 1200px) {
+  .radar-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .release-card {
+    grid-template-columns: 1fr;
+  }
+
+  .release-episode-pill {
+    justify-self: flex-start;
+  }
+
+  .release-actions {
+    justify-content: flex-start;
+  }
+
   .settings-update-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4907,6 +5134,29 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 720px) {
+  .radar-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .radar-toolbar,
+  .release-card-topline,
+  .release-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .radar-filter-group {
+    width: 100%;
+  }
+
+  .radar-filter-chip {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .release-card {
+    padding: 16px;
+  }
+
   .settings-update-grid {
     grid-template-columns: 1fr;
   }
@@ -6185,6 +6435,7 @@ body[data-device-class="mobile"] .add-user-row button {
 
 body[data-device-class="mobile"] .settings-info-grid,
 body[data-device-class="mobile"] .settings-row-download-rules,
+body[data-device-class="mobile"] .radar-summary-grid,
 body[data-device-class="mobile"] .search-filters,
 body[data-device-class="mobile"] .dashboard-grid,
 body[data-device-class="mobile"] .stats-grid,
@@ -6201,6 +6452,7 @@ body[data-device-class="mobile"] .settings-grid-two {
 }
 
 body[data-device-class="mobile"] .section-heading,
+body[data-device-class="mobile"] .radar-toolbar,
 body[data-device-class="mobile"] .episodes-header,
 body[data-device-class="mobile"] .queue-toolbar,
 body[data-device-class="mobile"] .modal-content-header,
@@ -6210,10 +6462,12 @@ body[data-device-class="mobile"] .season-toolbar,
 body[data-device-class="mobile"] .season-toolbar-meta,
 body[data-device-class="mobile"] .episode-topline,
 body[data-device-class="mobile"] .episode-meta-row,
+body[data-device-class="mobile"] .release-card-topline,
 body[data-device-class="mobile"] .modal-actions-cta,
 body[data-device-class="mobile"] .modal-action-buttons,
 body[data-device-class="mobile"] .autosync-card-head,
-body[data-device-class="mobile"] .autosync-card-actions {
+body[data-device-class="mobile"] .autosync-card-actions,
+body[data-device-class="mobile"] .release-actions {
   flex-direction: column;
   align-items: stretch;
 }

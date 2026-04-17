@@ -46,6 +46,9 @@ const activityList = document.getElementById("activityList");
 const providerQualityList = document.getElementById("providerQualityList");
 const activityChart = document.getElementById("activityChart");
 const releaseList = document.getElementById("releaseList");
+const radarSummaryGrid = document.getElementById("radarSummaryGrid");
+const radarFilterGroup = document.getElementById("radarFilterGroup");
+const radarToolbarNote = document.getElementById("radarToolbarNote");
 const favoriteToggleBtn = document.getElementById("favoriteToggleBtn");
 const providerAvailability = document.getElementById("providerAvailability");
 const modalPoster = document.getElementById("modalPoster");
@@ -131,6 +134,7 @@ let statsRequest = null;
 let favoritesRequest = null;
 let timelineRequest = null;
 let radarRequest = null;
+let radarFilter = "unseen";
 let currentSearchResults = [];
 const searchResultMetaCache = new Map();
 const SEARCH_GENRE_PRESETS = {
@@ -1306,34 +1310,178 @@ function renderProviderQuality(items) {
     .join("");
 }
 
+function prettifyReleaseLanguage(value) {
+  const parts = String(value || "")
+    .split("-")
+    .map((part) => {
+      const trimmed = String(part || "").trim();
+      if (!trimmed) return "";
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    })
+    .filter(Boolean);
+  return parts.join(" / ") || "Unknown";
+}
+
+function formatRadarEpisodeMarker(item) {
+  return `S${formatStatNumber(item.season)}E${formatStatNumber(item.episode)}`;
+}
+
+function getFilteredReleases(items, seenMap) {
+  return (items || []).filter((item) => {
+    const isSeen = !!seenMap[releaseKey(item)];
+    if (radarFilter === "seen") return isSeen;
+    if (radarFilter === "unseen") return !isSeen;
+    return true;
+  });
+}
+
+function renderRadarSummary(items, seenMap) {
+  if (!radarSummaryGrid) return;
+  const releases = Array.isArray(items) ? items : [];
+  const unseen = releases.filter((item) => !seenMap[releaseKey(item)]);
+  const seriesCount = new Set(releases.map((item) => item.title || "")).size;
+  const languageCount = new Set(
+    releases.flatMap((item) => (item.languages || []).map((lang) => prettifyReleaseLanguage(lang))),
+  ).size;
+  const cards = [
+    {
+      label: "Fresh Drops",
+      value: formatStatNumber(releases.length),
+      note: "Episodes currently surfaced by AniWorld",
+      tone: "primary",
+    },
+    {
+      label: "Unseen",
+      value: formatStatNumber(unseen.length),
+      note: unseen.length ? "Still waiting for a manual look" : "Everything in the feed has been checked",
+      tone: unseen.length ? "accent" : "muted",
+    },
+    {
+      label: "Series",
+      value: formatStatNumber(seriesCount),
+      note: "Distinct titles in the current release feed",
+      tone: "default",
+    },
+    {
+      label: "Languages",
+      value: formatStatNumber(languageCount),
+      note: "Unique language variants detected today",
+      tone: "default",
+    },
+  ];
+  radarSummaryGrid.innerHTML = cards
+    .map(
+      (card) => `
+        <div class="radar-summary-card radar-summary-card-${card.tone}">
+          <span class="radar-summary-label">${esc(card.label)}</span>
+          <strong class="radar-summary-value">${esc(card.value)}</strong>
+          <span class="radar-summary-note">${esc(card.note)}</span>
+        </div>`,
+    )
+    .join("");
+}
+
+function renderRadarFilterState(items, seenMap) {
+  if (radarFilterGroup) {
+    radarFilterGroup.querySelectorAll("[data-filter]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.filter === radarFilter);
+    });
+  }
+  if (!radarToolbarNote) return;
+  const releases = Array.isArray(items) ? items : [];
+  const unseenCount = releases.filter((item) => !seenMap[releaseKey(item)]).length;
+  const seenCount = releases.length - unseenCount;
+  if (!releases.length) {
+    radarToolbarNote.textContent = "No release data is currently available.";
+    return;
+  }
+  if (radarFilter === "unseen") {
+    radarToolbarNote.textContent =
+      unseenCount > 0
+        ? `${formatStatNumber(unseenCount)} unseen episode(s) in the current feed`
+        : "No unseen releases left right now";
+    return;
+  }
+  if (radarFilter === "seen") {
+    radarToolbarNote.textContent = `${formatStatNumber(seenCount)} episode(s) already marked as seen`;
+    return;
+  }
+  radarToolbarNote.textContent = `${formatStatNumber(releases.length)} episode(s) in the current radar feed`;
+}
+
 function renderReleases(items) {
   if (!releaseList) return;
-  if (!items.length) {
+  const releases = Array.isArray(items) ? items : [];
+  if (!releases.length) {
+    if (radarSummaryGrid) {
+      radarSummaryGrid.innerHTML =
+        '<div class="stats-empty">No radar summary available.</div>';
+    }
+    if (radarToolbarNote) {
+      radarToolbarNote.textContent = "No release data is currently available.";
+    }
     releaseList.innerHTML =
       '<div class="stats-empty">No release data available.</div>';
     return;
   }
   const seenMap = getReleaseSeenMap();
-  releaseList.innerHTML = items
+  renderRadarSummary(releases, seenMap);
+  renderRadarFilterState(releases, seenMap);
+  const filteredItems = getFilteredReleases(releases, seenMap);
+  if (!filteredItems.length) {
+    releaseList.innerHTML =
+      radarFilter === "seen"
+        ? '<div class="stats-empty">No episodes are marked as seen yet.</div>'
+        : radarFilter === "unseen"
+          ? '<div class="stats-empty">No unseen episodes left in the radar feed.</div>'
+          : '<div class="stats-empty">No release data available.</div>';
+    return;
+  }
+  releaseList.innerHTML = filteredItems
     .map((item) => {
       const key = releaseKey(item);
       const isNew = !seenMap[key];
       const languages = (item.languages || [])
-        .map((lang) => `<span class="release-badge">${esc(lang)}</span>`)
+        .map(
+          (lang) =>
+            `<span class="release-badge">${esc(prettifyReleaseLanguage(lang))}</span>`,
+        )
         .join("");
+      const encodedKey = encodeURIComponent(key);
+      const encodedUrl = encodeURIComponent(item.url || "");
       return `
-        <div class="release-item">
-          <div class="release-title">${esc(item.title || "Unknown")}</div>
-          <div class="release-meta">
-            Season ${formatStatNumber(item.season)} - Episode ${formatStatNumber(
-              item.episode,
-            )} - ${esc(item.date || "")}
+        <article class="release-item release-card ${isNew ? "release-card-new" : "release-card-seen"}">
+          <div class="release-card-main">
+            <div class="release-card-topline">
+              <span class="release-state ${isNew ? "release-state-new" : "release-state-seen"}">
+                ${isNew ? "New" : "Seen"}
+              </span>
+              <span class="release-card-date">${esc(item.date || "Unknown date")}</span>
+            </div>
+            <div class="release-title">${esc(item.title || "Unknown")}</div>
+            <div class="release-meta">
+              Season ${formatStatNumber(item.season)} · Episode ${formatStatNumber(
+                item.episode,
+              )} · ${esc(item.date || "")}
+            </div>
+            <div class="release-badges">
+              ${languages}
+            </div>
           </div>
-          <div class="release-badges">
-            ${isNew ? '<span class="release-badge release-badge-new">New</span>' : ""}
-            ${languages}
+          <div class="release-card-side">
+            <span class="release-episode-pill">${esc(formatRadarEpisodeMarker(item))}</span>
+            <div class="release-actions">
+              ${
+                item.url
+                  ? `<button class="btn-secondary btn-small" type="button" data-release-url="${encodedUrl}" onclick="openRadarRelease(decodeURIComponent(this.dataset.releaseUrl))">Open Source</button>`
+                  : ""
+              }
+              <button class="btn-secondary btn-small" type="button" data-release-key="${encodedKey}" onclick="setReleaseSeen(decodeURIComponent(this.dataset.releaseKey), ${isNew ? "true" : "false"})">
+                ${isNew ? "Mark Seen" : "Mark Unseen"}
+              </button>
+            </div>
           </div>
-        </div>`;
+        </article>`;
     })
     .join("");
 }
@@ -1751,6 +1899,25 @@ function markReleasesSeen() {
   renderReleases(dashboardData?.releases || []);
 }
 
+function setReleaseSeen(key, seen) {
+  const seenMap = getReleaseSeenMap();
+  if (seen) seenMap[key] = true;
+  else delete seenMap[key];
+  saveReleaseSeenMap(seenMap);
+  renderReleases(dashboardData?.releases || []);
+}
+
+function setRadarFilter(nextFilter) {
+  if (!["unseen", "all", "seen"].includes(nextFilter)) return;
+  radarFilter = nextFilter;
+  renderReleases(dashboardData?.releases || []);
+}
+
+function openRadarRelease(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener");
+}
+
 async function autoOpenSeriesFromQuery() {
   if (!hasSeriesModalSurface) return;
   const params = new URLSearchParams(window.location.search);
@@ -2085,6 +2252,14 @@ if (hasFavoritesSurface || isStatsPage || isTimelinePage || isRadarPage) {
       loadDashboardStats();
     }
   }, fallbackMs);
+}
+
+if (radarFilterGroup) {
+  radarFilterGroup.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-filter]");
+    if (!button) return;
+    setRadarFilter(button.dataset.filter || "unseen");
+  });
 }
 
 async function doSearch() {

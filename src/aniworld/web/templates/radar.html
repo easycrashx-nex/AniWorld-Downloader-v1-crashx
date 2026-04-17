@@ -11,17 +11,57 @@
     </p>
   </div>
 
-  <section class="dashboard-panel">
+  <section class="dashboard-panel radar-panel radar-panel-hero">
     <div class="section-heading">
       <div>
-        <span class="section-kicker">Updates</span>
-        <h2 class="browse-heading">New Episodes</h2>
+        <span class="section-kicker">Release Feed</span>
+        <h2 class="browse-heading">Episode Radar</h2>
+        <p class="section-description">
+          Track fresh drops, separate unseen episodes from already checked
+          entries, and jump straight into the source when something looks worth
+          opening.
+        </p>
       </div>
-      <button class="btn-secondary btn-small" onclick="markReleasesSeen()">
-        Mark Seen
-      </button>
+      <div class="radar-hero-actions">
+        <button class="btn-secondary btn-small" type="button" onclick="loadRadarPage()">
+          Refresh
+        </button>
+        <button class="btn-secondary btn-small" type="button" onclick="markReleasesSeen()">
+          Mark All Seen
+        </button>
+      </div>
     </div>
-    <div class="release-list" id="releaseList">
+
+    <div class="radar-summary-grid" id="radarSummaryGrid">
+      <div class="stats-empty">Loading radar summary...</div>
+    </div>
+
+    <div class="radar-toolbar">
+      <div class="radar-filter-group" id="radarFilterGroup">
+        <button type="button" class="radar-filter-chip is-active" data-filter="unseen">
+          Unseen
+        </button>
+        <button type="button" class="radar-filter-chip" data-filter="all">
+          All
+        </button>
+        <button type="button" class="radar-filter-chip" data-filter="seen">
+          Seen
+        </button>
+      </div>
+      <div class="radar-toolbar-note" id="radarToolbarNote">
+        Loading fresh drops...
+      </div>
+    </div>
+  </section>
+
+  <section class="dashboard-panel radar-panel">
+    <div class="section-heading">
+      <div>
+        <span class="section-kicker">Episodes</span>
+        <h2 class="browse-heading">Latest Drops</h2>
+      </div>
+    </div>
+    <div class="release-list radar-release-list" id="releaseList">
       <div class="stats-empty">Loading latest episodes...</div>
     </div>
   </section>
