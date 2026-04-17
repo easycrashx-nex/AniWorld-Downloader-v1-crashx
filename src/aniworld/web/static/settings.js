@@ -90,7 +90,6 @@ const updateRemoteCommitValue = document.getElementById(
   "updateRemoteCommitValue",
 );
 const updateInstallModeValue = document.getElementById("updateInstallModeValue");
-const updateActionValue = document.getElementById("updateActionValue");
 const updateStatusNote = document.getElementById("updateStatusNote");
 const updateCheckBtn = document.getElementById("updateCheckBtn");
 const restartAppBtn = document.getElementById("restartAppBtn");
@@ -488,10 +487,6 @@ function renderUpdateStatus(data) {
   }
   if (updateInstallModeValue) {
     updateInstallModeValue.textContent = installLabel;
-  }
-  if (updateActionValue) {
-    updateActionValue.textContent =
-      supported && updateAvailable ? actionLabel : supportsApply ? "Update Now" : actionLabel;
   }
 
   if (updateStatusNote) {
