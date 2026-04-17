@@ -4806,23 +4806,35 @@ input[type="checkbox"] {
 }
 
 .settings-update-spinner {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   justify-self: center;
   border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.12);
+  border: 4px solid rgba(255, 255, 255, 0.12);
   border-top-color: var(--blue);
-  border-right-color: color-mix(in srgb, var(--purple) 70%, rgba(255, 255, 255, 0.12));
+  border-right-color: color-mix(in srgb, var(--purple) 52%, rgba(255, 255, 255, 0.12));
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-left-color: rgba(255, 255, 255, 0.08);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 20px color-mix(in srgb, var(--blue) 18%, transparent);
+    0 0 18px color-mix(in srgb, var(--blue) 14%, transparent);
   animation:
-    spin 0.9s linear infinite,
+    settings-update-spinner-rotate 0.85s linear infinite,
     settings-update-spinner-pulse 1.8s ease-in-out infinite;
+  will-change: transform;
 }
 
 .settings-update-spinner[hidden] {
   display: none;
+}
+
+@keyframes settings-update-spinner-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes settings-update-spinner-pulse {
