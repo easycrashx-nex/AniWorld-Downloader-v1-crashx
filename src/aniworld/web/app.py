@@ -36,6 +36,7 @@ from ..config import (
     LANG_LABELS,
     SUPPORTED_PROVIDERS,
     VERSION,
+    display_version,
 )
 from ..extractors import provider_functions
 from ..logger import get_logger
@@ -4445,7 +4446,7 @@ def _ensure_autosync_worker():
 
 
 def _get_version():
-    return VERSION or ""
+    return display_version(VERSION)
 
 
 def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):

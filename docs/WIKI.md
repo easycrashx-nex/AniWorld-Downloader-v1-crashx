@@ -52,7 +52,7 @@ German versions are available in:
 
 ## Fast facts
 
-- Current version: `5.0.0`
+- Current version: `v1+crashx`
 - Main recommended mode: Web UI
 - Config directory on all systems: `~/.aniworld` or `%USERPROFILE%\.aniworld`
 - Stable sources: AniWorld, SerienStream / S.TO

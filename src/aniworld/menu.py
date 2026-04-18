@@ -8,7 +8,7 @@ from pathlib import Path
 
 import npyscreen
 
-from .config import INVERSE_LANG_KEY_MAP, LANG_LABELS, VERSION, logger
+from .config import INVERSE_LANG_KEY_MAP, LANG_LABELS, VERSION, display_version, logger
 from .providers import resolve_provider
 
 
@@ -161,7 +161,7 @@ class MenuApp(npyscreen.NPSApp):
 
     def main(self):
         npyscreen.setTheme(CustomTheme)
-        F = QuitForm(name=f"AniWorld-Downloader v.{VERSION}")
+        F = QuitForm(name=f"AniWorld-Downloader {display_version()}")
 
         # ============================================================
         # Get Values for series

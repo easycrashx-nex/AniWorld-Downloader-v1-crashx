@@ -15,6 +15,13 @@ from .logger import get_logger
 VERSION = None
 
 
+def display_version(value=None):
+    raw = str(value if value is not None else VERSION or "").strip()
+    if not raw:
+        return ""
+    return raw if raw.lower().startswith("v") else f"v{raw}"
+
+
 def _read_source_version():
     try:
         pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"

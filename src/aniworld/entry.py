@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .arguments import parse_args
 from .autodeps import ensure_patchright_chromium
-from .config import ACTION_METHODS, ANIWORLD_CONFIG_DIR, VERSION
+from .config import ACTION_METHODS, ANIWORLD_CONFIG_DIR, VERSION, display_version
 from .env import merge_env
 from .logger import get_logger
 from .providers import resolve_provider
@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 def set_terminal_title():
     """Set the terminal title if running in a TTY"""
     if sys.stdout.isatty():
-        title = f"AniWorld-Downloader v.{VERSION}"
+        title = f"AniWorld-Downloader {display_version()}"
         print(f"\033]0;{title}\007", end="", flush=True)
 
 

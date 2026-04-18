@@ -1,6 +1,6 @@
 <a id="readme-top"></a>
 
-# AniWorld Downloader 5.0.0
+# AniWorld Downloader v1+crashx
 
 This repository contains a customized AniWorld Downloader source build with a heavily expanded Web UI, multi-user support, per-account preferences, a persistent history/archive flow, Auto-Sync management, browser notifications, library comparison, provider health, audit logging, experimental stuck-download self-heal recovery, and a large amount of UI customization.
 

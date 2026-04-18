@@ -8,7 +8,13 @@ from rich.panel import Panel
 from rich.text import Text
 
 from .anime4k import anime4k
-from .config import ACTION_METHODS, LANG_LABELS, SUPPORTED_PROVIDERS, VERSION
+from .config import (
+    ACTION_METHODS,
+    LANG_LABELS,
+    SUPPORTED_PROVIDERS,
+    VERSION,
+    display_version,
+)
 from .logger import get_logger
 
 logger = get_logger(__name__)
@@ -411,11 +417,11 @@ def parse_args():
         version_message = (
             "You are on the latest version."
             if is_newest_version
-            else f"Your version is outdated.\nPlease update to the latest version (v.{latest_version})."
+            else f"Your version is outdated.\nPlease update to the latest version ({display_version(latest_version)})."
         )
 
         cowsay = Rf"""______________________________
-< AniWorld-Downloader v.{VERSION} >
+< AniWorld-Downloader {display_version()} >
 ------------------------------
     \   ^__^
      \  (oo)\_______

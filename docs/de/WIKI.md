@@ -45,7 +45,7 @@ Die englische Dokumentation bleibt der Hauptstand:
 
 ## Wichtige Kurzinfos
 
-- Version: `5.0.0`
+- Version: `v1+crashx`
 - Empfohlener Modus: Web UI
 - Konfigurationsordner:
   - Windows: `%USERPROFILE%\\.aniworld`
