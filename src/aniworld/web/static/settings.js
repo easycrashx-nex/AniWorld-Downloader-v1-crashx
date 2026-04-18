@@ -549,9 +549,9 @@ function renderUpdateStatus(data) {
   const actionHint = String(data?.action_hint || "");
   const manualCommand = String(data?.manual_command || "");
   const phase = String(data?.phase || "idle");
-  const message = String(
-    data?.message || data?.reason || "No update data available.",
-  );
+  const rawMessage = String(data?.message || data?.reason || "");
+  const message =
+    rawMessage === "No update data available." ? "" : rawMessage;
 
   let statusText = "Up to date";
   if (!supported) statusText = "Unavailable";
