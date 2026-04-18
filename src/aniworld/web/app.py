@@ -6774,6 +6774,28 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     def api_library():
         return jsonify(_get_cached_library_snapshot(include_meta=True))
 
+    @app.route("/api/library/posters", methods=["POST"])
+    def api_library_posters():
+        data = request.get_json(silent=True) or {}
+        raw_urls = data.get("series_urls") or []
+        if not isinstance(raw_urls, list):
+            return jsonify({"error": "series_urls must be a list"}), 400
+
+        items = {}
+        for series_url in raw_urls[:80]:
+            normalized = str(series_url or "").strip()
+            if not normalized:
+                continue
+            meta = _fetch_and_cache_series_meta(normalized) or {}
+            poster_url = str(meta.get("poster_url") or "").strip()
+            if poster_url:
+                items[normalized] = poster_url
+
+        if items:
+            _cache_invalidate("library:")
+
+        return jsonify({"items": items})
+
     @app.route("/api/library/compare")
     def api_library_compare():
         refresh = str(request.args.get("refresh", "0")).strip() == "1"

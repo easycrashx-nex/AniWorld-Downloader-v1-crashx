@@ -8,6 +8,8 @@ let libraryCompareMap = new Map();
 let libraryCompareSummary = null;
 let libraryAutosyncRequest = null;
 let libraryAutosyncUrls = new Set();
+let libraryPosterRequest = null;
+let libraryPosterPending = new Set();
 let librarySelectedSeries = new Set();
 let librarySeriesMeta = new Map();
 let libraryRenderedTitleMap = new Map();
@@ -1052,10 +1054,96 @@ function renderPoster(title) {
 
   var initials = escLib((title.folder || "?").slice(0, 2).toUpperCase());
   return (
-    '<div class="library-poster library-poster-placeholder">' +
+    '<div class="library-poster library-poster-placeholder"' +
+    (title.series_url
+      ? ' data-series-url="' + escLib(title.series_url) + '" data-title="' + escLib(title.folder || "") + '"'
+      : "") +
+    ">" +
     initials +
     "</div>"
   );
+}
+
+function applyLibraryPosterPayload(items) {
+  if (!items || typeof items !== "object") return;
+
+  const applyPosterToTitle = function (title) {
+    if (!title || !title.series_url) return;
+    const posterUrl = items[title.series_url];
+    if (posterUrl) {
+      title.poster_url = posterUrl;
+    }
+  };
+
+  libraryAllLocations.forEach(function (loc) {
+    if (libraryLangSep && Array.isArray(loc.lang_folders)) {
+      loc.lang_folders.forEach(function (lf) {
+        (lf.titles || []).forEach(applyPosterToTitle);
+      });
+      return;
+    }
+    (loc.titles || []).forEach(applyPosterToTitle);
+  });
+
+  document
+    .querySelectorAll(".library-poster-placeholder[data-series-url]")
+    .forEach(function (node) {
+      const seriesUrl = node.dataset.seriesUrl || "";
+      const posterUrl = items[seriesUrl] || "";
+      if (!posterUrl) return;
+      const img = document.createElement("img");
+      img.className = "library-poster";
+      img.src = posterUrl;
+      img.alt = node.dataset.title || "Poster";
+      img.loading = "lazy";
+      img.decoding = "async";
+      node.replaceWith(img);
+    });
+}
+
+async function loadMissingLibraryPosters() {
+  const missingUrls = Array.from(
+    new Set(
+      Array.from(
+        document.querySelectorAll(".library-poster-placeholder[data-series-url]"),
+      )
+        .map(function (node) {
+          return node.dataset.seriesUrl || "";
+        })
+        .filter(Boolean),
+    ),
+  ).filter(function (seriesUrl) {
+    return !libraryPosterPending.has(seriesUrl);
+  });
+
+  if (!missingUrls.length) return;
+  missingUrls.forEach(function (seriesUrl) {
+    libraryPosterPending.add(seriesUrl);
+  });
+
+  if (libraryPosterRequest) {
+    return libraryPosterRequest;
+  }
+
+  libraryPosterRequest = (async function () {
+    try {
+      const resp = await fetch("/api/library/posters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ series_urls: Array.from(libraryPosterPending) }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) return;
+      applyLibraryPosterPayload(data.items || {});
+    } catch (e) {
+      return;
+    } finally {
+      libraryPosterPending.clear();
+      libraryPosterRequest = null;
+    }
+  })();
+
+  return libraryPosterRequest;
 }
 
 function renderTitles(html, titles, idPrefix, padLeft, locIndex, langFolder) {
@@ -1494,6 +1582,7 @@ function renderLibrary(locations) {
 
   list.innerHTML = html.join("");
   syncLibrarySelectionUi();
+  loadMissingLibraryPosters();
 }
 
 function toggleLibraryLocation(index) {
