@@ -580,6 +580,25 @@
       controls how broad the layout feels, and Background Effects now range
       from calm minimal scenes to more atmospheric or energetic looks.
     </div>
+    <div class="settings-inline-actions settings-inline-actions-start settings-inline-actions-gap">
+      <button type="button" class="btn-secondary" onclick="exportUiSettings()">
+        Export UI Settings
+      </button>
+      <button type="button" class="btn-secondary" onclick="triggerUiSettingsImport()">
+        Import UI Settings
+      </button>
+      <input
+        type="file"
+        id="uiSettingsImportFile"
+        accept="application/json,.json"
+        hidden
+        onchange="importUiSettings()"
+      />
+    </div>
+    <div class="settings-hint">
+      Only personal interface preferences are exported here. Server paths,
+      queue defaults, and runtime flags stay out of this file.
+    </div>
   </div>
 
   <div class="settings-section" id="settings-search">

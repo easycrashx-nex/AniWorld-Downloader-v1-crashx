@@ -44,6 +44,7 @@ const statsDetailGrid = document.getElementById("statsDetailGrid");
 const favoritesList = document.getElementById("favoritesList");
 const activityList = document.getElementById("activityList");
 const providerQualityList = document.getElementById("providerQualityList");
+const providerWarningList = document.getElementById("providerWarningList");
 const activityChart = document.getElementById("activityChart");
 const releaseList = document.getElementById("releaseList");
 const radarSummaryGrid = document.getElementById("radarSummaryGrid");
@@ -1312,6 +1313,80 @@ function renderProviderQuality(items) {
     .join("");
 }
 
+function buildProviderWarnings(healthItems, failureItems) {
+  const items = Array.isArray(healthItems) ? healthItems : [];
+  const failures = Array.isArray(failureItems) ? failureItems : [];
+  const warnings = [];
+  const failureMap = new Map();
+
+  failures.forEach((entry) => {
+    const provider = String(entry.provider || "").trim();
+    if (provider && !failureMap.has(provider)) {
+      failureMap.set(provider, entry);
+    }
+  });
+
+  items.forEach((item) => {
+    const provider = String(item.provider || "").trim();
+    const state = String(item.state || "").trim().toLowerCase();
+    const score = Number(item.score || 0);
+    const avgLatency = Number(item.avg_latency_ms || 0);
+    const total = Number(item.completed || 0) + Number(item.failed || 0);
+    const failRate = total > 0 ? Number(item.failed || 0) / total : 0;
+    const hotspot = failureMap.get(provider);
+
+    if (state === "down" || score < 35 || failRate >= 0.45) {
+      warnings.push({
+        provider,
+        tone: "danger",
+        title: provider + " is unstable right now",
+        detail:
+          hotspot?.reason ||
+          (avgLatency > 0
+            ? `Score ${score} · ${Math.round(avgLatency)} ms average latency`
+            : `Score ${score} with a high current failure rate`),
+      });
+      return;
+    }
+
+    if (state === "degraded" || score < 60 || failRate >= 0.2 || avgLatency >= 4500) {
+      warnings.push({
+        provider,
+        tone: "warning",
+        title: provider + " looks noisy",
+        detail:
+          hotspot?.reason ||
+          (avgLatency > 0
+            ? `${Math.round(avgLatency)} ms average latency · watch retries`
+            : "Elevated failure rate detected in recent jobs"),
+      });
+    }
+  });
+
+  return warnings.slice(0, 4);
+}
+
+function renderProviderWarnings(healthItems, failureItems) {
+  if (!providerWarningList) return;
+  const warnings = buildProviderWarnings(healthItems, failureItems);
+  if (!warnings.length) {
+    providerWarningList.innerHTML =
+      '<div class="provider-warning-card provider-warning-card-ok"><strong>No active source warnings</strong><span>Current providers look stable enough for normal use.</span></div>';
+    return;
+  }
+  providerWarningList.innerHTML = warnings
+    .map(
+      (warning) => `
+        <article class="provider-warning-card provider-warning-card-${esc(
+          warning.tone,
+        )}">
+          <strong>${esc(warning.title)}</strong>
+          <span>${esc(warning.detail)}</span>
+        </article>`,
+    )
+    .join("");
+}
+
 function prettifyReleaseLanguage(value) {
   const parts = String(value || "")
     .split("-")
@@ -1690,6 +1765,10 @@ function renderDashboard(data) {
   renderActivity(data.history || data.recent_activity || []);
   renderActivityChart(data.activity_chart || []);
   renderProviderQuality(data.provider_quality || []);
+  renderProviderWarnings(
+    data.provider_health || [],
+    data.provider_failures || [],
+  );
   renderReleases(data.releases || []);
   syncFavoriteMap(data.favorites || []);
   maybeNotifyDashboard(data);

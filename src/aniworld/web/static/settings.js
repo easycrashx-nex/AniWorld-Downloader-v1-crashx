@@ -20,6 +20,7 @@ const uiModalWidthSelect = document.getElementById("uiModalWidth");
 const uiNavSizeSelect = document.getElementById("uiNavSize");
 const uiTableDensitySelect = document.getElementById("uiTableDensity");
 const uiBackgroundSelect = document.getElementById("uiBackground");
+const uiSettingsImportFileInput = document.getElementById("uiSettingsImportFile");
 const bandwidthLimitInput = document.getElementById("bandwidthLimit");
 const downloadBackendSelect = document.getElementById("downloadBackend");
 const downloadSpeedProfileSelect = document.getElementById(
@@ -194,6 +195,20 @@ const UI_PRESETS = {
     ui_background: "pulse",
   },
 };
+const UI_SETTINGS_EXPORT_KEYS = [
+  "ui_preset",
+  "ui_locale",
+  "ui_mode",
+  "ui_scale",
+  "ui_theme",
+  "ui_radius",
+  "ui_motion",
+  "ui_width",
+  "ui_modal_width",
+  "ui_nav_size",
+  "ui_table_density",
+  "ui_background",
+];
 
 async function updateSettings(body) {
   const resp = await fetch("/api/settings", {
@@ -382,6 +397,76 @@ function renderVpnInterfaces(data) {
         </div>`,
     )
     .join("");
+}
+
+function collectUiSettingsPayload() {
+  return {
+    ui_preset: uiPresetSelect?.value || "custom",
+    ui_locale: uiLocaleSelect?.value || "en",
+    ui_mode: uiModeSelect?.value || "cozy",
+    ui_scale: uiScaleSelect?.value || "100",
+    ui_theme: uiThemeSelect?.value || "ocean",
+    ui_radius: uiRadiusSelect?.value || "soft",
+    ui_motion: uiMotionSelect?.value || "normal",
+    ui_width: uiWidthSelect?.value || "standard",
+    ui_modal_width: uiModalWidthSelect?.value || "standard",
+    ui_nav_size: uiNavSizeSelect?.value || "standard",
+    ui_table_density: uiTableDensitySelect?.value || "standard",
+    ui_background: uiBackgroundSelect?.value || "dynamic",
+  };
+}
+
+function triggerUiSettingsImport() {
+  if (!uiSettingsImportFileInput) return;
+  uiSettingsImportFileInput.click();
+}
+
+function exportUiSettings() {
+  const payload = {
+    exported_at: new Date().toISOString(),
+    type: "aniworld-ui-settings",
+    settings: collectUiSettingsPayload(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = "aniworld-ui-settings.json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+  showToast("UI settings exported");
+}
+
+async function importUiSettings() {
+  const file = uiSettingsImportFileInput?.files?.[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    const source = parsed?.settings && typeof parsed.settings === "object"
+      ? parsed.settings
+      : parsed;
+    const payload = {};
+    UI_SETTINGS_EXPORT_KEYS.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        payload[key] = source[key];
+      }
+    });
+    if (!Object.keys(payload).length) {
+      throw new Error("No UI settings found in this file");
+    }
+    await updateSettings(payload);
+    await loadSettings();
+    showToast("UI settings imported");
+  } catch (e) {
+    showToast("Failed to import UI settings: " + e.message);
+  } finally {
+    if (uiSettingsImportFileInput) uiSettingsImportFileInput.value = "";
+  }
 }
 
 function formatUpdateTimestamp(value) {

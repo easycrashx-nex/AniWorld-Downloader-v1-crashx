@@ -3844,12 +3844,16 @@ def _get_cached_stats_payload(username=None):
             "available": False,
             "error": str(exc),
         }
+    provider_health = get_provider_health()
+    provider_failures = get_provider_failure_analytics()
     payload = {
         "general": general,
         "queue": queue,
         "sync": sync,
         "storage": storage_summary,
         "provider_quality": get_provider_quality(),
+        "provider_health": provider_health,
+        "provider_failures": provider_failures,
         "activity_chart": get_activity_chart(7),
     }
     return _cache_set(cache_key, payload)
