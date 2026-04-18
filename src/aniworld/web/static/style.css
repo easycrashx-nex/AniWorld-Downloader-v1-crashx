@@ -1172,6 +1172,12 @@ body[data-ui-background="off"] {
   color: var(--muted-strong);
 }
 
+.nav-dropdown-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .nav-dropdown-label {
   display: block;
   font-size: 0.88rem;

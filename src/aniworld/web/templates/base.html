@@ -182,21 +182,12 @@
               href="{{ url_for('settings_page') }}"
               class="top-bar-link nav-menu-trigger {% if settings_active %}active{% endif %}"
             >
-              Settings
+              Tools
               <span class="nav-badge" id="settingsBadge" style="display: none"
                 >0</span
               >
             </a>
             <div class="nav-dropdown nav-dropdown-right">
-              <a
-                href="{{ url_for('settings_page') }}"
-                class="nav-dropdown-link {% if request.endpoint == 'settings_page' %}active{% endif %}"
-              >
-                <span class="nav-dropdown-label">Settings</span>
-                <span class="nav-dropdown-note"
-                  >Paths, providers, schedules, and server preferences.</span
-                >
-              </a>
               <a
                 href="{{ url_for('autosync_page') }}"
                 class="nav-dropdown-link {% if request.endpoint == 'autosync_page' %}active{% endif %}"
@@ -213,24 +204,6 @@
                 <span class="nav-dropdown-label">Provider Health</span>
                 <span class="nav-dropdown-note"
                   >See which hosts are healthy, active, or currently noisy.</span
-                >
-              </a>
-              <a
-                href="{{ url_for('diagnostics_page') }}"
-                class="nav-dropdown-link {% if request.endpoint == 'diagnostics_page' %}active{% endif %}"
-              >
-                <span class="nav-dropdown-label">Diagnostics</span>
-                <span class="nav-dropdown-note"
-                  >Inspect cache state, disk guard, database size, and worker pressure.</span
-                >
-              </a>
-              <a
-                href="{{ url_for('maintenance_page') }}"
-                class="nav-dropdown-link {% if request.endpoint == 'maintenance_page' %}active{% endif %}"
-              >
-                <span class="nav-dropdown-label">Maintenance</span>
-                <span class="nav-dropdown-note"
-                  >Run upkeep actions, inspect sessions, and test providers.</span
                 >
               </a>
               <a
@@ -260,6 +233,34 @@
                   >{{ 'Administrator' if current_user.role == 'admin' else 'Signed in' }}</span
                 >
               </div>
+              <a
+                href="{{ url_for('settings_page') }}"
+                class="nav-dropdown-link {% if request.endpoint == 'settings_page' %}active{% endif %}"
+              >
+                <span class="nav-dropdown-label">Settings</span>
+                <span class="nav-dropdown-note"
+                  >Paths, providers, schedules, and server preferences.</span
+                >
+              </a>
+              <a
+                href="{{ url_for('diagnostics_page') }}"
+                class="nav-dropdown-link {% if request.endpoint == 'diagnostics_page' %}active{% endif %}"
+              >
+                <span class="nav-dropdown-label">Diagnostics</span>
+                <span class="nav-dropdown-note"
+                  >Inspect cache state, disk guard, database size, and worker pressure.</span
+                >
+              </a>
+              <a
+                href="{{ url_for('maintenance_page') }}"
+                class="nav-dropdown-link {% if request.endpoint == 'maintenance_page' %}active{% endif %}"
+              >
+                <span class="nav-dropdown-label">Maintenance</span>
+                <span class="nav-dropdown-note"
+                  >Run upkeep actions, inspect sessions, and test providers.</span
+                >
+              </a>
+              <div class="nav-dropdown-divider"></div>
               <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-link">
                 <span class="nav-dropdown-label">Logout</span>
                 <span class="nav-dropdown-note"
