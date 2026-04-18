@@ -3,7 +3,7 @@
 {% block content %}
 <div class="settings-container autosync-container">
   <div class="page-header">
-    <span class="eyebrow">Settings</span>
+    <span class="eyebrow">Tools</span>
     <h1>Auto-Sync</h1>
     <p class="page-description">
       Keep tracked series current and manage scheduled download jobs from one
@@ -62,6 +62,21 @@
     <h2>Edit Sync Job</h2>
     <div id="editJobTitle" class="modal-supporting-text"></div>
     <input type="hidden" id="editJobId" />
+    <div class="autosync-edit-meta" id="editJobMeta"></div>
+    <div class="settings-row" style="margin-bottom: 12px">
+      <label class="modal-field-label">Job Name</label>
+      <input id="editTitle" type="text" class="sync-select" placeholder="Sync job name" />
+    </div>
+    <div class="settings-row" style="margin-bottom: 12px">
+      <label class="modal-field-label">Series URL</label>
+      <input
+        id="editSeriesUrl"
+        type="text"
+        class="sync-select"
+        readonly
+        placeholder="Series source URL"
+      />
+    </div>
     <div class="settings-row" style="margin-bottom: 12px">
       <label class="modal-field-label">Language</label>
       <select id="editLanguage" class="sync-select">
@@ -73,6 +88,7 @@
     <div class="settings-row" style="margin-bottom: 12px">
       <label class="modal-field-label">Provider</label>
       <select id="editProvider" class="sync-select">
+        <option value="Auto">Auto (best available)</option>
         {% for p in supported_providers %}
         <option>{{ p }}</option>
         {% endfor %}
@@ -90,6 +106,29 @@
         <option value="1">Enabled</option>
         <option value="0">Disabled</option>
       </select>
+    </div>
+    <div class="autosync-edit-actions" style="margin-bottom: 18px">
+      <button
+        type="button"
+        class="btn-secondary btn-small"
+        onclick="syncJobFromEdit()"
+      >
+        Sync Now
+      </button>
+      <button
+        type="button"
+        class="btn-secondary btn-small"
+        onclick="openSeriesFromEdit()"
+      >
+        Open Source
+      </button>
+      <button
+        type="button"
+        class="btn-secondary btn-small autosync-edit-remove"
+        onclick="removeJobFromEdit()"
+      >
+        Remove Job
+      </button>
     </div>
     <div class="modal-inline-actions">
       <button onclick="closeEditModal()" class="btn-secondary">Cancel</button>

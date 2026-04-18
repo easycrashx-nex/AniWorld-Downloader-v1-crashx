@@ -3079,6 +3079,23 @@ def _build_autosync_job_options(job):
     }
 
 
+def _resolve_autosync_job_provider(job, language):
+    configured = str(job.get("provider") or "VOE").strip() or "VOE"
+    if configured != "Auto":
+        return configured
+
+    options = _build_autosync_job_options(job)
+    active_language = str(language or job.get("language") or "").strip()
+    if active_language == "All Languages":
+        candidates = list(options.get("all_language_providers") or [])
+    else:
+        candidates = list((options.get("providers_by_language") or {}).get(active_language, []))
+        if not candidates and active_language == str(job.get("language") or "").strip():
+            candidates = list(options.get("all_language_providers") or [])
+
+    return candidates[0] if candidates else "VOE"
+
+
 def _pick_retry_provider(queue_item):
     try:
         episodes = json.loads(queue_item["episodes"] or "[]")
@@ -4299,12 +4316,13 @@ def _run_autosync_for_job(job):
                     )
 
                 total_new_queued += len(queueable_episodes)
+                queued_provider = _resolve_autosync_job_provider(job, target_lang)
                 add_to_queue(
                     title=job["title"],
                     series_url=job["series_url"],
                     episodes=queueable_episodes,
                     language=target_lang,
-                    provider=job["provider"],
+                    provider=queued_provider,
                     username=job.get("added_by"),
                     custom_path_id=job.get("custom_path_id"),
                     source="sync:all_langs"
@@ -4322,6 +4340,7 @@ def _run_autosync_for_job(job):
                         "language": target_lang,
                         "labels": queued_labels[:12],
                         "queued_count": len(queueable_episodes),
+                        "provider": queued_provider,
                     }
                 )
                 _emit_ui_event("autosync", "queue", "dashboard", "nav")
@@ -6132,7 +6151,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         if not is_admin and job.get("added_by") != username:
             return jsonify({"error": "Not authorized to edit this job"}), 403
         data = request.get_json(silent=True) or {}
-        allowed = {"language", "provider", "enabled", "custom_path_id"}
+        allowed = {"title", "language", "provider", "enabled", "custom_path_id"}
         filtered = {k: v for k, v in data.items() if k in allowed}
         options = _build_autosync_job_options(job)
         valid_languages = set(options["languages"])
@@ -6149,9 +6168,15 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             valid_providers = set(options["all_language_providers"])
         else:
             valid_providers = set(options["providers_by_language"].get(language, []))
+        valid_providers.add("Auto")
 
         if provider not in valid_providers:
             return jsonify({"error": "Selected provider is not available for the chosen language"}), 400
+
+        if "title" in filtered:
+            filtered["title"] = str(filtered["title"] or "").strip()
+            if not filtered["title"]:
+                return jsonify({"error": "Job name is required"}), 400
 
         update_autosync_job(job_id, **filtered)
         _record_user_event(

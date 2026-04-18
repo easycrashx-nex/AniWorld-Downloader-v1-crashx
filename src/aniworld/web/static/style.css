@@ -5930,7 +5930,7 @@ input[type="checkbox"] {
 
 .autosync-card-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -5941,6 +5941,15 @@ input[type="checkbox"] {
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.autosync-stat-highlight {
+  background: linear-gradient(
+    180deg,
+    rgba(80, 132, 255, 0.08),
+    rgba(255, 255, 255, 0.03)
+  );
+  border-color: rgba(136, 176, 255, 0.16);
 }
 
 .autosync-stat span {
@@ -5955,12 +5964,63 @@ input[type="checkbox"] {
   color: var(--text);
   font-size: 0.95rem;
   font-weight: 700;
+  line-height: 1.4;
 }
 
 .autosync-card-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.autosync-edit-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 18px;
+}
+
+.autosync-edit-stat {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.autosync-edit-stat span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.autosync-edit-stat strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.autosync-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.autosync-edit-remove {
+  border-color: rgba(255, 120, 120, 0.24);
+  color: #ffb7b7;
+}
+
+.autosync-edit-remove:hover,
+.autosync-edit-remove:focus-visible {
+  border-color: rgba(255, 120, 120, 0.36);
+  background: rgba(255, 120, 120, 0.12);
 }
 
 .autosync-meta-pill {
@@ -6614,6 +6674,7 @@ body[data-device-class="mobile"] .favorites-grid,
 body[data-device-class="mobile"] .library-toolbar,
 body[data-device-class="mobile"] .chart-bars,
 body[data-device-class="mobile"] .autosync-card-stats,
+body[data-device-class="mobile"] .autosync-edit-meta,
 body[data-device-class="mobile"] .settings-grid,
 body[data-device-class="mobile"] .settings-grid-two {
   grid-template-columns: 1fr;
@@ -6650,6 +6711,15 @@ body[data-device-class="mobile"] .modal-content-panel,
 body[data-device-class="mobile"] .maintenance-test-grid,
 body[data-device-class="mobile"] .maintenance-status-grid {
   grid-template-columns: 1fr;
+}
+
+body[data-device-class="mobile"] .autosync-edit-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body[data-device-class="mobile"] .autosync-edit-actions button {
+  width: 100%;
 }
 
 body[data-device-class="mobile"] .results,

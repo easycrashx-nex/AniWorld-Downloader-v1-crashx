@@ -27,6 +27,7 @@ const selectedAutosyncIds = new Set();
 let currentEditProvidersByLanguage = {};
 let currentEditAllLanguageProviders = [];
 let currentEditAllowsAllLanguages = false;
+let currentEditJob = null;
 
 function refreshEditCustomSelect(select) {
   if (window.refreshCustomSelect && select) {
@@ -86,12 +87,50 @@ function refreshEditProviderSelect(preferredProvider) {
 
   const activeLanguage = languageSelect.value;
   const providerOptions = getEditProviderOptionsForLanguage(activeLanguage);
+  const nextOptions = providerOptions.length
+    ? ["Auto"].concat(providerOptions)
+    : ["Auto"];
   setSelectOptions(
     providerSelect,
-    providerOptions,
-    preferredProvider || providerSelect.value,
-    "No providers available",
+    nextOptions,
+    preferredProvider || providerSelect.value || "Auto",
+    "Auto",
   );
+}
+
+function renderEditMeta(job) {
+  const container = document.getElementById("editJobMeta");
+  if (!container || !job) return;
+
+  const parts = [
+    { label: "Source", value: detectAutosyncSource(job.series_url) },
+    { label: "Added By", value: job.added_by || "-" },
+    { label: "Created", value: job.created_at ? formatDate(job.created_at) : "-" },
+    { label: "Last Check", value: job.last_check ? formatDate(job.last_check) : "-" },
+    {
+      label: "Last New",
+      value: job.last_new_found ? formatDate(job.last_new_found) : "-",
+    },
+    {
+      label: "Episodes Found",
+      value: Number(job.episodes_found || 0),
+    },
+  ];
+
+  container.innerHTML = parts
+    .map(function (item) {
+      return (
+        '<div class="autosync-edit-stat">' +
+        "<span>" +
+        esc(item.label) +
+        "</span>" +
+        "<strong>" +
+        esc(String(item.value)) +
+        "</strong>" +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 async function loadSyncSchedule() {
@@ -229,6 +268,68 @@ function renderAutosyncMetaPill(label, value, modifier = "") {
   );
 }
 
+function summarizeAutosyncState(job, diffPreview, queuedPreview, skippedPreview) {
+  const missingCount = (diffPreview || []).reduce(function (sum, entry) {
+    return sum + Number(entry && entry.missing_count ? entry.missing_count : 0);
+  }, 0);
+  const queuedCount = (queuedPreview || []).reduce(function (sum, entry) {
+    return sum + Number(entry && entry.queued_count ? entry.queued_count : 0);
+  }, 0);
+  const skippedCount = (skippedPreview || []).reduce(function (sum, entry) {
+    const labels = Array.isArray(entry && entry.labels) ? entry.labels.length : 0;
+    return sum + labels;
+  }, 0);
+
+  if (!job.enabled) {
+    return {
+      label: "Paused",
+      className: "queue-status-cancelled",
+      detail: "Sync job is disabled",
+    };
+  }
+
+  if (job.last_error) {
+    return {
+      label: "Issue",
+      className: "queue-status-failed",
+      detail: "Last check failed",
+    };
+  }
+
+  if (!job.last_check) {
+    return {
+      label: "Pending",
+      className: "queue-status-queued",
+      detail: "Has not been checked yet",
+    };
+  }
+
+  if (queuedCount > 0) {
+    return {
+      label: "Queued",
+      className: "queue-status-running",
+      detail: queuedCount + " episode(s) queued last run",
+    };
+  }
+
+  if (missingCount > 0) {
+    return {
+      label: "Behind",
+      className: "queue-status-captcha",
+      detail:
+        missingCount +
+        " missing episode(s)" +
+        (skippedCount > 0 ? " · " + skippedCount + " skipped" : ""),
+    };
+  }
+
+  return {
+    label: "Current",
+    className: "queue-status-completed",
+    detail: "No missing episodes on the last check",
+  };
+}
+
 function renderJobs(jobs) {
   syncAutosyncSelectionState();
   updateAutosyncSelectionToolbar();
@@ -288,6 +389,22 @@ function renderJobs(jobs) {
     } catch (e) {
       skippedPreview = [];
     }
+    const syncState = summarizeAutosyncState(
+      job,
+      diffPreview,
+      queuedPreview,
+      skippedPreview,
+    );
+    const lastAction =
+      queuedPreview.length > 0
+        ? "Queued new episodes"
+        : job.last_error
+          ? "Check failed"
+          : diffPreview.length > 0
+            ? "Checked source"
+            : job.last_check
+              ? "No changes found"
+              : "Waiting for first check";
     const diffSections = [];
     if (diffPreview.length) {
       diffSections.push(
@@ -378,6 +495,11 @@ function renderJobs(jobs) {
       '">' +
       statusLabel +
       "</span>" +
+      '<span class="queue-status ' +
+      syncState.className +
+      '">' +
+      esc(syncState.label) +
+      "</span>" +
       '<span class="autosync-card-series-url">' +
       esc(sourceLabel) +
       "</span>" +
@@ -396,17 +518,23 @@ function renderJobs(jobs) {
       "</div>" +
       "</div>" +
       '<div class="autosync-card-stats">' +
+      '<div class="autosync-stat autosync-stat-highlight"><span>Sync State</span><strong>' +
+      esc(syncState.detail) +
+      "</strong></div>" +
+      '<div class="autosync-stat"><span>Last Action</span><strong>' +
+      esc(lastAction) +
+      "</strong></div>" +
       '<div class="autosync-stat"><span>Last Check</span><strong>' +
       lastCheck +
       "</strong></div>" +
       '<div class="autosync-stat"><span>Next Check</span><strong>' +
       nextCheck +
       "</strong></div>" +
-      '<div class="autosync-stat"><span>Last New</span><strong>' +
-      lastNew +
-      "</strong></div>" +
       '<div class="autosync-stat"><span>Episodes Found</span><strong>' +
       job.episodes_found +
+      "</strong></div>" +
+      '<div class="autosync-stat"><span>Last New</span><strong>' +
+      lastNew +
       "</strong></div>" +
       "</div>" +
       '<div class="autosync-card-meta">' +
@@ -550,10 +678,14 @@ async function openEditModal(id) {
       showToast("Job not found");
       return;
     }
+    currentEditJob = job;
 
     document.getElementById("editJobId").value = id;
     document.getElementById("editJobTitle").textContent =
       job.title || "Unknown";
+    document.getElementById("editTitle").value = job.title || "";
+    document.getElementById("editSeriesUrl").value = job.series_url || "";
+    renderEditMeta(job);
 
     const langSelect = document.getElementById("editLanguage");
     const providerSelect = document.getElementById("editProvider");
@@ -595,7 +727,7 @@ async function openEditModal(id) {
       "No languages available",
     );
     refreshEditProviderSelect(
-      (optionPayload && optionPayload.selected_provider) || job.provider || "VOE",
+      (optionPayload && optionPayload.selected_provider) || job.provider || "Auto",
     );
 
     const enabledSelect = document.getElementById("editEnabled");
@@ -626,18 +758,25 @@ async function openEditModal(id) {
 }
 
 function closeEditModal() {
+  currentEditJob = null;
   document.getElementById("editOverlay").style.display = "none";
 }
 
 async function saveEdit() {
   const id = document.getElementById("editJobId").value;
   const pathVal = document.getElementById("editPath").value;
+  const title = String(document.getElementById("editTitle").value || "").trim();
   const providerSelect = document.getElementById("editProvider");
   if (providerSelect && providerSelect.disabled) {
     showToast("No valid providers available for this selection");
     return;
   }
+  if (!title) {
+    showToast("Job name is required");
+    return;
+  }
   const body = {
+    title,
     language: document.getElementById("editLanguage").value,
     provider: providerSelect.value,
     enabled: parseInt(document.getElementById("editEnabled").value, 10),
@@ -661,6 +800,33 @@ async function saveEdit() {
   } catch (e) {
     showToast("Failed to update job");
   }
+}
+
+function syncJobFromEdit() {
+  const id = Number(document.getElementById("editJobId").value);
+  if (!Number.isFinite(id)) return;
+  closeEditModal();
+  syncNow(id);
+}
+
+function openSeriesFromEdit() {
+  const seriesUrl = String(
+    (currentEditJob && currentEditJob.series_url) ||
+      document.getElementById("editSeriesUrl").value ||
+      "",
+  ).trim();
+  if (!seriesUrl) {
+    showToast("No source URL available");
+    return;
+  }
+  window.open(seriesUrl, "_blank", "noopener,noreferrer");
+}
+
+function removeJobFromEdit() {
+  const id = Number(document.getElementById("editJobId").value);
+  if (!Number.isFinite(id)) return;
+  closeEditModal();
+  removeJob(id);
 }
 
 function showToast(msg) {
