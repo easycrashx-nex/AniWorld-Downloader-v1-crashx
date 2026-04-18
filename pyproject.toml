@@ -35,17 +35,13 @@ license = "MIT"
 license-files = ["LICENSE"]
 
 [project.urls]
-homepage = "https://github.com/phoenixthrush/AniWorld-Downloader"
-changelog = "https://github.com/phoenixthrush/AniWorld-Downloader/commits/models"
+homepage = "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx"
+changelog = "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx/commits/main"
 documentation = "https://readthedocs.org"
-bugs = "https://github.com/phoenixthrush/AniWorld-Downloader/issues"
-issues = "https://github.com/phoenixthrush/AniWorld-Downloader/issues"
-tracker = "https://github.com/phoenixthrush/AniWorld-Downloader/issues"
-download = "https://pypi.org/project/aniworld/#files"
-sponsor = "https://github.com/sponsors/phoenixthrush"
-funding = "https://github.com/sponsors/phoenixthrush"
-donate = "https://github.com/sponsors/phoenixthrush"
-discord = "https://discord.com/invite/BfDvrKd8V5"
+bugs = "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx/issues"
+issues = "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx/issues"
+tracker = "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx/issues"
+download = "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx"
 
 [tool.setuptools.package-data]
 aniworld = ["web/templates/*.html", "web/static/*.css", "web/static/*.js"]

@@ -92,7 +92,7 @@ If you already have Python and FFmpeg set up, these are the shortest recommended
 
 ```powershell
 py -m pip uninstall -y aniworld
-py -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+py -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git#egg=aniworld"
 aniworld -w -wA
 ```
 
@@ -100,7 +100,7 @@ aniworld -w -wA
 
 ```bash
 python3 -m pip uninstall -y aniworld
-python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git#egg=aniworld"
 aniworld -w -wA
 ```
 
@@ -108,7 +108,7 @@ aniworld -w -wA
 
 ```bash
 python3 -m pip uninstall -y aniworld
-python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git#egg=aniworld"
 aniworld -w -wA
 ```
 
@@ -119,7 +119,7 @@ mkdir -p aniworld && cd aniworld
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
-python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniworldDownloader-Update.git#egg=aniworld"
+python3 -m pip install --upgrade "git+https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git#egg=aniworld"
 aniworld -w -wA
 ```
 
@@ -134,7 +134,7 @@ Notes:
 Open PowerShell in the folder where the new `aniworld` project folder should be created and run:
 
 ```powershell
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+git clone https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git aniworld
 cd aniworld
 py -m pip install --upgrade pip
 py -m pip install -e .
@@ -172,7 +172,7 @@ aniworld -w -wA
 ## 6. Local source setup on Linux
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
+git clone https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
 ```
 
 With local accounts:
@@ -196,13 +196,13 @@ aniworld -w -wA
 ## 7. Local source setup on macOS
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
+git clone https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git aniworld && cd aniworld && python3 -m pip install --upgrade pip && python3 -m pip install -e . && chmod +x ./aniworld ./install-launcher.sh && ./install-launcher.sh && ./aniworld -w
 ```
 
 If macOS blocks installs into the system/Homebrew Python environment, use the venv variant:
 
 ```bash
-git clone https://github.com/easycrashx-nex/AniworldDownloader-Update.git aniworld
+git clone https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git aniworld
 cd aniworld
 python3 -m venv .venv
 source .venv/bin/activate

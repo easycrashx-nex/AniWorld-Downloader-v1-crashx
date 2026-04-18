@@ -157,6 +157,9 @@ _ENV_UPDATE_REMOTE_URL = "ANIWORLD_UPDATE_REMOTE_URL"
 _ENV_UPDATE_REMOTE_BRANCH = "ANIWORLD_UPDATE_REMOTE_BRANCH"
 _ENV_UPDATE_LOCAL_COMMIT = "ANIWORLD_UPDATE_LOCAL_COMMIT"
 _ENV_DOCKER_REDEPLOY_CMD = "ANIWORLD_DOCKER_REDEPLOY_CMD"
+_DEFAULT_FORK_REMOTE_URL = (
+    "https://github.com/easycrashx-nex/AniWorld-Downloader-v1-crashx.git"
+)
 
 _AUTO_UPDATE_IDLE_SECONDS = 20 * 60
 _AUTO_UPDATE_LOOP_SECONDS = 60
@@ -786,7 +789,11 @@ def _pip_vcs_update_snapshot(
     manual_command="",
 ):
     vcs_info = (direct_url or {}).get("vcs_info") or {}
-    remote_url = (direct_url or {}).get("url") or os.environ.get(_ENV_UPDATE_REMOTE_URL, "")
+    remote_url = (
+        (direct_url or {}).get("url")
+        or os.environ.get(_ENV_UPDATE_REMOTE_URL, "")
+        or _DEFAULT_FORK_REMOTE_URL
+    )
     branch = (
         vcs_info.get("requested_revision")
         or os.environ.get(_ENV_UPDATE_REMOTE_BRANCH, "")
@@ -852,7 +859,9 @@ def _docker_update_snapshot(repo_root=None, direct_url=None):
             manual_command=redeploy_command,
         )
 
-    remote_url = str(os.environ.get(_ENV_UPDATE_REMOTE_URL) or "").strip()
+    remote_url = str(
+        os.environ.get(_ENV_UPDATE_REMOTE_URL) or _DEFAULT_FORK_REMOTE_URL
+    ).strip()
     local_commit = str(os.environ.get(_ENV_UPDATE_LOCAL_COMMIT) or "").strip()
     if remote_url and local_commit:
         return _remote_update_snapshot(
