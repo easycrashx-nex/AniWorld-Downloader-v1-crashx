@@ -796,6 +796,10 @@
         <input type="checkbox" id="preflightCheck" />
         Preflight check
       </label>
+      <label class="settings-checkbox">
+        <input type="checkbox" id="mp4FallbackRemux" />
+        MP4 fallback remux
+      </label>
     </div>
     <div class="settings-hint">
       Bandwidth limiting is a soft ffmpeg cap. The download engine can let
@@ -806,8 +810,10 @@
       Per-provider engine rules override adaptive selection. Smart retry
       profiles decide how many alternative hosts are tried automatically before
       a download is marked as failed. Preflight checks resolve the stream before
-      the actual transfer starts, and the rate-limit guard keeps aggressive
-      download settings in check on touchy hosts.
+      the actual transfer starts, the rate-limit guard keeps aggressive
+      download settings in check on touchy hosts, and MP4 fallback remux tries
+      a direct provider-page download to temporary MP4 when the usual
+      full-stream path fails, then remuxes it back into MKV with metadata.
     </div>
 
     <label class="settings-checkbox">

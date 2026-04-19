@@ -30,6 +30,7 @@ const downloadEngineRulesInput = document.getElementById("downloadEngineRules");
 const autoProviderSwitchCb = document.getElementById("autoProviderSwitch");
 const rateLimitGuardCb = document.getElementById("rateLimitGuard");
 const preflightCheckCb = document.getElementById("preflightCheck");
+const mp4FallbackRemuxCb = document.getElementById("mp4FallbackRemux");
 const providerFallbackOrderInput = document.getElementById(
   "providerFallbackOrder",
 );
@@ -1045,6 +1046,9 @@ async function loadSettings() {
       if (preflightCheckCb) {
         preflightCheckCb.checked = data.preflight_check !== "0";
       }
+      if (mp4FallbackRemuxCb) {
+        mp4FallbackRemuxCb.checked = data.mp4_fallback_remux === "1";
+      }
       if (providerFallbackOrderInput) {
         providerFallbackOrderInput.value = data.provider_fallback_order || "";
       }
@@ -1514,6 +1518,7 @@ async function saveDownloadAdvancedSettings() {
       auto_provider_switch: autoProviderSwitchCb?.checked || false,
       rate_limit_guard: rateLimitGuardCb?.checked || false,
       preflight_check: preflightCheckCb?.checked || false,
+      mp4_fallback_remux: mp4FallbackRemuxCb?.checked || false,
       provider_fallback_order: providerFallbackOrderInput?.value || "",
       smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
     });

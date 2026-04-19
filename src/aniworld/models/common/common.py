@@ -203,6 +203,13 @@ def _auto_provider_switch_enabled():
     return str(os.getenv("ANIWORLD_AUTO_PROVIDER_SWITCH", "1") or "1").strip() == "1"
 
 
+def _mp4_fallback_remux_enabled():
+    return (
+        str(os.getenv("ANIWORLD_MP4_FALLBACK_REMUX", "0") or "0").strip() == "1"
+        and _yt_dlp_available()
+    )
+
+
 def _provider_engine_rules():
     rules = {}
     raw = str(os.getenv("ANIWORLD_DOWNLOAD_ENGINE_RULES", "") or "")
@@ -669,7 +676,13 @@ def _parse_percent_number(raw):
         return 0.0
 
 
-def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
+def _run_ytdlp_with_progress(
+    url,
+    output_template,
+    headers=None,
+    label="",
+    merge_output_format="",
+):
     """Download a direct media URL via yt-dlp and surface progress through the existing runtime state."""
     import queue
     import threading
@@ -694,6 +707,9 @@ def _run_ytdlp_with_progress(url, output_template, headers=None, label=""):
         str(_fragment_concurrency()),
         "--force-generic-extractor",
     ]
+
+    if merge_output_format:
+        cmd.extend(["--merge-output-format", str(merge_output_format)])
 
     for key, value in (headers or {}).items():
         cmd.extend(["--add-header", f"{key}:{value}"])
@@ -871,6 +887,69 @@ def _tag_downloaded_stream(input_path, output_path, audio_code, wants_clean_vide
     )
 
 
+def _mp4_fallback_sources(episode):
+    candidates = []
+    for label, attr in (
+        ("provider page", "provider_url"),
+        ("stream url", "stream_url"),
+        ("redirect url", "redirect_url"),
+    ):
+        try:
+            value = str(getattr(episode, attr, "") or "").strip()
+        except Exception:
+            continue
+        if value and value not in {item[1] for item in candidates}:
+            candidates.append((label, value))
+    return candidates
+
+
+def _run_mp4_fallback_remux(
+    episode,
+    temp_ytdlp_template,
+    temp_full,
+    headers,
+    ep_label,
+    audio_code,
+    wants_clean_video,
+    sub_video_code,
+):
+    fallback_errors = []
+    for source_label, source_url in _mp4_fallback_sources(episode):
+        raw_temp = None
+        try:
+            logger.warning(
+                "[FALLBACK] Trying MP4 remux fallback via %s for %s",
+                source_label,
+                ep_label or getattr(episode, "_file_name", "episode"),
+            )
+            _set_transfer_runtime(engine="ytdlp", phase="downloading", active=True)
+            _run_ytdlp_with_progress(
+                source_url,
+                temp_ytdlp_template,
+                headers=headers,
+                label=ep_label,
+                merge_output_format="mp4",
+            )
+            raw_temp = _find_ytdlp_output(temp_ytdlp_template)
+            if not raw_temp or not raw_temp.exists():
+                raise RuntimeError("MP4 fallback finished without creating an output file")
+            _tag_downloaded_stream(
+                raw_temp,
+                temp_full,
+                audio_code,
+                wants_clean_video,
+                sub_video_code,
+            )
+            return
+        except Exception as exc:
+            fallback_errors.append(f"{source_label}: {exc}")
+        finally:
+            _cleanup_ytdlp_outputs(temp_ytdlp_template)
+
+    detail = "; ".join(fallback_errors) if fallback_errors else "no fallback source available"
+    raise RuntimeError(f"MP4 fallback remux failed: {detail}")
+
+
 def download(self):
     """Download required audio/video streams for an episode (AniWorld + s.to) with retry logic."""
     if platform.system() == "Windows":
@@ -975,44 +1054,75 @@ def download(self):
                     "[DOWNLOADING] full preset (audio + video together) via %s",
                     "yt-dlp" if use_ytdlp else "ffmpeg",
                 )
+                full_stream_error = None
+                try:
+                    if use_ytdlp:
+                        raw_temp = None
+                        try:
+                            _run_ytdlp_with_progress(
+                                self.stream_url,
+                                temp_ytdlp_template,
+                                headers=headers,
+                                label=ep_label,
+                            )
+                            raw_temp = _find_ytdlp_output(temp_ytdlp_template)
+                            if not raw_temp or not raw_temp.exists():
+                                raise RuntimeError("yt-dlp finished without creating an output file")
+                            _tag_downloaded_stream(
+                                raw_temp,
+                                temp_full,
+                                audio_code,
+                                wants_clean_video,
+                                sub_video_code,
+                            )
+                        finally:
+                            _cleanup_ytdlp_outputs(temp_ytdlp_template)
+                    else:
+                        stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
+                        if (not wants_clean_video) and sub_video_code:
+                            stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
+                        bandwidth_kwargs = _bandwidth_limit_output_kwargs()
 
-                if use_ytdlp:
-                    raw_temp = None
-                    try:
-                        _run_ytdlp_with_progress(
-                            self.stream_url,
-                            temp_ytdlp_template,
-                            headers=headers,
+                        video_codec = get_video_codec()
+                        _run_ffmpeg_with_progress(
+                            ffmpeg.input(self.stream_url, **input_kwargs).output(
+                                str(temp_full),
+                                vcodec=video_codec,
+                                acodec=video_codec,
+                                **stream_metadata,
+                                **bandwidth_kwargs,
+                            ),
                             label=ep_label,
                         )
-                        raw_temp = _find_ytdlp_output(temp_ytdlp_template)
-                        if not raw_temp or not raw_temp.exists():
-                            raise RuntimeError("yt-dlp finished without creating an output file")
-                        _tag_downloaded_stream(
-                            raw_temp,
+                except Exception as exc:
+                    full_stream_error = exc
+                    if not _mp4_fallback_remux_enabled():
+                        raise
+                    logger.warning(
+                        "[FALLBACK] Full stream path failed for %s: %s",
+                        ep_label or self._file_name,
+                        exc,
+                    )
+                    try:
+                        _run_mp4_fallback_remux(
+                            self,
+                            temp_ytdlp_template,
                             temp_full,
+                            headers,
+                            ep_label,
                             audio_code,
                             wants_clean_video,
                             sub_video_code,
                         )
-                    finally:
-                        _cleanup_ytdlp_outputs(temp_ytdlp_template)
-                else:
-                    stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
-                    if (not wants_clean_video) and sub_video_code:
-                        stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
-                    bandwidth_kwargs = _bandwidth_limit_output_kwargs()
+                    except Exception as fallback_exc:
+                        raise RuntimeError(
+                            f"{exc}; MP4 fallback remux also failed: {fallback_exc}"
+                        ) from fallback_exc
 
-                    video_codec = get_video_codec()
-                    _run_ffmpeg_with_progress(
-                        ffmpeg.input(self.stream_url, **input_kwargs).output(
-                            str(temp_full),
-                            vcodec=video_codec,
-                            acodec=video_codec,
-                            **stream_metadata,
-                            **bandwidth_kwargs,
-                        ),
-                        label=ep_label,
+                if full_stream_error:
+                    logger.info(
+                        "[FALLBACK] MP4 remux fallback succeeded for %s",
+                        ep_label or self._file_name,
                     )
 
                 if self._episode_path.exists():

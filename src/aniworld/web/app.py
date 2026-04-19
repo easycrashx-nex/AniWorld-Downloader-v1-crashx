@@ -160,6 +160,7 @@ _ENV_DOWNLOAD_SPEED_PROFILE = "ANIWORLD_DOWNLOAD_SPEED_PROFILE"
 _ENV_AUTO_PROVIDER_SWITCH = "ANIWORLD_AUTO_PROVIDER_SWITCH"
 _ENV_RATE_LIMIT_GUARD = "ANIWORLD_RATE_LIMIT_GUARD"
 _ENV_PREFLIGHT_CHECK = "ANIWORLD_PREFLIGHT_CHECK"
+_ENV_MP4_FALLBACK_REMUX = "ANIWORLD_MP4_FALLBACK_REMUX"
 _ENV_UPDATE_REMOTE_URL = "ANIWORLD_UPDATE_REMOTE_URL"
 _ENV_UPDATE_REMOTE_BRANCH = "ANIWORLD_UPDATE_REMOTE_BRANCH"
 _ENV_UPDATE_LOCAL_COMMIT = "ANIWORLD_UPDATE_LOCAL_COMMIT"
@@ -1714,6 +1715,9 @@ def _settings_payload(
         ),
         "preflight_check": _normalize_pref_bool(
             os.environ.get(_ENV_PREFLIGHT_CHECK, "1")
+        ),
+        "mp4_fallback_remux": _normalize_pref_bool(
+            os.environ.get(_ENV_MP4_FALLBACK_REMUX, "0")
         ),
         "provider_fallback_order": _normalize_provider_fallback_order(
             os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, "")
@@ -5795,6 +5799,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             _set_bool_env(_ENV_RATE_LIMIT_GUARD, data["rate_limit_guard"])
         if "preflight_check" in data:
             _set_bool_env(_ENV_PREFLIGHT_CHECK, data["preflight_check"])
+        if "mp4_fallback_remux" in data:
+            _set_bool_env(_ENV_MP4_FALLBACK_REMUX, data["mp4_fallback_remux"])
         if "provider_fallback_order" in data:
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = (
                 _normalize_provider_fallback_order(data["provider_fallback_order"])
@@ -6785,6 +6791,13 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                 settings_payload.get(
                     "preflight_check",
                     os.environ.get(_ENV_PREFLIGHT_CHECK, "1"),
+                ),
+            )
+            _set_bool_env(
+                _ENV_MP4_FALLBACK_REMUX,
+                settings_payload.get(
+                    "mp4_fallback_remux",
+                    os.environ.get(_ENV_MP4_FALLBACK_REMUX, "0"),
                 ),
             )
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = _normalize_provider_fallback_order(
