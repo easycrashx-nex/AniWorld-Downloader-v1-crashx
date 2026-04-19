@@ -228,10 +228,32 @@ function getQueuePriorityLabel(item) {
   return "Manual";
 }
 
+function getQueueEpisodeSourceUrl(item) {
+  const currentUrl = String(item?.current_url || "").trim();
+  if (currentUrl) return currentUrl;
+  try {
+    const entries =
+      typeof item?.episodes === "string"
+        ? JSON.parse(item.episodes || "[]")
+        : Array.isArray(item?.episodes)
+          ? item.episodes
+          : [];
+    return String(entries?.[0] || "").trim();
+  } catch (e) {
+    return "";
+  }
+}
+
+function isQueueMovieUrl(url) {
+  const clean = String(url || "").toLowerCase();
+  return clean.includes("/filme/film-") || clean.includes("filmpalast.to/stream/");
+}
+
 function getQueueEpisodeMarker(item) {
-  const parsed = parseSeasonEpisode(item.current_url || "");
+  const sourceUrl = getQueueEpisodeSourceUrl(item);
+  const parsed = parseSeasonEpisode(sourceUrl);
   if (parsed) return parsed;
-  if (item.total_episodes === 1) return "Movie";
+  if (isQueueMovieUrl(sourceUrl)) return "Movie";
   if (item.current_episode && item.total_episodes) {
     return item.current_episode + "/" + item.total_episodes;
   }

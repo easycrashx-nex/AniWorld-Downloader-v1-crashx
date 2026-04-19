@@ -98,6 +98,17 @@ const restartAppBtn = document.getElementById("restartAppBtn");
 const updateApplyBtn = document.getElementById("updateApplyBtn");
 const autoUpdateEnabledCb = document.getElementById("autoUpdateEnabled");
 const autoUpdateHint = document.getElementById("autoUpdateHint");
+const updateCommitPreview = document.getElementById("updateCommitPreview");
+const updateCommitHistoryDetails = document.getElementById(
+  "updateCommitHistoryDetails",
+);
+const updateCommitHistoryBody = document.getElementById(
+  "updateCommitHistoryBody",
+);
+const updateCommitPagination = document.getElementById("updateCommitPagination");
+const updateCommitPrevBtn = document.getElementById("updateCommitPrevBtn");
+const updateCommitNextBtn = document.getElementById("updateCommitNextBtn");
+const updateCommitPageLabel = document.getElementById("updateCommitPageLabel");
 const settingsUpdateOverlay = document.getElementById("settingsUpdateOverlay");
 const settingsUpdateOverlayMessage = document.getElementById(
   "settingsUpdateOverlayMessage",
@@ -121,6 +132,12 @@ const settingsRestartBanner = document.getElementById("settingsRestartBanner");
 const settingsRestartBannerBtn = document.getElementById(
   "settingsRestartBannerBtn",
 );
+const externalNotificationTestBtn = document.getElementById(
+  "externalNotificationTestBtn",
+);
+const settingsSaveBar = document.getElementById("settingsSaveBar");
+const settingsSaveAllBtn = document.getElementById("settingsSaveAllBtn");
+const settingsDiscardBtn = document.getElementById("settingsDiscardBtn");
 const searchDefaultSortSelect = document.getElementById("searchDefaultSort");
 const searchDefaultGenresInput = document.getElementById(
   "searchDefaultGenres",
@@ -146,6 +163,13 @@ let updateOverlayDismissed = false;
 let restartInFlight = false;
 let updateCheckInFlight = false;
 let restartReloadTimer = null;
+let updateCommitPage = 1;
+let updateCommitPages = 0;
+let updateCommitRequest = null;
+let settingsBaselineState = null;
+let settingsDirty = false;
+let settingsApplyingState = false;
+const settingsDraftMode = true;
 const UPDATE_POLL_IDLE_MS = 300000;
 const UPDATE_POLL_ACTIVE_MS = 2500;
 const RESTART_RELOAD_INTERVAL_MS = 5000;
@@ -415,6 +439,146 @@ function collectUiSettingsPayload() {
     ui_table_density: uiTableDensitySelect?.value || "standard",
     ui_background: uiBackgroundSelect?.value || "dynamic",
   };
+}
+
+function captureSettingsState() {
+  return {
+    download_path: downloadPathInput?.value?.trim() || "",
+    lang_separation: !!langSeparationCb?.checked,
+    disable_english_sub: !!disableEnglishSubCb?.checked,
+    experimental_filmpalast: !!experimentalFilmpalastCb?.checked,
+    experimental_self_heal: !!experimentalSelfHealCb?.checked,
+    safe_mode: !!safeModeCb?.checked,
+    auto_open_captcha_tab: !!autoOpenCaptchaTabCb?.checked,
+    auto_update_enabled: !!autoUpdateEnabledCb?.checked,
+    external_notifications_enabled: !!externalNotificationsEnabledCb?.checked,
+    external_notification_type: externalNotificationTypeSelect?.value || "generic",
+    external_notification_url:
+      String(externalNotificationUrlInput?.value || "").trim(),
+    external_notify_queue: !!externalNotifyQueueCb?.checked,
+    external_notify_autosync: !!externalNotifyAutosyncCb?.checked,
+    external_notify_library: !!externalNotifyLibraryCb?.checked,
+    external_notify_system: !!externalNotifySystemCb?.checked,
+    browser_notifications_enabled: !!browserNotificationsEnabledCb?.checked,
+    browser_notify_browse: !!browserNotifyBrowseCb?.checked,
+    browser_notify_queue: !!browserNotifyQueueCb?.checked,
+    browser_notify_autosync: !!browserNotifyAutosyncCb?.checked,
+    browser_notify_library: !!browserNotifyLibraryCb?.checked,
+    browser_notify_settings: !!browserNotifySettingsCb?.checked,
+    browser_notify_system: !!browserNotifySystemCb?.checked,
+    ui_preset: uiPresetSelect?.value || "custom",
+    ui_locale: uiLocaleSelect?.value || "en",
+    ui_mode: uiModeSelect?.value || "cozy",
+    ui_scale: uiScaleSelect?.value || "100",
+    ui_theme: uiThemeSelect?.value || "ocean",
+    ui_radius: uiRadiusSelect?.value || "soft",
+    ui_motion: uiMotionSelect?.value || "normal",
+    ui_width: uiWidthSelect?.value || "standard",
+    ui_modal_width: uiModalWidthSelect?.value || "standard",
+    ui_nav_size: uiNavSizeSelect?.value || "standard",
+    ui_table_density: uiTableDensitySelect?.value || "standard",
+    ui_background: uiBackgroundSelect?.value || "dynamic",
+    search_default_sort: searchDefaultSortSelect?.value || "source",
+    search_default_genres: searchDefaultGenresInput?.value || "",
+    search_default_year_from: searchDefaultYearFromInput?.value || "",
+    search_default_year_to: searchDefaultYearToInput?.value || "",
+    search_default_favorites_only: !!searchDefaultFavoritesOnlyCb?.checked,
+    search_default_downloaded_only: !!searchDefaultDownloadedOnlyCb?.checked,
+    sync_schedule: syncScheduleSelect?.value || "0",
+    sync_language: syncLanguageSelect?.value || "German Dub",
+    sync_provider: syncProviderSelect?.value || "VOE",
+    bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
+    download_backend: downloadBackendSelect?.value || "auto",
+    download_speed_profile: downloadSpeedProfileSelect?.value || "balanced",
+    download_engine_rules: downloadEngineRulesInput?.value || "",
+    auto_provider_switch: !!autoProviderSwitchCb?.checked,
+    rate_limit_guard: !!rateLimitGuardCb?.checked,
+    preflight_check: !!preflightCheckCb?.checked,
+    mp4_fallback_remux: !!mp4FallbackRemuxCb?.checked,
+    provider_fallback_order: providerFallbackOrderInput?.value || "",
+    smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
+    library_auto_repair: !!libraryAutoRepairCb?.checked,
+    disk_warn_gb: diskWarnGbInput?.value || "8",
+    disk_warn_percent: diskWarnPercentInput?.value || "12",
+  };
+}
+
+function cloneSettingsState(state) {
+  return JSON.parse(JSON.stringify(state || {}));
+}
+
+function statesEqual(left, right) {
+  return JSON.stringify(left || {}) === JSON.stringify(right || {});
+}
+
+function setSettingsDirty(nextDirty) {
+  settingsDirty = !!nextDirty;
+  if (settingsSaveBar) settingsSaveBar.hidden = !settingsDirty;
+  if (settingsSaveAllBtn) settingsSaveAllBtn.disabled = !settingsDirty;
+  if (settingsDiscardBtn) settingsDiscardBtn.disabled = !settingsDirty;
+}
+
+function refreshSettingsDirtyState() {
+  if (settingsApplyingState || !settingsDraftMode || !settingsBaselineState) {
+    setSettingsDirty(false);
+    return;
+  }
+  setSettingsDirty(!statesEqual(captureSettingsState(), settingsBaselineState));
+}
+
+function syncSettingsBaselineFromDom() {
+  settingsBaselineState = cloneSettingsState(captureSettingsState());
+  refreshSettingsDirtyState();
+}
+
+function mergeSettingsBaseline(patch) {
+  settingsBaselineState = Object.assign(
+    {},
+    settingsBaselineState || {},
+    patch || {},
+  );
+  refreshSettingsDirtyState();
+}
+
+function handleSettingsDraft(localApply) {
+  if (!settingsDraftMode || settingsApplyingState) return false;
+  if (typeof localApply === "function") localApply();
+  refreshSettingsDirtyState();
+  return true;
+}
+
+function attachSettingsDirtyListeners() {
+  if (!settingsDraftMode) return;
+  document
+    .querySelectorAll(
+      ".settings-container input, .settings-container select, .settings-container textarea",
+    )
+    .forEach((element) => {
+      element.addEventListener("input", refreshSettingsDirtyState);
+      element.addEventListener("change", refreshSettingsDirtyState);
+    });
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!settingsDirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!settingsDirty) return;
+    const link = event.target.closest("a[href]");
+    if (!link) return;
+    if (link.closest(".settings-save-bar")) return;
+    if (link.getAttribute("href")?.startsWith("#")) return;
+    const keepEditing = !window.confirm(
+      "You have unsaved settings. Press OK to discard them and continue, or Cancel to stay here and save them first.",
+    );
+    if (keepEditing) {
+      event.preventDefault();
+    } else {
+      setSettingsDirty(false);
+    }
+  });
 }
 
 function triggerUiSettingsImport() {
@@ -721,6 +885,159 @@ async function loadUpdateStatus(force = false) {
   return request;
 }
 
+function renderUpdateCommitPreview(data) {
+  if (!updateCommitPreview) return;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  if (!items.length) {
+    updateCommitPreview.innerHTML =
+      '<div class="settings-hint">No commit preview is available for this installation.</div>';
+    return;
+  }
+  updateCommitPreview.innerHTML = items
+    .map(
+      (item) => `
+        <article class="settings-commit-item settings-commit-item-preview">
+          <div class="settings-commit-head">
+            <strong>${escapeSettingsHtml(item.subject || "Untitled commit")}</strong>
+            <span>${escapeSettingsHtml(item.short_hash || "-")}</span>
+          </div>
+          <div class="settings-commit-meta">
+            <span>${escapeSettingsHtml(item.author || "Unknown")}</span>
+            <span>${escapeSettingsHtml(item.date || "-")}</span>
+          </div>
+        </article>`,
+    )
+    .join("");
+}
+
+function renderUpdateCommitHistory(data) {
+  if (!updateCommitHistoryBody) return;
+  if (!data?.supported) {
+    updateCommitHistoryBody.innerHTML =
+      '<div class="settings-hint">' +
+      escapeSettingsHtml(data?.reason || "Commit history is unavailable.") +
+      "</div>";
+    if (updateCommitPagination) updateCommitPagination.hidden = true;
+    return;
+  }
+
+  const items = Array.isArray(data?.items) ? data.items : [];
+  if (!items.length) {
+    updateCommitHistoryBody.innerHTML =
+      '<div class="settings-hint">No commits were returned for this page.</div>';
+    if (updateCommitPagination) updateCommitPagination.hidden = true;
+    return;
+  }
+
+  updateCommitHistoryBody.innerHTML = items
+    .map(
+      (item) => `
+        <article class="settings-commit-item">
+          <div class="settings-commit-head">
+            <strong>${escapeSettingsHtml(item.subject || "Untitled commit")}</strong>
+            <span>${escapeSettingsHtml(item.short_hash || "-")}</span>
+          </div>
+          <div class="settings-commit-meta">
+            <span>${escapeSettingsHtml(item.author || "Unknown")}</span>
+            <span>${escapeSettingsHtml(item.date || "-")}</span>
+          </div>
+        </article>`,
+    )
+    .join("");
+
+  updateCommitPages = Number(data?.pages || 0);
+  if (updateCommitPageLabel) {
+    updateCommitPageLabel.textContent = updateCommitPages
+      ? `Page ${Number(data?.page || 1)} of ${updateCommitPages}`
+      : "Page 1";
+  }
+  if (updateCommitPrevBtn) {
+    updateCommitPrevBtn.disabled = Number(data?.page || 1) <= 1;
+  }
+  if (updateCommitNextBtn) {
+    updateCommitNextBtn.disabled =
+      !updateCommitPages || Number(data?.page || 1) >= updateCommitPages;
+  }
+  if (updateCommitPagination) {
+    updateCommitPagination.hidden = updateCommitPages <= 1;
+  }
+}
+
+async function loadUpdateCommits(page = 1, perPage = 30, previewOnly = false) {
+  if (updateCommitRequest) return updateCommitRequest;
+  updateCommitRequest = (async () => {
+    try {
+      const resp = await fetch(
+        `/api/update/commits?page=${Number(page || 1)}&per_page=${Number(perPage || 30)}`,
+        { cache: "no-store" },
+      );
+      const data = await resp.json();
+      if (previewOnly) renderUpdateCommitPreview(data);
+      else renderUpdateCommitHistory(data);
+      return data;
+    } catch (e) {
+      const fallback = {
+        supported: false,
+        reason: "Commit history could not be loaded.",
+      };
+      if (previewOnly) renderUpdateCommitPreview(fallback);
+      else renderUpdateCommitHistory(fallback);
+      return fallback;
+    } finally {
+      updateCommitRequest = null;
+    }
+  })();
+  return updateCommitRequest;
+}
+
+async function testExternalNotification() {
+  if (!externalNotificationTestBtn) return;
+  externalNotificationTestBtn.disabled = true;
+  const originalLabel = externalNotificationTestBtn.textContent;
+  externalNotificationTestBtn.textContent = "Sending...";
+  try {
+    const resp = await fetch("/api/settings/test-webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) {
+      throw new Error(data.error || "Webhook test failed");
+    }
+    showToast("Test notification sent");
+  } catch (e) {
+    showToast("Webhook test failed: " + e.message);
+  } finally {
+    externalNotificationTestBtn.disabled = false;
+    externalNotificationTestBtn.textContent = originalLabel;
+  }
+}
+
+async function saveAllSettings() {
+  const payload = captureSettingsState();
+  try {
+    await updateSettings(payload);
+    syncSettingsBaselineFromDom();
+    invalidateQueuePrefs();
+    await loadUpdateStatus(false);
+    showToast("All settings saved");
+  } catch (e) {
+    showToast("Failed to save settings: " + e.message);
+  }
+}
+
+async function discardAllSettingsChanges() {
+  if (!settingsDirty) return;
+  settingsApplyingState = true;
+  try {
+    await loadSettings();
+    syncSettingsBaselineFromDom();
+    showToast("Settings changes discarded");
+  } finally {
+    settingsApplyingState = false;
+  }
+}
+
 async function startWebUpdate() {
   if (!updateApplyBtn || updateApplyBtn.disabled) return;
   clearRestartReloadProbe();
@@ -961,6 +1278,7 @@ async function loadSettings() {
   if (settingsRequest) return settingsRequest;
   settingsRequest = (async () => {
     try {
+      settingsApplyingState = true;
       const resp = await fetch("/api/settings");
       const data = await resp.json();
       downloadPathInput.value = data.download_path || "";
@@ -1125,9 +1443,11 @@ async function loadSettings() {
       if (syncProviderSelect && data.sync_provider)
         syncProviderSelect.value = data.sync_provider;
       refreshSettingsSelects();
+      syncSettingsBaselineFromDom();
     } catch (e) {
       showToast("Failed to load settings: " + e.message);
     } finally {
+      settingsApplyingState = false;
       settingsRequest = null;
     }
   })();
@@ -1135,6 +1455,16 @@ async function loadSettings() {
 }
 
 async function saveBrowserNotificationToggles() {
+  if (
+    handleSettingsDraft(() => {
+      updateBrowserNotificationCategoryState();
+      if (typeof window.applyBrowserNotificationPrefs === "function") {
+        window.applyBrowserNotificationPrefs(captureSettingsState());
+      }
+    })
+  ) {
+    return;
+  }
   try {
     const payload = {
       browser_notifications_enabled:
@@ -1151,6 +1481,7 @@ async function saveBrowserNotificationToggles() {
     if (typeof window.applyBrowserNotificationPrefs === "function") {
       window.applyBrowserNotificationPrefs(payload);
     }
+    mergeSettingsBaseline(payload);
     showToast("Browser notification settings saved");
   } catch (e) {
     showToast("Failed to save browser notifications: " + e.message);
@@ -1184,6 +1515,17 @@ async function requestBrowserNotificationPermission() {
 }
 
 async function saveLangSeparation() {
+  if (
+    handleSettingsDraft(() => {
+      let currentSyncLang = syncLanguageSelect ? syncLanguageSelect.value : null;
+      if (!langSeparationCb.checked && currentSyncLang === "All Languages") {
+        currentSyncLang = "German Dub";
+      }
+      updateSyncLanguageDropdown(langSeparationCb.checked, currentSyncLang);
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings({
       download_path: downloadPathInput.value.trim(),
@@ -1202,6 +1544,11 @@ async function saveLangSeparation() {
     } else {
       updateSyncLanguageDropdown(langSeparationCb.checked, currentSyncLang);
     }
+    mergeSettingsBaseline({
+      download_path: downloadPathInput.value.trim(),
+      lang_separation: langSeparationCb.checked,
+      sync_language: syncLanguageSelect?.value || "German Dub",
+    });
   } catch (e) {
     showToast("Failed to save setting: " + e.message);
   }
@@ -1227,8 +1574,12 @@ function updateSyncLanguageDropdown(isLangSep, currentValue) {
 }
 
 async function saveDisableEnglishSub() {
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      disable_english_sub: disableEnglishSubCb.checked,
+    });
+    mergeSettingsBaseline({
       disable_english_sub: disableEnglishSubCb.checked,
     });
     showToast(
@@ -1242,8 +1593,12 @@ async function saveDisableEnglishSub() {
 
 async function saveExperimentalFilmpalast() {
   if (!experimentalFilmpalastCb) return;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      experimental_filmpalast: experimentalFilmpalastCb.checked,
+    });
+    mergeSettingsBaseline({
       experimental_filmpalast: experimentalFilmpalastCb.checked,
     });
     showToast(
@@ -1257,11 +1612,21 @@ async function saveExperimentalFilmpalast() {
 
 async function saveUiMode() {
   if (!uiModeSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiDensity === "function") {
+        window.applyUiDensity(uiModeSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(buildManualUiPayload({ ui_mode: uiModeSelect.value }));
     if (typeof window.applyUiDensity === "function") {
       window.applyUiDensity(uiModeSelect.value);
     }
+    mergeSettingsBaseline(buildManualUiPayload({ ui_mode: uiModeSelect.value }));
     showToast("UI mode saved");
   } catch (e) {
     showToast("Failed to save UI mode: " + e.message);
@@ -1270,11 +1635,21 @@ async function saveUiMode() {
 
 async function saveUiScale() {
   if (!uiScaleSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiScale === "function") {
+        window.applyUiScale(uiScaleSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(buildManualUiPayload({ ui_scale: uiScaleSelect.value }));
     if (typeof window.applyUiScale === "function") {
       window.applyUiScale(uiScaleSelect.value);
     }
+    mergeSettingsBaseline(buildManualUiPayload({ ui_scale: uiScaleSelect.value }));
     showToast("UI scale saved");
   } catch (e) {
     showToast("Failed to save UI scale: " + e.message);
@@ -1283,8 +1658,12 @@ async function saveUiScale() {
 
 async function saveExperimentalSelfHeal() {
   if (!experimentalSelfHealCb) return;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      experimental_self_heal: experimentalSelfHealCb.checked,
+    });
+    mergeSettingsBaseline({
       experimental_self_heal: experimentalSelfHealCb.checked,
     });
     showToast(
@@ -1298,11 +1677,24 @@ async function saveExperimentalSelfHeal() {
 
 async function saveUiLocale() {
   if (!uiLocaleSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (
+        window.AniworldI18n &&
+        typeof window.AniworldI18n.setLocale === "function"
+      ) {
+        window.AniworldI18n.setLocale(uiLocaleSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings({ ui_locale: uiLocaleSelect.value });
     if (window.AniworldI18n && typeof window.AniworldI18n.setLocale === "function") {
       window.AniworldI18n.setLocale(uiLocaleSelect.value);
     }
+    mergeSettingsBaseline({ ui_locale: uiLocaleSelect.value });
     showToast(
       uiLocaleSelect.value === "de"
         ? "Oberflächensprache gespeichert"
@@ -1315,11 +1707,15 @@ async function saveUiLocale() {
 
 async function saveAutoUpdateEnabled() {
   if (!autoUpdateEnabledCb) return;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
       auto_update_enabled: autoUpdateEnabledCb.checked,
     });
     await loadUpdateStatus(false);
+    mergeSettingsBaseline({
+      auto_update_enabled: autoUpdateEnabledCb.checked,
+    });
     showToast(
       "Automatic updates " + (autoUpdateEnabledCb.checked ? "enabled" : "disabled"),
     );
@@ -1330,8 +1726,12 @@ async function saveAutoUpdateEnabled() {
 
 async function saveSafeMode() {
   if (!safeModeCb) return;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      safe_mode: safeModeCb.checked,
+    });
+    mergeSettingsBaseline({
       safe_mode: safeModeCb.checked,
     });
     showToast("Safe mode " + (safeModeCb.checked ? "enabled" : "disabled"));
@@ -1342,8 +1742,12 @@ async function saveSafeMode() {
 
 async function saveAutoOpenCaptchaTab() {
   if (!autoOpenCaptchaTabCb) return;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      auto_open_captcha_tab: autoOpenCaptchaTabCb.checked,
+    });
+    mergeSettingsBaseline({
       auto_open_captcha_tab: autoOpenCaptchaTabCb.checked,
     });
     showToast(
@@ -1358,8 +1762,21 @@ async function saveAutoOpenCaptchaTab() {
 
 async function saveExternalNotificationSettings() {
   updateExternalNotificationState();
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      external_notifications_enabled:
+        externalNotificationsEnabledCb?.checked || false,
+      external_notification_type:
+        externalNotificationTypeSelect?.value || "generic",
+      external_notification_url:
+        String(externalNotificationUrlInput?.value || "").trim(),
+      external_notify_queue: externalNotifyQueueCb?.checked || false,
+      external_notify_autosync: externalNotifyAutosyncCb?.checked || false,
+      external_notify_library: externalNotifyLibraryCb?.checked || false,
+      external_notify_system: externalNotifySystemCb?.checked || false,
+    });
+    mergeSettingsBaseline({
       external_notifications_enabled:
         externalNotificationsEnabledCb?.checked || false,
       external_notification_type:
@@ -1379,11 +1796,21 @@ async function saveExternalNotificationSettings() {
 
 async function saveUiTheme() {
   if (!uiThemeSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiTheme === "function") {
+        window.applyUiTheme(uiThemeSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(buildManualUiPayload({ ui_theme: uiThemeSelect.value }));
     if (typeof window.applyUiTheme === "function") {
       window.applyUiTheme(uiThemeSelect.value);
     }
+    mergeSettingsBaseline(buildManualUiPayload({ ui_theme: uiThemeSelect.value }));
     showToast("Theme color saved");
   } catch (e) {
     showToast("Failed to save theme color: " + e.message);
@@ -1392,11 +1819,21 @@ async function saveUiTheme() {
 
 async function saveUiRadius() {
   if (!uiRadiusSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiRadius === "function") {
+        window.applyUiRadius(uiRadiusSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(buildManualUiPayload({ ui_radius: uiRadiusSelect.value }));
     if (typeof window.applyUiRadius === "function") {
       window.applyUiRadius(uiRadiusSelect.value);
     }
+    mergeSettingsBaseline(buildManualUiPayload({ ui_radius: uiRadiusSelect.value }));
     showToast("Card radius saved");
   } catch (e) {
     showToast("Failed to save card radius: " + e.message);
@@ -1405,11 +1842,21 @@ async function saveUiRadius() {
 
 async function saveUiMotion() {
   if (!uiMotionSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiMotion === "function") {
+        window.applyUiMotion(uiMotionSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(buildManualUiPayload({ ui_motion: uiMotionSelect.value }));
     if (typeof window.applyUiMotion === "function") {
       window.applyUiMotion(uiMotionSelect.value);
     }
+    mergeSettingsBaseline(buildManualUiPayload({ ui_motion: uiMotionSelect.value }));
     showToast("Animation speed saved");
   } catch (e) {
     showToast("Failed to save animation speed: " + e.message);
@@ -1418,11 +1865,21 @@ async function saveUiMotion() {
 
 async function saveUiWidth() {
   if (!uiWidthSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiWidth === "function") {
+        window.applyUiWidth(uiWidthSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(buildManualUiPayload({ ui_width: uiWidthSelect.value }));
     if (typeof window.applyUiWidth === "function") {
       window.applyUiWidth(uiWidthSelect.value);
     }
+    mergeSettingsBaseline(buildManualUiPayload({ ui_width: uiWidthSelect.value }));
     showToast("Content width saved");
   } catch (e) {
     showToast("Failed to save content width: " + e.message);
@@ -1431,6 +1888,15 @@ async function saveUiWidth() {
 
 async function saveUiModalWidth() {
   if (!uiModalWidthSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiModalWidth === "function") {
+        window.applyUiModalWidth(uiModalWidthSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(
       buildManualUiPayload({ ui_modal_width: uiModalWidthSelect.value }),
@@ -1438,6 +1904,9 @@ async function saveUiModalWidth() {
     if (typeof window.applyUiModalWidth === "function") {
       window.applyUiModalWidth(uiModalWidthSelect.value);
     }
+    mergeSettingsBaseline(
+      buildManualUiPayload({ ui_modal_width: uiModalWidthSelect.value }),
+    );
     showToast("Modal width saved");
   } catch (e) {
     showToast("Failed to save modal width: " + e.message);
@@ -1446,6 +1915,15 @@ async function saveUiModalWidth() {
 
 async function saveUiNavSize() {
   if (!uiNavSizeSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiNavSize === "function") {
+        window.applyUiNavSize(uiNavSizeSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(
       buildManualUiPayload({ ui_nav_size: uiNavSizeSelect.value }),
@@ -1453,6 +1931,9 @@ async function saveUiNavSize() {
     if (typeof window.applyUiNavSize === "function") {
       window.applyUiNavSize(uiNavSizeSelect.value);
     }
+    mergeSettingsBaseline(
+      buildManualUiPayload({ ui_nav_size: uiNavSizeSelect.value }),
+    );
     showToast("Navigation size saved");
   } catch (e) {
     showToast("Failed to save navigation size: " + e.message);
@@ -1461,6 +1942,15 @@ async function saveUiNavSize() {
 
 async function saveUiTableDensity() {
   if (!uiTableDensitySelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiTableDensity === "function") {
+        window.applyUiTableDensity(uiTableDensitySelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(
       buildManualUiPayload({ ui_table_density: uiTableDensitySelect.value }),
@@ -1468,6 +1958,9 @@ async function saveUiTableDensity() {
     if (typeof window.applyUiTableDensity === "function") {
       window.applyUiTableDensity(uiTableDensitySelect.value);
     }
+    mergeSettingsBaseline(
+      buildManualUiPayload({ ui_table_density: uiTableDensitySelect.value }),
+    );
     showToast("Table density saved");
   } catch (e) {
     showToast("Failed to save table density: " + e.message);
@@ -1476,6 +1969,15 @@ async function saveUiTableDensity() {
 
 async function saveUiBackground() {
   if (!uiBackgroundSelect) return;
+  if (
+    handleSettingsDraft(() => {
+      if (typeof window.applyUiBackground === "function") {
+        window.applyUiBackground(uiBackgroundSelect.value);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     await updateSettings(
       buildManualUiPayload({ ui_background: uiBackgroundSelect.value }),
@@ -1483,6 +1985,9 @@ async function saveUiBackground() {
     if (typeof window.applyUiBackground === "function") {
       window.applyUiBackground(uiBackgroundSelect.value);
     }
+    mergeSettingsBaseline(
+      buildManualUiPayload({ ui_background: uiBackgroundSelect.value }),
+    );
     showToast("Background effects saved");
   } catch (e) {
     showToast("Failed to save background effects: " + e.message);
@@ -1492,9 +1997,20 @@ async function saveUiBackground() {
 async function applyUiPreset() {
   if (!uiPresetSelect) return;
   const preset = uiPresetSelect.value || "custom";
+  if (
+    handleSettingsDraft(() => {
+      if (preset !== "custom") {
+        const values = UI_PRESETS[preset];
+        if (values) applyUiPresetValues(values);
+      }
+    })
+  ) {
+    return;
+  }
   try {
     if (preset === "custom") {
       await updateSettings({ ui_preset: "custom" });
+      mergeSettingsBaseline({ ui_preset: "custom" });
       showToast("Theme preset set to custom");
       return;
     }
@@ -1502,6 +2018,7 @@ async function applyUiPreset() {
     if (!values) return;
     applyUiPresetValues(values);
     await updateSettings(Object.assign({ ui_preset: preset }, values));
+    mergeSettingsBaseline(Object.assign({ ui_preset: preset }, values));
     showToast("Theme preset applied");
   } catch (e) {
     showToast("Failed to apply theme preset: " + e.message);
@@ -1510,7 +2027,7 @@ async function applyUiPreset() {
 
 async function saveDownloadAdvancedSettings() {
   try {
-    await updateSettings({
+    const payload = {
       bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
       download_backend: downloadBackendSelect?.value || "auto",
       download_speed_profile: downloadSpeedProfileSelect?.value || "balanced",
@@ -1521,7 +2038,9 @@ async function saveDownloadAdvancedSettings() {
       mp4_fallback_remux: mp4FallbackRemuxCb?.checked || false,
       provider_fallback_order: providerFallbackOrderInput?.value || "",
       smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
-    });
+    };
+    await updateSettings(payload);
+    mergeSettingsBaseline(payload);
     showToast("Download rules saved");
   } catch (e) {
     showToast("Failed to save download rules: " + e.message);
@@ -1530,10 +2049,12 @@ async function saveDownloadAdvancedSettings() {
 
 async function saveDiskGuardSettings() {
   try {
-    await updateSettings({
+    const payload = {
       disk_warn_gb: diskWarnGbInput?.value || "8",
       disk_warn_percent: diskWarnPercentInput?.value || "12",
-    });
+    };
+    await updateSettings(payload);
+    mergeSettingsBaseline(payload);
     await loadSettings();
     showToast("Disk guard thresholds saved");
   } catch (e) {
@@ -1542,8 +2063,12 @@ async function saveDiskGuardSettings() {
 }
 
 async function saveLibraryAutoRepair() {
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({
+      library_auto_repair: libraryAutoRepairCb?.checked || false,
+    });
+    mergeSettingsBaseline({
       library_auto_repair: libraryAutoRepairCb?.checked || false,
     });
     showToast(
@@ -1594,7 +2119,7 @@ async function importBackup() {
 
 async function saveSearchDefaults() {
   try {
-    await updateSettings({
+    const payload = {
       search_default_sort: searchDefaultSortSelect?.value || "source",
       search_default_genres: searchDefaultGenresInput?.value || "",
       search_default_year_from: searchDefaultYearFromInput?.value || "",
@@ -1603,7 +2128,9 @@ async function saveSearchDefaults() {
         searchDefaultFavoritesOnlyCb?.checked || false,
       search_default_downloaded_only:
         searchDefaultDownloadedOnlyCb?.checked || false,
-    });
+    };
+    await updateSettings(payload);
+    mergeSettingsBaseline(payload);
     showToast("Search defaults saved");
   } catch (e) {
     showToast("Failed to save search defaults: " + e.message);
@@ -1627,6 +2154,7 @@ async function saveDownloadPath() {
   const download_path = downloadPathInput.value.trim();
   try {
     await updateSettings({ download_path });
+    mergeSettingsBaseline({ download_path });
     showToast("Download path saved");
   } catch (e) {
     showToast("Failed to save settings: " + e.message);
@@ -1635,17 +2163,50 @@ async function saveDownloadPath() {
 
 loadSettings();
 loadUpdateStatus(false);
+loadUpdateCommits(1, 3, true);
 renderBrowserNotificationPermissionState();
+attachSettingsDirtyListeners();
 window.addEventListener("focus", () => {
   renderBrowserNotificationPermissionState();
   loadUpdateStatus(false);
 });
 scheduleUpdatePolling();
 
+if (settingsSaveAllBtn) {
+  settingsSaveAllBtn.addEventListener("click", saveAllSettings);
+}
+if (settingsDiscardBtn) {
+  settingsDiscardBtn.addEventListener("click", discardAllSettingsChanges);
+}
+if (updateCommitHistoryDetails) {
+  updateCommitHistoryDetails.addEventListener("toggle", () => {
+    if (updateCommitHistoryDetails.open) {
+      updateCommitPage = 1;
+      loadUpdateCommits(updateCommitPage, 30, false);
+    }
+  });
+}
+if (updateCommitPrevBtn) {
+  updateCommitPrevBtn.addEventListener("click", () => {
+    if (updateCommitPage <= 1) return;
+    updateCommitPage -= 1;
+    loadUpdateCommits(updateCommitPage, 30, false);
+  });
+}
+if (updateCommitNextBtn) {
+  updateCommitNextBtn.addEventListener("click", () => {
+    if (!updateCommitPages || updateCommitPage >= updateCommitPages) return;
+    updateCommitPage += 1;
+    loadUpdateCommits(updateCommitPage, 30, false);
+  });
+}
+
 async function saveSyncSchedule() {
   if (!syncScheduleSelect) return;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings({ sync_schedule: syncScheduleSelect.value });
+    mergeSettingsBaseline({ sync_schedule: syncScheduleSelect.value });
     showToast("Auto-Sync schedule saved");
   } catch (e) {
     showToast("Failed to save schedule: " + e.message);
@@ -1656,8 +2217,10 @@ async function saveSyncDefaults() {
   const body = {};
   if (syncLanguageSelect) body.sync_language = syncLanguageSelect.value;
   if (syncProviderSelect) body.sync_provider = syncProviderSelect.value;
+  if (handleSettingsDraft()) return;
   try {
     await updateSettings(body);
+    mergeSettingsBaseline(body);
     showToast("Auto-Sync defaults saved");
   } catch (e) {
     showToast("Failed to save defaults: " + e.message);

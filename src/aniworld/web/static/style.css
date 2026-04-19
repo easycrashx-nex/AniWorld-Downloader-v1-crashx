@@ -5153,6 +5153,115 @@ input[type="checkbox"] {
   overflow-wrap: anywhere;
 }
 
+.settings-commit-preview,
+.settings-commit-history {
+  margin-top: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px 18px;
+}
+
+.settings-commit-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-commit-history summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 700;
+  list-style: none;
+}
+
+.settings-commit-history summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-commit-history-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.settings-commit-item {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.settings-commit-item-preview {
+  padding: 12px 14px;
+}
+
+.settings-commit-head,
+.settings-commit-meta,
+.settings-commit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-commit-head strong {
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.4;
+}
+
+.settings-commit-head span,
+.settings-commit-meta span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.settings-commit-meta {
+  margin-top: 8px;
+}
+
+.settings-save-bar {
+  position: sticky;
+  bottom: 18px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 24px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--blue) 36%, rgba(255, 255, 255, 0.08));
+  background:
+    linear-gradient(135deg, rgba(12, 21, 34, 0.96), rgba(11, 18, 30, 0.92)),
+    rgba(11, 18, 30, 0.94);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.22);
+}
+
+.settings-save-bar[hidden] {
+  display: none !important;
+}
+
+.settings-save-bar-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-save-bar-copy strong {
+  color: var(--text);
+}
+
+.settings-save-bar-copy span {
+  color: var(--muted-strong);
+  font-size: 0.9rem;
+}
+
+.settings-save-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .settings-inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -5410,6 +5519,19 @@ input[type="checkbox"] {
   .settings-row-download-rules button {
     grid-column: span 2;
   }
+
+  .settings-save-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-save-bar-actions {
+    width: 100%;
+  }
+
+  .settings-save-bar-actions > * {
+    flex: 1 1 220px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -5448,6 +5570,13 @@ input[type="checkbox"] {
   .settings-row-download-rules .settings-field-wide,
   .settings-row-download-rules button {
     grid-column: span 1;
+  }
+
+  .settings-commit-head,
+  .settings-commit-meta,
+  .settings-commit-pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

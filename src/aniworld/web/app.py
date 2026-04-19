@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import os
 import platform
 import re
@@ -3252,7 +3253,10 @@ def _run_provider_benchmark(episode_url="", language=""):
     if not prov.episode_cls:
         raise ValueError("This source does not support provider benchmarking")
 
-    episode = prov.episode_cls(url=sample["episode_url"])
+    episode = prov.episode_cls(
+        url=sample["episode_url"],
+        selected_language=sample["language"],
+    )
     provider_map = _extract_provider_info(getattr(episode, "provider_data", None))
     available = _rank_provider_candidates(provider_map.get(sample["language"], []))
     if not available:
@@ -3270,9 +3274,12 @@ def _run_provider_benchmark(episode_url="", language=""):
         recommendation = _recommended_engine_for_provider(provider_name)
 
         try:
-            redirect_url = str(
-                episode.provider_link(sample["language"], provider_name) or ""
-            ).strip()
+            benchmark_episode = prov.episode_cls(
+                url=sample["episode_url"],
+                selected_language=sample["language"],
+                selected_provider=provider_name,
+            )
+            redirect_url = str(getattr(benchmark_episode, "redirect_url", "") or "").strip()
             if not redirect_url:
                 status = "broken"
                 error_message = "No redirect URL returned"
@@ -3919,9 +3926,11 @@ def _run_provider_test(episode_url, language, provider):
     if not prov.episode_cls:
         raise ValueError("This source does not expose episode testing")
 
-    episode = prov.episode_cls(url=episode_url)
-    episode.selected_language = language
-    episode.selected_provider = provider
+    episode = prov.episode_cls(
+        url=episode_url,
+        selected_language=language,
+        selected_provider=provider,
+    )
 
     provider_url = episode.provider_url
     stream_url = episode.stream_url
@@ -3936,6 +3945,111 @@ def _run_provider_test(episode_url, language, provider):
         "language": language,
         "provider": provider,
         "ok": True,
+    }
+
+
+def _update_commit_log_ref(repo_root, branch="main"):
+    clean_branch = str(branch or "").strip() or "main"
+    remote_ref = f"origin/{clean_branch}"
+    fetch_result = _run_git_command(["git", "fetch", "origin", clean_branch], repo_root, 25)
+    if fetch_result["code"] == 0:
+        verify_result = _run_git_command(
+            ["git", "rev-parse", "--verify", remote_ref],
+            repo_root,
+            12,
+        )
+        if verify_result["code"] == 0:
+            return remote_ref
+    branch_result = _run_git_command(
+        ["git", "rev-parse", "--verify", clean_branch],
+        repo_root,
+        12,
+    )
+    if branch_result["code"] == 0:
+        return clean_branch
+    return "HEAD"
+
+
+def _get_update_commit_history(page=1, per_page=30):
+    snapshot = _update_source_snapshot(force=False)
+    repo_root = snapshot.get("repo_root") or _resolve_repo_root()
+    if not repo_root:
+        return {
+            "supported": False,
+            "reason": "Commit history is only available for git checkout installations.",
+            "items": [],
+            "page": 1,
+            "per_page": int(per_page or 30),
+            "pages": 0,
+            "total": 0,
+        }
+
+    page = max(1, int(page or 1))
+    per_page = max(1, min(30, int(per_page or 30)))
+    log_ref = _update_commit_log_ref(repo_root, snapshot.get("branch") or "main")
+    count_result = _run_git_command(["git", "rev-list", "--count", log_ref], repo_root, 18)
+    if count_result["code"] != 0:
+        return {
+            "supported": False,
+            "reason": count_result["stderr"] or "Commit history could not be loaded.",
+            "items": [],
+            "page": page,
+            "per_page": per_page,
+            "pages": 0,
+            "total": 0,
+        }
+
+    total = max(0, int((count_result["stdout"] or "0").strip() or 0))
+    pages = max(1, math.ceil(total / per_page)) if total else 0
+    page = min(page, pages or 1)
+    skip = max(0, (page - 1) * per_page)
+    log_result = _run_git_command(
+        [
+            "git",
+            "log",
+            log_ref,
+            f"--skip={skip}",
+            f"-n={per_page}",
+            "--date=short",
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s",
+        ],
+        repo_root,
+        20,
+    )
+    if log_result["code"] != 0:
+        return {
+            "supported": False,
+            "reason": log_result["stderr"] or "Commit history could not be loaded.",
+            "items": [],
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+            "total": total,
+        }
+
+    items = []
+    for raw_line in (log_result["stdout"] or "").splitlines():
+        parts = raw_line.split("\x1f")
+        if len(parts) != 5:
+            continue
+        full_hash, short_hash, author, commit_date, subject = parts
+        items.append(
+            {
+                "hash": full_hash,
+                "short_hash": short_hash,
+                "author": author,
+                "date": commit_date,
+                "subject": subject,
+            }
+        )
+
+    return {
+        "supported": True,
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+        "total": total,
     }
 
 
@@ -6099,6 +6213,12 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         payload = _update_status_payload(force=True, can_manage=is_admin)
         return jsonify(payload)
 
+    @app.route("/api/update/commits")
+    def api_update_commits():
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 30, type=int)
+        return jsonify(_get_update_commit_history(page=page, per_page=per_page))
+
     @app.route("/api/update/apply", methods=["POST"])
     def api_update_apply():
         username, is_admin = _get_current_user_info()
@@ -6696,6 +6816,29 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             return jsonify(payload)
         except Exception as exc:
             return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/settings/test-webhook", methods=["POST"])
+    def api_settings_test_webhook():
+        username, is_admin = _get_current_user_info()
+        if not is_admin:
+            return jsonify({"error": "Only admins can test external notifications."}), 403
+
+        if not _external_notifications_enabled():
+            return jsonify({"error": "External notifications are disabled."}), 400
+
+        if not _external_notifications_url():
+            return jsonify({"error": "No webhook URL has been configured."}), 400
+
+        ok = _post_external_notification(
+            "AniWorld Downloader test",
+            f"Webhook test sent by {username or 'admin'} at {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            category="system",
+            details={"source": "settings-test"},
+        )
+        if not ok:
+            return jsonify({"error": "The webhook request failed. Check the URL and target type."}), 400
+
+        return jsonify({"ok": True})
 
     @app.route("/api/backup/export")
     def api_backup_export():

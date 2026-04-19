@@ -77,6 +77,24 @@
         Checking the current repository state...
       </div>
     </div>
+    <div class="settings-commit-preview" id="updateCommitPreview">
+      <div class="settings-hint">Loading recent commits...</div>
+    </div>
+    <details class="settings-commit-history" id="updateCommitHistoryDetails">
+      <summary>Commit History</summary>
+      <div id="updateCommitHistoryBody" class="settings-commit-history-body">
+        <div class="settings-hint">Open this section to load commit history.</div>
+      </div>
+      <div class="settings-commit-pagination" id="updateCommitPagination" hidden>
+        <button type="button" class="btn-secondary" id="updateCommitPrevBtn">
+          Previous
+        </button>
+        <span id="updateCommitPageLabel">Page 1</span>
+        <button type="button" class="btn-secondary" id="updateCommitNextBtn">
+          Next
+        </button>
+      </div>
+    </details>
     <label class="settings-checkbox">
       <input
         type="checkbox"
@@ -395,6 +413,16 @@
         />
         System notifications
       </label>
+    </div>
+    <div class="settings-inline-actions settings-inline-actions-start">
+      <button
+        type="button"
+        class="btn-secondary"
+        id="externalNotificationTestBtn"
+        onclick="testExternalNotification()"
+      >
+        Send Test Notification
+      </button>
     </div>
 
     <div class="settings-hint">
@@ -985,6 +1013,21 @@
           Restart Now
         </button>
       </div>
+    </div>
+  </div>
+
+  <div class="settings-save-bar" id="settingsSaveBar" hidden>
+    <div class="settings-save-bar-copy">
+      <strong>Unsaved settings</strong>
+      <span>You changed one or more options. Save them or discard the draft.</span>
+    </div>
+    <div class="settings-save-bar-actions">
+      <button type="button" class="btn-secondary" id="settingsDiscardBtn">
+        Discard Changes
+      </button>
+      <button type="button" class="btn-primary" id="settingsSaveAllBtn">
+        Save All Settings
+      </button>
     </div>
   </div>
 </div>
