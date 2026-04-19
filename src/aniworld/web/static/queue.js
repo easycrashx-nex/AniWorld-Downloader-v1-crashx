@@ -467,19 +467,17 @@ function renderQueue(items) {
       actionButtons.push(
         queueActionButton(
           "queue-icon-btn queue-icon-btn-neutral",
-          "?",
+          "Up",
           "moveQueueItem(" + item.id + ",'up')",
           "Move up",
-          true,
         ),
       );
       actionButtons.push(
         queueActionButton(
           "queue-icon-btn queue-icon-btn-neutral",
-          "?",
+          "Down",
           "moveQueueItem(" + item.id + ",'down')",
           "Move down",
-          true,
         ),
       );
       actionButtons.push(
@@ -642,10 +640,14 @@ async function moveQueueItem(id, direction) {
       body: JSON.stringify({ direction }),
     });
     const data = await resp.json();
-    if (data.error && typeof showToast === "function") showToast(data.error);
+    if (data.error) {
+      if (typeof showToast === "function") showToast(data.error);
+    } else if (typeof showToast === "function") {
+      showToast(direction === "up" ? "Queue item moved up" : "Queue item moved down");
+    }
     loadQueue();
   } catch (e) {
-    /* ignore */
+    if (typeof showToast === "function") showToast("Queue reorder failed");
   }
 }
 
