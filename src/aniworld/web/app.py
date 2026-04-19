@@ -4009,7 +4009,7 @@ def _get_update_commit_history(page=1, per_page=30):
             "log",
             log_ref,
             f"--skip={skip}",
-            f"-n={per_page}",
+            f"--max-count={per_page}",
             "--date=short",
             "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s",
         ],
