@@ -30,10 +30,17 @@ from flask import (
 from flask_wtf.csrf import CSRFProtect
 
 from ..config import (
+    ANIWORLD_EPISODE_PATTERN,
+    ANIWORLD_SEASON_PATTERN,
+    ANIWORLD_SERIES_PATTERN,
     DEFAULT_USER_AGENT,
+    FILMPALAST_EPISODE_PATTERN,
     GLOBAL_SESSION,
     LANG_KEY_MAP,
     LANG_LABELS,
+    SERIENSTREAM_EPISODE_PATTERN,
+    SERIENSTREAM_SEASON_PATTERN,
+    SERIENSTREAM_SERIES_PATTERN,
     SUPPORTED_PROVIDERS,
     VERSION,
     display_version,
@@ -44,7 +51,7 @@ from ..models.common.common import (
     get_ffmpeg_runtime_state,
     terminate_ffmpeg_process_tree,
 )
-from ..providers import resolve_provider
+from ..providers import normalize_url, resolve_provider
 from ..search import (
     fetch_new_animes,
     fetch_new_episodes,
@@ -2894,6 +2901,86 @@ def _episode_language_labels_for_ui(episode, allow_provider_lookup=False):
     return labels
 
 
+def _flatten_provider_map(provider_map):
+    flattened = []
+    seen = set()
+    for providers in (provider_map or {}).values():
+        for provider_name in providers or []:
+            clean = str(provider_name or "").strip()
+            if not clean or clean in seen:
+                continue
+            seen.add(clean)
+            flattened.append(clean)
+    return _rank_provider_candidates(flattened)
+
+
+def _resolve_link_import_target(raw_url):
+    url = normalize_url(str(raw_url or "").strip())
+    if not url:
+        raise ValueError("url is required")
+
+    provider = resolve_provider(url)
+    site = _detect_site(url)
+    kind = "direct"
+    series_url = url
+    focus_season_url = ""
+    focus_episode_url = ""
+
+    if provider.name == "AniWorld":
+        if ANIWORLD_SERIES_PATTERN.fullmatch(url):
+            kind = "series"
+        elif ANIWORLD_SEASON_PATTERN.fullmatch(url):
+            kind = "season"
+            focus_season_url = url
+            series_url = re.sub(r"/(staffel-\d+|filme)$", "", url, flags=re.IGNORECASE)
+        elif ANIWORLD_EPISODE_PATTERN.fullmatch(url):
+            kind = "episode"
+            focus_episode_url = url
+            if "/filme/" in url:
+                focus_season_url = re.sub(r"/film-\d+$", "", url, flags=re.IGNORECASE)
+                series_url = re.sub(
+                    r"/filme/film-\d+$", "", url, flags=re.IGNORECASE
+                )
+            else:
+                focus_season_url = re.sub(
+                    r"/episode-\d+$", "", url, flags=re.IGNORECASE
+                )
+                series_url = re.sub(
+                    r"/staffel-\d+/episode-\d+$", "", url, flags=re.IGNORECASE
+                )
+    elif provider.name == "SerienStream":
+        if SERIENSTREAM_SERIES_PATTERN.fullmatch(url):
+            kind = "series"
+        elif SERIENSTREAM_SEASON_PATTERN.fullmatch(url):
+            kind = "season"
+            focus_season_url = url
+            series_url = re.sub(r"/staffel-\d+$", "", url, flags=re.IGNORECASE)
+        elif SERIENSTREAM_EPISODE_PATTERN.fullmatch(url):
+            kind = "episode"
+            focus_episode_url = url
+            focus_season_url = re.sub(r"/episode-\d+$", "", url, flags=re.IGNORECASE)
+            series_url = re.sub(
+                r"/staffel-\d+/episode-\d+$", "", url, flags=re.IGNORECASE
+            )
+    elif provider.name == "Filmpalast" and FILMPALAST_EPISODE_PATTERN.fullmatch(url):
+        kind = "movie"
+        focus_episode_url = url
+        focus_season_url = url
+        series_url = url
+
+    return {
+        "input_url": raw_url,
+        "normalized_url": url,
+        "site": site,
+        "source_name": provider.name,
+        "kind": kind,
+        "series_url": series_url,
+        "focus_season_url": focus_season_url,
+        "focus_episode_url": focus_episode_url,
+        "auto_sync_supported": bool(provider.series_cls),
+    }
+
+
 def _provider_fallback_order():
     custom = _normalize_provider_fallback_order(
         os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, "")
@@ -4738,6 +4825,24 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     def radar_page():
         return render_template("radar.html")
 
+    @app.route("/link-import")
+    def link_import_page():
+        return render_template(
+            "link_import.html", **_series_modal_template_context()
+        )
+
+    @app.route("/api/link-import/resolve", methods=["POST"])
+    def api_link_import_resolve():
+        data = request.get_json(silent=True) or {}
+        raw_url = str(data.get("url") or "").strip()
+        if not raw_url:
+            return jsonify({"error": "url is required"}), 400
+        try:
+            return jsonify(_resolve_link_import_target(raw_url))
+        except Exception as exc:
+            logger.warning("Link import resolve failed: %s", exc)
+            return jsonify({"error": str(exc)}), 400
+
     @app.route("/api/search", methods=["POST"])
     def api_search():
         data = request.get_json(silent=True) or {}
@@ -4911,6 +5016,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     @app.route("/api/episodes")
     def api_episodes():
         url = request.args.get("url", "").strip()
+        include_provider_details = request.args.get("include_providers", "0") == "1"
         if not url:
             return jsonify({"error": "url is required"}), 400
 
@@ -4929,6 +5035,14 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                         )
                         if downloaded:
                             break
+                provider_info = {}
+                providers_flat = []
+                if include_provider_details:
+                    try:
+                        provider_info = _extract_provider_info(episode.provider_data)
+                    except Exception:
+                        provider_info = {}
+                    providers_flat = _flatten_provider_map(provider_info)
                 return jsonify(
                     {
                         "episodes": [
@@ -4943,6 +5057,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                                 "languages": _episode_language_labels_for_ui(
                                     episode, allow_provider_lookup=True
                                 ),
+                                "providers_by_language": provider_info,
+                                "providers_flat": providers_flat,
                             }
                         ]
                     }
@@ -5026,6 +5142,15 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     ep.episode_number,
                 ) in downloaded_eps
 
+                provider_info = {}
+                providers_flat = []
+                if include_provider_details:
+                    try:
+                        provider_info = _extract_provider_info(ep.provider_data)
+                    except Exception:
+                        provider_info = {}
+                    providers_flat = _flatten_provider_map(provider_info)
+
                 episodes_data.append(
                     {
                         "url": ep.url,
@@ -5037,6 +5162,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                             ep,
                             allow_provider_lookup=allow_episode_language_lookup,
                         ),
+                        "providers_by_language": provider_info,
+                        "providers_flat": providers_flat,
                     }
                 )
             return jsonify({"episodes": episodes_data})

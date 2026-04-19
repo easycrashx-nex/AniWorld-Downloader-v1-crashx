@@ -1566,6 +1566,168 @@ h1 {
   text-transform: uppercase;
 }
 
+.link-import-panel,
+.link-import-workspace {
+  display: grid;
+  gap: 18px;
+}
+
+.link-import-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+}
+
+.link-import-hint {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.link-import-summary-card {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.link-import-summary-poster {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.link-import-summary-poster img,
+.link-import-summary-placeholder {
+  width: 100%;
+  max-width: 168px;
+  aspect-ratio: 2 / 3;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  object-fit: cover;
+  background: linear-gradient(180deg, rgba(53, 107, 149, 0.55), rgba(30, 58, 83, 0.7));
+}
+
+.link-import-summary-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.link-import-summary-copy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.link-import-summary-copy h2 {
+  margin: 0;
+}
+
+.link-import-summary-head,
+.link-import-summary-stats,
+.link-import-summary-meta,
+.link-import-actions,
+.link-import-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.link-import-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.link-import-summary-description {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.link-import-summary-stats span,
+.link-import-summary-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted-strong);
+  font-size: 0.86rem;
+}
+
+.link-import-toolbar,
+.link-import-controls {
+  display: grid;
+  gap: 16px;
+}
+
+.link-import-controls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.link-import-actions {
+  justify-content: flex-end;
+}
+
+.link-import-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-strong);
+}
+
+.link-import-status strong {
+  color: var(--text);
+}
+
+.link-import-status-warning {
+  color: #ffcf7c;
+}
+
+.link-import-seasons .season-body {
+  gap: 12px;
+}
+
+.link-import-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.link-import-pill-provider {
+  border-color: rgba(86, 182, 255, 0.18);
+  background: rgba(86, 182, 255, 0.1);
+  color: #bfe6ff;
+}
+
 .stats-panel {
   padding: 22px;
   border: 1px solid var(--border);
@@ -6251,7 +6413,8 @@ input[type="checkbox"] {
 
   .favorites-grid,
   .stats-detail-grid,
-  .library-toolbar {
+  .library-toolbar,
+  .link-import-controls {
     grid-template-columns: 1fr;
   }
 
@@ -6304,6 +6467,10 @@ input[type="checkbox"] {
   .settings-row button,
   .add-user-row button {
     width: 100%;
+  }
+
+  .link-import-input-row {
+    grid-template-columns: 1fr;
   }
 
   .settings-info-grid {
@@ -6463,14 +6630,27 @@ input[type="checkbox"] {
   .stats-detail-grid,
   .overview-grid,
   .insight-switcher,
-  .autosync-card-stats {
+  .autosync-card-stats,
+  .link-import-controls {
     grid-template-columns: 1fr;
+  }
+
+  .link-import-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .link-import-summary-poster {
+    justify-content: flex-start;
   }
 
   .favorites-grid,
   .library-toolbar,
   .chart-bars {
     grid-template-columns: 1fr;
+  }
+
+  .link-import-actions {
+    justify-content: flex-start;
   }
 
   .favorite-card {

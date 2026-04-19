@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Link Import - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="settings-container link-import-container">
+  <div class="page-header">
+    <span class="eyebrow">Tools</span>
+    <h1>Link Import</h1>
+    <p class="page-description">
+      Paste AniWorld, SerienStream, or FilmPalast links directly, inspect the
+      detected episodes and providers, and queue only what you want.
+    </p>
+  </div>
+
+  <section class="page-panel link-import-panel">
+    <div class="link-import-input-row">
+      <input
+        id="linkImportUrl"
+        type="text"
+        class="sync-select"
+        placeholder="Paste a series, season, or episode link..."
+        autocomplete="off"
+      />
+      <button id="linkImportAnalyzeBtn" class="btn-primary" type="button">
+        Analyze Link
+      </button>
+    </div>
+    <p class="link-import-hint">
+      Season links are useful when the normal browse flow acts up. The page
+      will resolve the URL, show the episodes it found, and then queue the
+      selected entries through the normal downloader pipeline.
+    </p>
+  </section>
+
+  <section class="page-panel link-import-workspace" id="linkImportWorkspace" hidden>
+    <div class="link-import-summary" id="linkImportSummary"></div>
+
+    <div class="link-import-toolbar">
+      <div class="link-import-controls">
+        <div class="settings-field">
+          <label class="settings-label" for="linkImportLanguage">Language</label>
+          <select id="linkImportLanguage" class="sync-select"></select>
+        </div>
+        <div class="settings-field">
+          <label class="settings-label" for="linkImportProvider">Provider</label>
+          <select id="linkImportProvider" class="sync-select">
+            <option value="Auto">Auto (best available)</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="settings-label" for="linkImportPath">Path</label>
+          <select id="linkImportPath" class="sync-select">
+            <option value="">Default</option>
+          </select>
+        </div>
+      </div>
+      <div class="link-import-actions">
+        <button class="btn-secondary btn-small" type="button" id="linkImportSelectAllBtn">
+          Select All
+        </button>
+        <button class="btn-secondary btn-small" type="button" id="linkImportSelectCompatibleBtn">
+          Select Compatible
+        </button>
+        <button class="btn-secondary btn-small" type="button" id="linkImportClearBtn">
+          Clear
+        </button>
+        <button class="btn-primary" type="button" id="linkImportQueueBtn">
+          Queue Selected
+        </button>
+      </div>
+    </div>
+
+    <div class="link-import-status" id="linkImportStatus"></div>
+    <div class="season-accordion link-import-seasons" id="linkImportSeasons"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='link-import.js') }}"></script>
+{% endblock %}

@@ -71,7 +71,7 @@
 
     {% set browse_active = request.endpoint in ['index', 'library_page', 'favorites_page'] %}
     {% set stats_active = request.endpoint in ['stats_page', 'timeline_page', 'radar_page'] %}
-    {% set settings_active = request.endpoint in ['settings_page', 'autosync_page', 'provider_health_page', 'diagnostics_page', 'maintenance_page', 'audit_page'] %}
+    {% set settings_active = request.endpoint in ['settings_page', 'autosync_page', 'link_import_page', 'provider_health_page', 'diagnostics_page', 'maintenance_page', 'audit_page'] %}
 
     <div class="app-shell">
       <div class="top-bar">
@@ -195,6 +195,15 @@
                 <span class="nav-dropdown-label">Auto-Sync</span>
                 <span class="nav-dropdown-note"
                   >Manage tracked shows and trigger sync runs.</span
+                >
+              </a>
+              <a
+                href="{{ url_for('link_import_page') }}"
+                class="nav-dropdown-link {% if request.endpoint == 'link_import_page' %}active{% endif %}"
+              >
+                <span class="nav-dropdown-label">Link Import</span>
+                <span class="nav-dropdown-note"
+                  >Paste series or season links and queue episodes manually.</span
                 >
               </a>
               <a
