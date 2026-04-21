@@ -290,9 +290,10 @@ class SerienstreamEpisode:
 
             # Try plain HTTP first — works when no modal is shown
             resp = GLOBAL_SESSION.get(self.redirect_url)
+            resolved_provider_url = None
             if urlparse(resp.url).netloc != urlparse(self.redirect_url).netloc:
                 # Redirect left s.to — no modal, plain session worked
-                self.__provider_url = resp.url
+                resolved_provider_url = resp.url
             else:
                 # Still on s.to — modal was shown, need browser
                 _lang_map = {Audio.GERMAN: "Deutsch", Audio.ENGLISH: "Englisch"}
@@ -306,9 +307,9 @@ class SerienstreamEpisode:
                     language_label,
                     expected_redirect_url=self.redirect_url,
                 )
-                self.__provider_url = result if result else resp.url
+                resolved_provider_url = result if result else resp.url
 
-            parsed_provider = urlparse((self.__provider_url or "").strip())
+            parsed_provider = urlparse((resolved_provider_url or "").strip())
             redirect_netloc = urlparse(self.redirect_url).netloc
             if not parsed_provider.scheme or not parsed_provider.netloc:
                 raise ValueError(
@@ -324,8 +325,9 @@ class SerienstreamEpisode:
                 logger.warning(
                     "SerienStream provider URL still points to redirect host for %s: %s",
                     self.selected_provider,
-                    self.__provider_url,
+                    resolved_provider_url,
                 )
+            self.__provider_url = resolved_provider_url
         return self.__provider_url
 
     @property
