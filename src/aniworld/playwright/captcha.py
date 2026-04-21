@@ -518,6 +518,26 @@ def solve_sto_modal(
             )
             _inject_session_cookies(context, episode_url)
             page = context.new_page()
+            from urllib.parse import urlparse as _urlparse
+
+            episode_netloc = _urlparse(episode_url).netloc
+            observed_external_url = None
+
+            def _capture_external_url(candidate_url: str):
+                nonlocal observed_external_url
+                if observed_external_url or not candidate_url:
+                    return
+                try:
+                    parsed = _urlparse(candidate_url)
+                except Exception:
+                    return
+                if not parsed.scheme or not parsed.netloc:
+                    return
+                if parsed.netloc != episode_netloc:
+                    observed_external_url = candidate_url
+
+            context.on("request", lambda request: _capture_external_url(request.url))
+            context.on("response", lambda response: _capture_external_url(response.url))
 
             with _captcha_state_lock:
                 _captcha_state = {"url": episode_url, "started_at": _time.time(), "solved": False}
@@ -528,7 +548,6 @@ def solve_sto_modal(
 
             # Single poll loop: streams screenshots from the start, waits for
             # Turnstile to auto-fill, clicks Weiter once, then waits for result.
-            from urllib.parse import urlparse as _urlparse
             final_url = None
             provider_clicked = False
             weiter_clicked = False
@@ -556,6 +575,11 @@ def solve_sto_modal(
                         final_url = current_page_url
                         logger.warning(f"External page URL found: {final_url}")
                         break
+
+                if observed_external_url:
+                    final_url = observed_external_url
+                    logger.warning(f"Observed external request URL: {final_url}")
+                    break
 
                 for frame in page.frames:
                     fu = frame.url
@@ -614,9 +638,25 @@ def solve_sto_modal(
                             weiter.click()
                             logger.warning("Submit clicked (Turnstile solved)")
                             weiter_clicked = True
+                            page.wait_for_timeout(800)
                         except Exception as e:
                             logger.warning(f"Submit button error: {e}")
                 else:
+                    has_clearance = any(
+                        c["name"] == "cf_clearance" for c in context.cookies()
+                    )
+                    if has_clearance and not post_clearance_reclick:
+                        if _click_sto_provider_option(
+                            page,
+                            provider_name,
+                            language_label,
+                            expected_redirect_url=expected_redirect_url,
+                        ):
+                            logger.warning(
+                                "Re-clicked s.to provider after Turnstile clearance"
+                            )
+                            page.wait_for_timeout(800)
+                        post_clearance_reclick = True
                     # Weiter was clicked – poll for the VOE URL
                     for frame in page.frames:
                         if frame.name == "player-iframe":
