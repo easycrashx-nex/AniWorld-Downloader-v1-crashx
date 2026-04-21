@@ -387,7 +387,96 @@ def _inject_session_cookies(context, url: str) -> None:
         pass
 
 
-def solve_sto_modal(episode_url: str, provider_name: str, language_label: str):
+def _sto_redirect_path(expected_redirect_url: str | None) -> str | None:
+    if not expected_redirect_url:
+        return None
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(expected_redirect_url)
+        path = parsed.path or ""
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        return path or None
+    except Exception:
+        return None
+
+
+def _click_sto_provider_option(
+    page,
+    provider_name: str,
+    language_label: str,
+    expected_redirect_url: str | None = None,
+) -> bool:
+    """
+    Trigger the original provider click on the episode page.
+
+    s.to now resolves some provider opens client-side. Replaying the native page
+    click is more reliable than hoping a raw GET on the redirect URL still
+    leaves the site.
+    """
+    redirect_path = _sto_redirect_path(expected_redirect_url)
+    try:
+        return bool(
+            page.evaluate(
+                """({ providerName, languageLabel, redirectPath }) => {
+                    const norm = (v) => String(v || "").trim();
+                    const nodes = [...document.querySelectorAll("[data-play-url][data-provider-name]")];
+                    if (!nodes.length) return false;
+
+                    let match = nodes.find((node) => {
+                        const nodePath = norm(node.dataset.playUrl);
+                        return (
+                            redirectPath &&
+                            nodePath === norm(redirectPath) &&
+                            norm(node.dataset.providerName) === providerName &&
+                            (!languageLabel || norm(node.dataset.languageLabel) === languageLabel)
+                        );
+                    });
+
+                    if (!match) {
+                        match = nodes.find((node) =>
+                            norm(node.dataset.providerName) === providerName &&
+                            (!languageLabel || norm(node.dataset.languageLabel) === languageLabel)
+                        );
+                    }
+
+                    if (!match) return false;
+
+                    match.scrollIntoView({ block: "center", inline: "center" });
+                    const clickable = match.closest("a,button,[role='button'],label,.hosterSiteDirectNav,li,div") || match;
+                    const rect = clickable.getBoundingClientRect();
+                    const eventInit = {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: rect.left + rect.width / 2,
+                        clientY: rect.top + rect.height / 2,
+                    };
+
+                    clickable.dispatchEvent(new MouseEvent("mousedown", eventInit));
+                    clickable.dispatchEvent(new MouseEvent("mouseup", eventInit));
+                    clickable.dispatchEvent(new MouseEvent("click", eventInit));
+                    if (typeof clickable.click === "function") clickable.click();
+                    return true;
+                }""",
+                {
+                    "providerName": provider_name,
+                    "languageLabel": language_label,
+                    "redirectPath": redirect_path,
+                },
+            )
+        )
+    except Exception:
+        return False
+
+
+def solve_sto_modal(
+    episode_url: str,
+    provider_name: str,
+    language_label: str,
+    expected_redirect_url: str | None = None,
+):
     """
     Open the s.to episode page in a browser, click the provider button,
     solve the Turnstile modal, click Weiter, and return the player-iframe
@@ -435,12 +524,15 @@ def solve_sto_modal(episode_url: str, provider_name: str, language_label: str):
 
             logger.warning(f"Opening episode page for modal solving: {episode_url}")
             page.goto(episode_url, wait_until="domcontentloaded")
+            page.wait_for_timeout(1200)
 
             # Single poll loop: streams screenshots from the start, waits for
             # Turnstile to auto-fill, clicks Weiter once, then waits for result.
             from urllib.parse import urlparse as _urlparse
             final_url = None
+            provider_clicked = False
             weiter_clicked = False
+            post_clearance_reclick = False
             start = _time.time()
 
             while _time.time() - start < 300:
@@ -457,6 +549,51 @@ def solve_sto_modal(episode_url: str, provider_name: str, language_label: str):
                             page.wait_for_timeout(300)
                         except Exception:
                             pass
+
+                current_page_url = page.url
+                if current_page_url and current_page_url not in ("about:blank", "", episode_url):
+                    if _urlparse(current_page_url).netloc != _urlparse(episode_url).netloc:
+                        final_url = current_page_url
+                        logger.warning(f"External page URL found: {final_url}")
+                        break
+
+                for frame in page.frames:
+                    fu = frame.url
+                    if not fu or fu in ("about:blank", ""):
+                        continue
+                    if _urlparse(fu).netloc != _urlparse(episode_url).netloc:
+                        final_url = fu
+                        logger.warning(f"Frame URL found: {final_url}")
+                        break
+                if final_url:
+                    break
+
+                for pg in context.pages:
+                    if pg is page:
+                        continue
+                    pu = pg.url
+                    if pu and pu not in ("about:blank", ""):
+                        if _urlparse(pu).netloc != _urlparse(episode_url).netloc:
+                            final_url = pu
+                            logger.warning(f"New page URL found: {final_url}")
+                            break
+                if final_url:
+                    break
+
+                if not provider_clicked:
+                    provider_clicked = _click_sto_provider_option(
+                        page,
+                        provider_name,
+                        language_label,
+                        expected_redirect_url=expected_redirect_url,
+                    )
+                    if provider_clicked:
+                        logger.warning(
+                            "Clicked s.to provider option for %s / %s",
+                            provider_name,
+                            language_label,
+                        )
+                        page.wait_for_timeout(800)
 
                 if not weiter_clicked:
                     # Check if Turnstile token is filled (user clicked checkbox

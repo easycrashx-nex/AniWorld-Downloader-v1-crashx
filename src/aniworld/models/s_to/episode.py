@@ -301,7 +301,10 @@ class SerienstreamEpisode:
                 language_label = _lang_map.get(audio, "Deutsch")
 
                 result = solve_sto_modal(
-                    self.url, self.selected_provider, language_label
+                    self.url,
+                    self.selected_provider,
+                    language_label,
+                    expected_redirect_url=self.redirect_url,
                 )
                 self.__provider_url = result if result else resp.url
 
