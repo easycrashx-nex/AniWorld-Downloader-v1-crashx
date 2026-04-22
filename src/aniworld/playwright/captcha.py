@@ -416,6 +416,26 @@ def _click_sto_provider_option(
     leaves the site.
     """
     redirect_path = _sto_redirect_path(expected_redirect_url)
+    selector = f'[data-provider-name="{provider_name}"]'
+    if language_label:
+        selector += f'[data-language-label="{language_label}"]'
+
+    try:
+        locator = page.locator(selector)
+        if locator.count() > 0:
+            target = locator.first
+            try:
+                target.scroll_into_view_if_needed(timeout=1500)
+            except Exception:
+                pass
+            try:
+                target.click(timeout=2000, force=True)
+                page.wait_for_timeout(250)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     try:
         return bool(
             page.evaluate(
@@ -443,21 +463,26 @@ def _click_sto_provider_option(
 
                     if (!match) return false;
 
-                    match.scrollIntoView({ block: "center", inline: "center" });
-                    const clickable = match.closest("a,button,[role='button'],label,.hosterSiteDirectNav,li,div") || match;
-                    const rect = clickable.getBoundingClientRect();
-                    const eventInit = {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        clientX: rect.left + rect.width / 2,
-                        clientY: rect.top + rect.height / 2,
-                    };
+                    for (const node of nodes) {
+                        node.classList.toggle("active", node === match);
+                    }
 
-                    clickable.dispatchEvent(new MouseEvent("mousedown", eventInit));
-                    clickable.dispatchEvent(new MouseEvent("mouseup", eventInit));
-                    clickable.dispatchEvent(new MouseEvent("click", eventInit));
+                    match.scrollIntoView({ block: "center", inline: "center" });
+
+                    const clickable =
+                        match.closest("a,button,[role='button'],label,.hosterSiteDirectNav,li,div") || match;
+                    const playPath = redirectPath || norm(match.dataset.playUrl);
+                    const fullPlayUrl = playPath ? new URL(playPath, window.location.origin).href : "";
+                    const iframe =
+                        document.querySelector('iframe[name="player-iframe"]') ||
+                        document.querySelector("#player-iframe") ||
+                        document.querySelector("article iframe") ||
+                        document.querySelector("iframe");
+
                     if (typeof clickable.click === "function") clickable.click();
+                    if (iframe && fullPlayUrl) {
+                        iframe.setAttribute("src", fullPlayUrl);
+                    }
                     return true;
                 }""",
                 {
@@ -509,19 +534,57 @@ def solve_sto_modal(
 
     global _captcha_state
     try:
-        extra_args = ["--window-position=-32000,-32000", "--window-size=1280,720"] if queue_id is not None else []
+        extra_args = (
+            ["--window-position=-32000,-32000", "--window-size=1280,720"]
+            if queue_id is not None
+            else []
+        )
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False, args=extra_args)
+            browser = p.chromium.launch(
+                headless=False,
+                args=["--disable-blink-features=AutomationControlled", *extra_args],
+            )
             context = browser.new_context(
                 viewport={"width": 1280, "height": 720},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                locale="de-DE",
+                extra_http_headers={
+                    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+                },
             )
             _inject_session_cookies(context, episode_url)
             page = context.new_page()
+            page.add_init_script(
+                """() => {
+                    window.__stoBridgeMessages = [];
+                    window.addEventListener("message", (event) => {
+                        try {
+                            const data = event && event.data;
+                            if (data && typeof data === "object" && data.type === "frameBridge") {
+                                window.__stoBridgeMessages.push({
+                                    origin: event.origin || "",
+                                    type: String(data.type || ""),
+                                    token: typeof data.t === "string" ? data.t : "",
+                                    err: data.err == null ? null : String(data.err),
+                                    ts: Date.now(),
+                                });
+                            }
+                        } catch (_) {}
+                    }, true);
+                }"""
+            )
             from urllib.parse import urlparse as _urlparse
+            import re as _re
 
             episode_netloc = _urlparse(episode_url).netloc
             observed_external_url = None
+            bridge_message_seen = False
+            external_url_pattern = _re.compile(r"https?://[^\s\"'<>]+")
 
             def _capture_external_url(candidate_url: str):
                 nonlocal observed_external_url
@@ -536,15 +599,54 @@ def solve_sto_modal(
                 if parsed.netloc != episode_netloc:
                     observed_external_url = candidate_url
 
+            def _capture_external_url_from_text(body: str):
+                if observed_external_url or not body:
+                    return
+                for match in external_url_pattern.findall(body):
+                    candidate = str(match or "").rstrip(").,;\"'")
+                    try:
+                        parsed = _urlparse(candidate)
+                    except Exception:
+                        continue
+                    if parsed.scheme and parsed.netloc and parsed.netloc != episode_netloc:
+                        _capture_external_url(candidate)
+                        if observed_external_url:
+                            return
+
+            def _capture_response(response):
+                _capture_external_url(response.url)
+                if observed_external_url:
+                    return
+                try:
+                    request = response.request
+                    resource_type = request.resource_type
+                except Exception:
+                    resource_type = ""
+                if resource_type not in ("xhr", "fetch", "document", "iframe"):
+                    return
+                try:
+                    if _urlparse(response.url).netloc != episode_netloc:
+                        return
+                except Exception:
+                    return
+                try:
+                    _capture_external_url_from_text(response.text())
+                except Exception:
+                    return
+
             context.on("request", lambda request: _capture_external_url(request.url))
-            context.on("response", lambda response: _capture_external_url(response.url))
+            context.on("response", _capture_response)
 
             with _captcha_state_lock:
                 _captcha_state = {"url": episode_url, "started_at": _time.time(), "solved": False}
 
             logger.warning(f"Opening episode page for modal solving: {episode_url}")
             page.goto(episode_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(1200)
+            try:
+                page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                pass
+            page.wait_for_timeout(1800)
 
             # Single poll loop: streams screenshots from the start, waits for
             # Turnstile to auto-fill, clicks Weiter once, then waits for result.
@@ -568,6 +670,35 @@ def solve_sto_modal(
                             page.wait_for_timeout(300)
                         except Exception:
                             pass
+
+                if not provider_clicked:
+                    provider_clicked = _click_sto_provider_option(
+                        page,
+                        provider_name,
+                        language_label,
+                        expected_redirect_url=expected_redirect_url,
+                    )
+                    if provider_clicked:
+                        logger.warning(
+                            "Armed s.to provider option for %s / %s",
+                            provider_name,
+                            language_label,
+                        )
+                        page.wait_for_timeout(1200)
+
+                try:
+                    bridge_messages = page.evaluate(
+                        "() => Array.isArray(window.__stoBridgeMessages) ? window.__stoBridgeMessages.slice(-5) : []"
+                    )
+                except Exception:
+                    bridge_messages = []
+                if bridge_messages and not bridge_message_seen:
+                    bridge_message_seen = True
+                    latest_bridge = bridge_messages[-1]
+                    logger.warning(
+                        "Observed s.to frameBridge message (err=%s)",
+                        latest_bridge.get("err") if isinstance(latest_bridge, dict) else None,
+                    )
 
                 current_page_url = page.url
                 if current_page_url and current_page_url not in ("about:blank", "", episode_url):
@@ -603,21 +734,6 @@ def solve_sto_modal(
                             break
                 if final_url:
                     break
-
-                if not provider_clicked:
-                    provider_clicked = _click_sto_provider_option(
-                        page,
-                        provider_name,
-                        language_label,
-                        expected_redirect_url=expected_redirect_url,
-                    )
-                    if provider_clicked:
-                        logger.warning(
-                            "Clicked s.to provider option for %s / %s",
-                            provider_name,
-                            language_label,
-                        )
-                        page.wait_for_timeout(800)
 
                 if not weiter_clicked:
                     # Check if Turnstile token is filled (user clicked checkbox
