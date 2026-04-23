@@ -37,6 +37,10 @@ from ..config import (
     DEFAULT_USER_AGENT,
     FILMPALAST_EPISODE_PATTERN,
     GLOBAL_SESSION,
+    apply_global_dns_mode,
+    get_dns_mode_label,
+    get_dns_resolver_servers,
+    get_global_dns_mode,
     LANG_KEY_MAP,
     LANG_LABELS,
     SERIENSTREAM_EPISODE_PATTERN,
@@ -45,6 +49,7 @@ from ..config import (
     SUPPORTED_PROVIDERS,
     VERSION,
     display_version,
+    normalize_dns_mode,
 )
 from ..extractors import provider_functions
 from ..logger import get_logger
@@ -162,6 +167,7 @@ _ENV_AUTO_PROVIDER_SWITCH = "ANIWORLD_AUTO_PROVIDER_SWITCH"
 _ENV_RATE_LIMIT_GUARD = "ANIWORLD_RATE_LIMIT_GUARD"
 _ENV_PREFLIGHT_CHECK = "ANIWORLD_PREFLIGHT_CHECK"
 _ENV_MP4_FALLBACK_REMUX = "ANIWORLD_MP4_FALLBACK_REMUX"
+_ENV_DNS_MODE = "ANIWORLD_DNS_MODE"
 _ENV_UPDATE_REMOTE_URL = "ANIWORLD_UPDATE_REMOTE_URL"
 _ENV_UPDATE_REMOTE_BRANCH = "ANIWORLD_UPDATE_REMOTE_BRANCH"
 _ENV_UPDATE_LOCAL_COMMIT = "ANIWORLD_UPDATE_LOCAL_COMMIT"
@@ -173,6 +179,7 @@ _DEFAULT_FORK_REMOTE_URL = (
 _AUTO_UPDATE_IDLE_SECONDS = 20 * 60
 _AUTO_UPDATE_LOOP_SECONDS = 60
 _AUTO_UPDATE_REMOTE_CHECK_SECONDS = 15 * 60
+_DNS_TEST_DOMAINS = ("aniworld.to", "s.to", "filmpalast.to")
 
 
 def _experimental_flags():
@@ -434,6 +441,80 @@ def _server_network_info(app):
         "server_scope": "Local only" if is_local_only else "LAN / exposed",
         "vpn": _detect_vpn_status(),
     }
+
+
+def _dns_mode_value():
+    return normalize_dns_mode(
+        _global_pref("dns_mode", os.environ.get(_ENV_DNS_MODE, get_global_dns_mode()))
+    )
+
+
+def _dns_status_message(mode, servers):
+    if mode == "system":
+        return "System DNS active"
+    if servers:
+        return f"{get_dns_mode_label(mode)} active — Server: {', '.join(servers)}"
+    return f"{get_dns_mode_label(mode)} active"
+
+
+def _dns_status_message(mode, servers):
+    if mode == "system":
+        return "System DNS active"
+    if servers:
+        return f"{get_dns_mode_label(mode)} active - Server: {', '.join(servers)}"
+    return f"{get_dns_mode_label(mode)} active"
+
+
+def _dns_probe_domain(domain):
+    response = None
+    try:
+        response = GLOBAL_SESSION.get(
+            f"https://{domain}",
+            allow_redirects=True,
+            timeout=8,
+            stream=True,
+        )
+        final_host = urlparse(str(response.url or "")).netloc
+        return {
+            "domain": domain,
+            "ok": True,
+            "message": "Reachable & verified",
+            "final_host": final_host,
+            "status_code": response.status_code,
+        }
+    except Exception as exc:
+        return {
+            "domain": domain,
+            "ok": False,
+            "message": str(exc).strip()[:180] or "Resolution failed",
+            "final_host": "",
+            "status_code": None,
+        }
+    finally:
+        try:
+            if response is not None:
+                response.close()
+        except Exception:
+            pass
+
+
+def _dns_diagnostics_payload(force=False):
+    mode = _dns_mode_value()
+    cache_key = f"network:dns_diag:{mode}"
+    if not force:
+        cached = _cache_get(cache_key, 90)
+        if cached is not None:
+            return cached
+
+    servers = get_dns_resolver_servers(mode)
+    payload = {
+        "mode": mode,
+        "label": get_dns_mode_label(mode),
+        "servers": servers,
+        "status": _dns_status_message(mode, servers),
+        "reachability": [_dns_probe_domain(domain) for domain in _DNS_TEST_DOMAINS],
+    }
+    return _cache_set(cache_key, payload)
 
 
 _update_runtime_lock = threading.Lock()
@@ -1720,6 +1801,7 @@ def _settings_payload(
         "mp4_fallback_remux": _normalize_pref_bool(
             os.environ.get(_ENV_MP4_FALLBACK_REMUX, "0")
         ),
+        "dns_mode": _dns_mode_value(),
         "provider_fallback_order": _normalize_provider_fallback_order(
             os.environ.get(_ENV_PROVIDER_FALLBACK_ORDER, "")
         ),
@@ -4879,6 +4961,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
     init_audit_log_db()
     init_provider_score_history_db()
 
+    try:
+        apply_global_dns_mode(_dns_mode_value())
+    except Exception as exc:
+        logger.warning("Failed to apply configured DNS mode: %s", exc)
+
     # Wire up captcha hooks so the Playwright module can signal the Web UI
     from ..playwright import captcha as _captcha_mod
     _captcha_mod._on_captcha_start = set_captcha_url
@@ -5884,6 +5971,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             auto_open_captcha_tab=auto_open_captcha_tab,
         )
         payload.update(_server_network_info(app))
+        payload["dns_diagnostics"] = _dns_diagnostics_payload(force=False)
         return jsonify(payload)
 
     @app.route("/api/settings", methods=["PUT"])
@@ -5915,6 +6003,15 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             _set_bool_env(_ENV_PREFLIGHT_CHECK, data["preflight_check"])
         if "mp4_fallback_remux" in data:
             _set_bool_env(_ENV_MP4_FALLBACK_REMUX, data["mp4_fallback_remux"])
+        if "dns_mode" in data:
+            dns_mode = normalize_dns_mode(data["dns_mode"])
+            try:
+                os.environ[_ENV_DNS_MODE] = dns_mode
+                apply_global_dns_mode(dns_mode)
+                _set_global_pref("dns_mode", dns_mode)
+                _cache_invalidate("network:dns_diag:")
+            except Exception as exc:
+                return jsonify({"error": f"Failed to apply DNS mode: {exc}"}), 400
         if "provider_fallback_order" in data:
             os.environ[_ENV_PROVIDER_FALLBACK_ORDER] = (
                 _normalize_provider_fallback_order(data["provider_fallback_order"])
@@ -6144,6 +6241,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "download_path",
                     "bandwidth_limit_kbps",
                     "download_backend",
+                    "dns_mode",
                     "provider_fallback_order",
                     "disk_warn_gb",
                     "disk_warn_percent",
@@ -6195,6 +6293,16 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         )
         _emit_ui_event("settings", "autosync", "dashboard", "library", "nav")
         return jsonify({"ok": True})
+
+    @app.route("/api/settings/dns-diagnostics")
+    def api_settings_dns_diagnostics():
+        force = str(request.args.get("force", "")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        return jsonify(_dns_diagnostics_payload(force=force))
 
     @app.route("/api/custom-paths")
     def api_custom_paths():

@@ -13,6 +13,7 @@
 
   <nav class="settings-nav">
     <a href="#settings-system" class="settings-nav-link">System</a>
+    <a href="#settings-network" class="settings-nav-link">Network</a>
     <a href="#settings-downloads" class="settings-nav-link">Downloads</a>
     <a href="#settings-search" class="settings-nav-link">Search</a>
     <a href="#settings-notifications" class="settings-nav-link">Notifications</a>
@@ -196,6 +197,46 @@
       <code>--web-expose</code>, your local network IPs will also appear here.
       VPN detection is best-effort and recognizes common tunnel setups like
       WireGuard, OpenVPN, Tailscale, and Gluetun-style environments.
+    </div>
+  </div>
+
+  <div class="settings-section" id="settings-network">
+    <h2>Network / DNS</h2>
+    <div class="settings-row settings-dns-row">
+      <div class="settings-field settings-field-dns">
+        <label class="field-label" for="dnsMode">DNS Mode</label>
+        <select id="dnsMode" class="sync-select">
+          <option value="google">Google (8.8.8.8)</option>
+          <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+          <option value="quad9">Quad9 (9.9.9.9)</option>
+          <option value="system">System default</option>
+        </select>
+      </div>
+      <button type="button" class="btn-primary" id="dnsSaveBtn">
+        Save
+      </button>
+    </div>
+    <div class="settings-hint">
+      Forces the downloader to resolve domains through the selected DNS chain.
+      Google mode is hard-wired to direct resolvers first, not just browser-style
+      DoH aliases. No restart is required.
+    </div>
+    <div class="settings-info-card settings-dns-card">
+      <div class="settings-dns-head">
+        <span class="field-label">DNS Diagnostics</span>
+        <button type="button" class="btn-secondary" id="dnsRetestBtn">
+          Retest
+        </button>
+      </div>
+      <strong id="dnsStatusValue" class="settings-static-value">Loading...</strong>
+      <div id="dnsServers" class="settings-chip-list">
+        <span class="settings-chip">Loading...</span>
+      </div>
+      <div id="dnsReachabilityList" class="settings-disk-list">
+        <div class="settings-disk-card">
+          <strong>Loading...</strong>
+        </div>
+      </div>
     </div>
   </div>
 

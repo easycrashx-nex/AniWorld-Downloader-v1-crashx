@@ -5285,6 +5285,46 @@ input[type="checkbox"] {
   max-width: 220px;
 }
 
+.settings-dns-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+}
+
+.settings-field-dns {
+  flex: 1 1 320px;
+}
+
+.settings-dns-row > button {
+  min-width: 140px;
+}
+
+.settings-dns-card {
+  margin-top: 16px;
+}
+
+.settings-dns-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-dns-ok {
+  color: #4ade80;
+}
+
+.settings-dns-error {
+  color: #fca5a5;
+}
+
+.settings-dns-card-error {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(248, 113, 113, 0.08);
+}
+
 .settings-row-download-rules {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

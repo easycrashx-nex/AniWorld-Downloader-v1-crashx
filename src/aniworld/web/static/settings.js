@@ -51,6 +51,12 @@ const serverVpnIpsWrap = document.getElementById("serverVpnIps");
 const serverVpnClientsWrap = document.getElementById("serverVpnClients");
 const serverVpnInterfaces = document.getElementById("serverVpnInterfaces");
 const diskGuardList = document.getElementById("diskGuardList");
+const dnsModeSelect = document.getElementById("dnsMode");
+const dnsSaveBtn = document.getElementById("dnsSaveBtn");
+const dnsRetestBtn = document.getElementById("dnsRetestBtn");
+const dnsStatusValue = document.getElementById("dnsStatusValue");
+const dnsServersWrap = document.getElementById("dnsServers");
+const dnsReachabilityList = document.getElementById("dnsReachabilityList");
 const externalNotificationsEnabledCb = document.getElementById(
   "externalNotificationsEnabled",
 );
@@ -267,6 +273,7 @@ function refreshSettingsSelects() {
   if (uiBackgroundSelect) window.refreshCustomSelect(uiBackgroundSelect);
   if (smartRetryProfileSelect) window.refreshCustomSelect(smartRetryProfileSelect);
   if (downloadBackendSelect) window.refreshCustomSelect(downloadBackendSelect);
+  if (dnsModeSelect) window.refreshCustomSelect(dnsModeSelect);
   if (downloadSpeedProfileSelect) {
     window.refreshCustomSelect(downloadSpeedProfileSelect);
   }
@@ -489,6 +496,7 @@ function captureSettingsState() {
     sync_provider: syncProviderSelect?.value || "VOE",
     bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
     download_backend: downloadBackendSelect?.value || "auto",
+    dns_mode: dnsModeSelect?.value || "google",
     download_speed_profile: downloadSpeedProfileSelect?.value || "balanced",
     download_engine_rules: downloadEngineRulesInput?.value || "",
     auto_provider_switch: !!autoProviderSwitchCb?.checked,
@@ -578,6 +586,41 @@ function attachSettingsDirtyListeners() {
     } else {
       setSettingsDirty(false);
     }
+  });
+}
+
+function renderDnsDiagnostics(data) {
+  if (dnsStatusValue) {
+    dnsStatusValue.textContent = data?.status || "DNS diagnostics unavailable";
+  }
+  renderSettingsChipList(
+    dnsServersWrap,
+    Array.isArray(data?.servers) && data.servers.length
+      ? data.servers
+      : [data?.mode === "system" ? "System resolver" : "Unavailable"],
+  );
+  if (!dnsReachabilityList) return;
+  dnsReachabilityList.innerHTML = "";
+  const entries = Array.isArray(data?.reachability) ? data.reachability : [];
+  if (!entries.length) {
+    dnsReachabilityList.innerHTML =
+      '<div class="settings-disk-card settings-disk-card-unknown"><strong>No DNS diagnostics yet</strong></div>';
+    return;
+  }
+  entries.forEach((entry) => {
+    const ok = !!entry?.ok;
+    const card = document.createElement("div");
+    card.className = "settings-disk-card";
+    if (!ok) card.classList.add("settings-dns-card-error");
+    const finalHost = String(entry?.final_host || "").trim();
+    const meta = [];
+    if (entry?.message) meta.push(String(entry.message));
+    if (finalHost) meta.push(`Resolved via ${finalHost}`);
+    if (entry?.status_code) meta.push(`HTTP ${entry.status_code}`);
+    card.innerHTML =
+      `<strong>${escapeSettingsHtml(entry?.domain || "Unknown host")}</strong>` +
+      `<span class="settings-disk-meta ${ok ? "settings-dns-ok" : "settings-dns-error"}">${escapeSettingsHtml(meta.join(" • "))}</span>`;
+    dnsReachabilityList.appendChild(card);
   });
 }
 
@@ -1019,6 +1062,7 @@ async function saveAllSettings() {
     await updateSettings(payload);
     syncSettingsBaselineFromDom();
     invalidateQueuePrefs();
+    await refreshDnsDiagnostics(true);
     await loadUpdateStatus(false);
     showToast("All settings saved");
   } catch (e) {
@@ -1348,6 +1392,9 @@ async function loadSettings() {
       if (downloadBackendSelect) {
         downloadBackendSelect.value = data.download_backend || "auto";
       }
+      if (dnsModeSelect) {
+        dnsModeSelect.value = data.dns_mode || "google";
+      }
       if (downloadSpeedProfileSelect) {
         downloadSpeedProfileSelect.value =
           data.download_speed_profile || "balanced";
@@ -1409,6 +1456,7 @@ async function loadSettings() {
       renderSettingsChipList(serverVpnClientsWrap, data.vpn?.clients || []);
       renderVpnInterfaces(data.vpn?.interfaces || []);
       renderDiskGuard(data.disk_guard || null);
+      renderDnsDiagnostics(data.dns_diagnostics || null);
       applyBrowserNotificationPrefsClient(data);
       if (searchDefaultSortSelect) {
         searchDefaultSortSelect.value = data.search_default_sort || "source";
@@ -1721,6 +1769,40 @@ async function saveAutoUpdateEnabled() {
     );
   } catch (e) {
     showToast("Failed to save automatic updates: " + e.message);
+  }
+}
+
+async function refreshDnsDiagnostics(force = false) {
+  try {
+    if (dnsRetestBtn) dnsRetestBtn.disabled = true;
+    const suffix = force ? "?force=1" : "";
+    const resp = await fetch("/api/settings/dns-diagnostics" + suffix, {
+      cache: "no-store",
+    });
+    const data = await resp.json();
+    renderDnsDiagnostics(data);
+    return data;
+  } catch (e) {
+    renderDnsDiagnostics(null);
+    showToast("Failed to refresh DNS diagnostics: " + e.message);
+    return null;
+  } finally {
+    if (dnsRetestBtn) dnsRetestBtn.disabled = false;
+  }
+}
+
+async function saveDnsSettings() {
+  if (!dnsModeSelect) return;
+  try {
+    if (dnsSaveBtn) dnsSaveBtn.disabled = true;
+    await updateSettings({ dns_mode: dnsModeSelect.value });
+    mergeSettingsBaseline({ dns_mode: dnsModeSelect.value });
+    await refreshDnsDiagnostics(true);
+    showToast("DNS mode saved");
+  } catch (e) {
+    showToast("Failed to save DNS mode: " + e.message);
+  } finally {
+    if (dnsSaveBtn) dnsSaveBtn.disabled = false;
   }
 }
 
@@ -2177,6 +2259,12 @@ if (settingsSaveAllBtn) {
 }
 if (settingsDiscardBtn) {
   settingsDiscardBtn.addEventListener("click", discardAllSettingsChanges);
+}
+if (dnsSaveBtn) {
+  dnsSaveBtn.addEventListener("click", saveDnsSettings);
+}
+if (dnsRetestBtn) {
+  dnsRetestBtn.addEventListener("click", () => refreshDnsDiagnostics(true));
 }
 if (updateCommitHistoryDetails) {
   updateCommitHistoryDetails.addEventListener("toggle", () => {
