@@ -201,25 +201,32 @@
   </div>
 
   <div class="settings-section" id="settings-network">
-    <h2>Network / DNS</h2>
-    <div class="settings-row settings-dns-row">
-      <div class="settings-field settings-field-dns">
-        <label class="field-label" for="dnsMode">DNS Mode</label>
-        <select id="dnsMode" class="sync-select">
-          <option value="google">Google (8.8.8.8)</option>
-          <option value="cloudflare">Cloudflare (1.1.1.1)</option>
-          <option value="quad9">Quad9 (9.9.9.9)</option>
-          <option value="system">System default</option>
-        </select>
+    <div class="settings-section-head">
+      <div>
+        <h2>Network / DNS</h2>
+        <p class="settings-section-copy">
+          Control how domains are resolved and verify that the main source
+          domains are reachable through the active resolver chain.
+        </p>
       </div>
-      <button type="button" class="btn-primary" id="dnsSaveBtn">
-        Save
-      </button>
     </div>
-    <div class="settings-hint">
-      Forces the downloader to resolve domains through the selected DNS chain.
-      Google mode is hard-wired to direct resolvers first, not just browser-style
-      DoH aliases. No restart is required.
+    <div class="settings-form-card">
+      <div class="settings-row settings-dns-row">
+        <div class="settings-field settings-field-dns">
+          <label class="field-label" for="dnsMode">DNS Mode</label>
+          <select id="dnsMode" class="sync-select">
+            <option value="google">Google (8.8.8.8)</option>
+            <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+            <option value="quad9">Quad9 (9.9.9.9)</option>
+            <option value="system">System default</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-hint">
+        Forces the downloader to resolve domains through the selected DNS chain.
+        Google mode is hard-wired to direct resolvers first, not just
+        browser-style DoH aliases. No restart is required.
+      </div>
     </div>
     <div class="settings-info-card settings-dns-card">
       <div class="settings-dns-head">
@@ -241,66 +248,85 @@
   </div>
 
   <div class="settings-section">
-    <h2>Runtime & Recovery</h2>
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="experimentalFilmpalast"
-        onchange="saveExperimentalFilmpalast()"
-      />
-      Show FilmPalast in the downloader
-    </label>
-    <div class="settings-hint">
-      Re-enables FilmPalast in the home area while the source is still in
-      development.
+    <div class="settings-section-head">
+      <div>
+        <h2>Runtime & Recovery</h2>
+        <p class="settings-section-copy">
+          Runtime toggles for source visibility, recovery behavior, and captcha
+          handling while the service is running.
+        </p>
+      </div>
     </div>
+    <div class="settings-form-card">
+      <label class="settings-checkbox">
+        <input
+          type="checkbox"
+          id="experimentalFilmpalast"
+          onchange="saveExperimentalFilmpalast()"
+        />
+        Show FilmPalast in the downloader
+      </label>
+      <div class="settings-hint">
+        Re-enables FilmPalast in the home area while the source is still in
+        development.
+      </div>
 
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="experimentalSelfHeal"
-        onchange="saveExperimentalSelfHeal()"
-      />
-      Experimental stuck download self-heal
-    </label>
-    <div class="settings-hint">
-      Watches active ffmpeg downloads for hard stalls, kills the stuck process
-      tree, and requeues the same job instead of letting it die in place. This
-      is off by default and can put extra load on the server while a broken
-      stream is being analyzed and recovered.
-    </div>
+      <label class="settings-checkbox">
+        <input
+          type="checkbox"
+          id="experimentalSelfHeal"
+          onchange="saveExperimentalSelfHeal()"
+        />
+        Experimental stuck download self-heal
+      </label>
+      <div class="settings-hint">
+        Watches active ffmpeg downloads for hard stalls, kills the stuck
+        process tree, and requeues the same job instead of letting it die in
+        place. This is off by default and can put extra load on the server
+        while a broken stream is being analyzed and recovered.
+      </div>
 
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="safeMode"
-        onchange="saveSafeMode()"
-      />
-      Safe Mode
-    </label>
-    <div class="settings-hint">
-      Turns off the riskiest experimental recovery helpers and outbound webhook
-      notifications so the downloader stays in a conservative runtime mode.
-    </div>
+      <label class="settings-checkbox">
+        <input
+          type="checkbox"
+          id="safeMode"
+          onchange="saveSafeMode()"
+        />
+        Safe Mode
+      </label>
+      <div class="settings-hint">
+        Turns off the riskiest experimental recovery helpers and outbound
+        webhook notifications so the downloader stays in a conservative runtime
+        mode.
+      </div>
 
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="autoOpenCaptchaTab"
-        onchange="saveAutoOpenCaptchaTab()"
-      />
-      Auto open visible captcha tab
-    </label>
-    <div class="settings-hint">
-      When enabled, the solve page opens automatically in a new visible tab as
-      soon as a running queue item needs manual captcha interaction. When
-      disabled, the captcha browser stays hidden in the background and only
-      opens when you press <code>Solve Captcha</code> yourself.
+      <label class="settings-checkbox">
+        <input
+          type="checkbox"
+          id="autoOpenCaptchaTab"
+          onchange="saveAutoOpenCaptchaTab()"
+        />
+        Auto open visible captcha tab
+      </label>
+      <div class="settings-hint">
+        When enabled, the solve page opens automatically in a new visible tab
+        as soon as a running queue item needs manual captcha interaction. When
+        disabled, the captcha browser stays hidden in the background and only
+        opens when you press <code>Solve Captcha</code> yourself.
+      </div>
     </div>
   </div>
 
   <div class="settings-section" id="settings-notifications">
-    <h2>Browser Notifications</h2>
+    <div class="settings-section-head">
+      <div>
+        <h2>Browser Notifications</h2>
+        <p class="settings-section-copy">
+          Control local browser alerts and which product areas are allowed to
+          raise them.
+        </p>
+      </div>
+    </div>
     <div class="settings-info-card">
       <span class="field-label">Browser Permission</span>
       <div class="settings-inline-actions settings-inline-actions-start">
@@ -390,7 +416,15 @@
   </div>
 
   <div class="settings-section">
-    <h2>External Notifications</h2>
+    <div class="settings-section-head">
+      <div>
+        <h2>External Notifications</h2>
+        <p class="settings-section-copy">
+          Forward queue, library, and system events to Discord or generic
+          webhook targets.
+        </p>
+      </div>
+    </div>
     <label class="settings-checkbox">
       <input
         type="checkbox"
@@ -472,7 +506,15 @@
   </div>
 
   <div class="settings-section" id="settings-ui">
-    <h2>UI Settings</h2>
+    <div class="settings-section-head">
+      <div>
+        <h2>UI Settings</h2>
+        <p class="settings-section-copy">
+          Personal display preferences for density, theme, motion, and visual
+          behavior tied to your account.
+        </p>
+      </div>
+    </div>
     <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
       <div class="settings-field">
         <label class="field-label">UI Language</label>
@@ -671,287 +713,351 @@
   </div>
 
   <div class="settings-section" id="settings-search">
-    <h2>Default Search Filters</h2>
-    <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
-      <div class="settings-field">
-        <label class="field-label">Default Sort</label>
-        <select
-          id="searchDefaultSort"
-          onchange="saveSearchDefaults()"
-          class="sync-select"
-        >
-          <option value="source">Best Match</option>
-          <option value="year-desc">Newest Year</option>
-          <option value="year-asc">Oldest Year</option>
-          <option value="title-asc">Title A-Z</option>
-          <option value="title-desc">Title Z-A</option>
-        </select>
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Default Genres</label>
-        <input
-          type="text"
-          id="searchDefaultGenres"
-          placeholder="Action, Fantasy"
-        />
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Year From</label>
-        <input
-          type="number"
-          id="searchDefaultYearFrom"
-          min="1950"
-          max="2099"
-          placeholder="Optional"
-        />
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Year To</label>
-        <input
-          type="number"
-          id="searchDefaultYearTo"
-          min="1950"
-          max="2099"
-          placeholder="Optional"
-        />
+    <div class="settings-section-head">
+      <div>
+        <h2>Default Search Filters</h2>
+        <p class="settings-section-copy">
+          Preset the home search screen so recurring filters start in the state
+          you actually use.
+        </p>
       </div>
     </div>
-    <div class="settings-row" style="gap: 18px; flex-wrap: wrap">
-      <label class="settings-checkbox">
-        <input type="checkbox" id="searchDefaultFavoritesOnly" />
-        Favorites Only by default
-      </label>
-      <label class="settings-checkbox">
-        <input type="checkbox" id="searchDefaultDownloadedOnly" />
-        Downloaded Only by default
-      </label>
-      <button onclick="saveSearchDefaults()">Save Search Defaults</button>
-      <button class="btn-secondary" onclick="resetSearchDefaultsConfig()">
-        Reset Search Defaults
-      </button>
-    </div>
-    <div class="settings-hint">
-      These values are applied automatically on the Home search screen and are
-      also used when you hit Reset Filters.
+    <div class="settings-form-card">
+      <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
+        <div class="settings-field">
+          <label class="field-label">Default Sort</label>
+          <select
+            id="searchDefaultSort"
+            onchange="saveSearchDefaults()"
+            class="sync-select"
+          >
+            <option value="source">Best Match</option>
+            <option value="year-desc">Newest Year</option>
+            <option value="year-asc">Oldest Year</option>
+            <option value="title-asc">Title A-Z</option>
+            <option value="title-desc">Title Z-A</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Default Genres</label>
+          <input
+            type="text"
+            id="searchDefaultGenres"
+            placeholder="Action, Fantasy"
+          />
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Year From</label>
+          <input
+            type="number"
+            id="searchDefaultYearFrom"
+            min="1950"
+            max="2099"
+            placeholder="Optional"
+          />
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Year To</label>
+          <input
+            type="number"
+            id="searchDefaultYearTo"
+            min="1950"
+            max="2099"
+            placeholder="Optional"
+          />
+        </div>
+      </div>
+      <div class="settings-row" style="gap: 18px; flex-wrap: wrap">
+        <label class="settings-checkbox">
+          <input type="checkbox" id="searchDefaultFavoritesOnly" />
+          Favorites Only by default
+        </label>
+        <label class="settings-checkbox">
+          <input type="checkbox" id="searchDefaultDownloadedOnly" />
+          Downloaded Only by default
+        </label>
+        <button class="btn-secondary" onclick="resetSearchDefaultsConfig()">
+          Reset Search Defaults
+        </button>
+      </div>
+      <div class="settings-hint">
+        These values are applied automatically on the Home search screen and
+        are also used when you hit Reset Filters.
+      </div>
     </div>
   </div>
 
   <div class="settings-section">
-    <h2>Auto-Sync Defaults</h2>
-    <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
-      <div class="settings-field">
-        <label class="field-label">Schedule</label>
-        <select
-          id="syncSchedule"
-          onchange="saveSyncSchedule()"
-          class="sync-select"
-        >
-          <option value="0">Disabled</option>
-          <option value="1min">1 min (Debug)</option>
-          <option value="30min">30 min</option>
-          <option value="1h">1 hour</option>
-          <option value="2h">2 hours</option>
-          <option value="4h">4 hours</option>
-          <option value="8h">8 hours</option>
-          <option value="12h">12 hours</option>
-          <option value="16h">16 hours</option>
-          <option value="24h">24 hours</option>
-        </select>
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Default Language</label>
-        <select
-          id="syncLanguage"
-          onchange="saveSyncDefaults()"
-          class="sync-select"
-        >
-          <option>German Dub</option>
-          <option>English Sub</option>
-          <option>German Sub</option>
-        </select>
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Default Provider</label>
-        <select
-          id="syncProvider"
-          onchange="saveSyncDefaults()"
-          class="sync-select"
-        >
-          {% for p in supported_providers %}
-          <option>{{ p }}</option>
-          {% endfor %}
-        </select>
+    <div class="settings-section-head">
+      <div>
+        <h2>Auto-Sync Defaults</h2>
+        <p class="settings-section-copy">
+          Baseline defaults used when new tracked jobs are created from the UI.
+        </p>
       </div>
     </div>
-    <div class="settings-hint">
-      Auto-Sync uses these defaults when new jobs are created.
+    <div class="settings-form-card">
+      <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
+        <div class="settings-field">
+          <label class="field-label">Schedule</label>
+          <select
+            id="syncSchedule"
+            onchange="saveSyncSchedule()"
+            class="sync-select"
+          >
+            <option value="0">Disabled</option>
+            <option value="1min">1 min (Debug)</option>
+            <option value="30min">30 min</option>
+            <option value="1h">1 hour</option>
+            <option value="2h">2 hours</option>
+            <option value="4h">4 hours</option>
+            <option value="8h">8 hours</option>
+            <option value="12h">12 hours</option>
+            <option value="16h">16 hours</option>
+            <option value="24h">24 hours</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Default Language</label>
+          <select
+            id="syncLanguage"
+            onchange="saveSyncDefaults()"
+            class="sync-select"
+          >
+            <option>German Dub</option>
+            <option>English Sub</option>
+            <option>German Sub</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Default Provider</label>
+          <select
+            id="syncProvider"
+            onchange="saveSyncDefaults()"
+            class="sync-select"
+          >
+            {% for p in supported_providers %}
+            <option>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="settings-hint">
+        Auto-Sync uses these defaults when new jobs are created.
+      </div>
     </div>
   </div>
 
   <div class="settings-section" id="settings-downloads">
-    <h2>Downloads</h2>
-    <h3 class="settings-subtitle">Download Path</h3>
-    <div class="settings-row">
-      <input type="text" id="downloadPath" placeholder="/path/to/downloads" />
-      <button onclick="saveDownloadPath()">Save</button>
+    <div class="settings-section-head">
+      <div>
+        <h2>Downloads</h2>
+        <p class="settings-section-copy">
+          Core transfer defaults for pathing, provider fallback, engine
+          behavior, and repair-related download handling.
+        </p>
+      </div>
     </div>
-    <div class="settings-hint">
-      Changes take effect immediately for new downloads.
-    </div>
+    <div class="settings-form-card">
+      <div class="settings-form-card-head">
+        <div>
+          <h3>Path & Library Behavior</h3>
+          <p class="settings-form-card-copy">
+            Base target path and library-side defaults for language separation
+            and repair behavior.
+          </p>
+        </div>
+      </div>
+      <div class="settings-row">
+        <input type="text" id="downloadPath" placeholder="/path/to/downloads" />
+      </div>
+      <div class="settings-hint">
+        Changes take effect immediately for new downloads after you save the
+        current draft.
+      </div>
 
-    <div class="settings-row settings-row-download-rules" style="gap: 10px; flex-wrap: wrap">
-      <div class="settings-field">
-        <label class="field-label">Bandwidth Limit (KB/s)</label>
+      <label class="settings-checkbox">
         <input
-          type="number"
-          id="bandwidthLimit"
-          min="0"
-          max="250000"
-          placeholder="0 = unlimited"
+          type="checkbox"
+          id="langSeparation"
+          onchange="saveLangSeparation()"
         />
+        Separate languages into folders
+      </label>
+      <div class="settings-hint">
+        When enabled, downloads are organized into subfolders by language, for
+        example <code>german-dub/</code> or <code>english-sub/</code>.
       </div>
-      <div class="settings-field">
-        <label class="field-label">Download Engine</label>
-        <select id="downloadBackend" class="sync-select">
-          <option value="auto">Auto (yt-dlp when it fits)</option>
-          <option value="ffmpeg">FFmpeg only</option>
-          <option value="ytdlp">yt-dlp only</option>
-        </select>
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Speed Mode</label>
-        <select id="downloadSpeedProfile" class="sync-select">
-          <option value="fast">Fast</option>
-          <option value="balanced">Balanced</option>
-          <option value="safe">Safe</option>
-        </select>
-      </div>
-      <div class="settings-field">
-        <label class="field-label">Smart Retry Profile</label>
-        <select id="smartRetryProfile" class="sync-select">
-          <option value="conservative">Conservative</option>
-          <option value="balanced">Balanced</option>
-          <option value="aggressive">Aggressive</option>
-        </select>
-      </div>
-      <div class="settings-field settings-field-wide">
-        <label class="field-label">Per-Provider Engine Rules</label>
+
+      <label class="settings-checkbox">
         <input
-          type="text"
-          id="downloadEngineRules"
-          placeholder="VOE:ytdlp, Vidmoly:ffmpeg"
+          type="checkbox"
+          id="disableEnglishSub"
+          onchange="saveDisableEnglishSub()"
         />
+        Disable English Sub downloads
+      </label>
+      <div class="settings-hint">
+        When enabled, English Sub is hidden from the language selector and
+        cannot be queued.
       </div>
-      <div class="settings-field settings-field-wide">
-        <label class="field-label">Provider Fallback Order</label>
+
+      <label class="settings-checkbox">
         <input
-          type="text"
-          id="providerFallbackOrder"
-          placeholder="VOE, Filemoon, Doodstream"
+          type="checkbox"
+          id="libraryAutoRepair"
+          onchange="saveLibraryAutoRepair()"
         />
+        Enable missing episode auto-repair on compare refresh
+      </label>
+      <div class="settings-hint">
+        When enabled, a manual source compare refresh can automatically queue
+        missing episodes using your default sync language and provider.
       </div>
-      <button onclick="saveDownloadAdvancedSettings()">Save Download Rules</button>
-    </div>
-    <div class="settings-grid settings-grid-two">
-      <label class="settings-checkbox">
-        <input type="checkbox" id="autoProviderSwitch" />
-        Auto provider switch
-      </label>
-      <label class="settings-checkbox">
-        <input type="checkbox" id="rateLimitGuard" />
-        Rate-limit guard
-      </label>
-      <label class="settings-checkbox">
-        <input type="checkbox" id="preflightCheck" />
-        Preflight check
-      </label>
-      <label class="settings-checkbox">
-        <input type="checkbox" id="mp4FallbackRemux" />
-        MP4 fallback remux
-      </label>
-    </div>
-    <div class="settings-hint">
-      Bandwidth limiting is a soft ffmpeg cap. The download engine can let
-      yt-dlp pull full streams first and then let ffmpeg write metadata and
-      mux the result. Partial repair/missing-stream jobs still use ffmpeg so
-      the existing incremental merge flow stays intact. Provider fallback order
-      controls which hosts are preferred first when the current provider fails.
-      Per-provider engine rules override adaptive selection. Smart retry
-      profiles decide how many alternative hosts are tried automatically before
-      a download is marked as failed. Preflight checks resolve the stream before
-      the actual transfer starts, the rate-limit guard keeps aggressive
-      download settings in check on touchy hosts, and MP4 fallback remux tries
-      a direct provider-page download to temporary MP4 when the usual
-      full-stream path fails, then remuxes it back into MKV with metadata.
     </div>
 
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="langSeparation"
-        onchange="saveLangSeparation()"
-      />
-      Separate languages into folders
-    </label>
-    <div class="settings-hint">
-      When enabled, downloads are organized into subfolders by language, for
-      example <code>german-dub/</code> or <code>english-sub/</code>.
-    </div>
-
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="disableEnglishSub"
-        onchange="saveDisableEnglishSub()"
-      />
-      Disable English Sub downloads
-    </label>
-    <div class="settings-hint">
-      When enabled, English Sub is hidden from the language selector and cannot
-      be queued.
-    </div>
-
-    <label class="settings-checkbox">
-      <input
-        type="checkbox"
-        id="libraryAutoRepair"
-        onchange="saveLibraryAutoRepair()"
-      />
-      Enable missing episode auto-repair on compare refresh
-    </label>
-    <div class="settings-hint">
-      When enabled, a manual source compare refresh can automatically queue
-      missing episodes using your default sync language and provider.
+    <div class="settings-form-card">
+      <div class="settings-form-card-head">
+        <div>
+          <h3>Engine & Fallback Rules</h3>
+          <p class="settings-form-card-copy">
+            Throughput, engine choice, retry behavior, and fallback routing for
+            more stubborn sources.
+          </p>
+        </div>
+      </div>
+      <div class="settings-row settings-row-download-rules" style="gap: 10px; flex-wrap: wrap">
+        <div class="settings-field">
+          <label class="field-label">Bandwidth Limit (KB/s)</label>
+          <input
+            type="number"
+            id="bandwidthLimit"
+            min="0"
+            max="250000"
+            placeholder="0 = unlimited"
+          />
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Download Engine</label>
+          <select id="downloadBackend" class="sync-select">
+            <option value="auto">Auto (yt-dlp when it fits)</option>
+            <option value="ffmpeg">FFmpeg only</option>
+            <option value="ytdlp">yt-dlp only</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Speed Mode</label>
+          <select id="downloadSpeedProfile" class="sync-select">
+            <option value="fast">Fast</option>
+            <option value="balanced">Balanced</option>
+            <option value="safe">Safe</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Smart Retry Profile</label>
+          <select id="smartRetryProfile" class="sync-select">
+            <option value="conservative">Conservative</option>
+            <option value="balanced">Balanced</option>
+            <option value="aggressive">Aggressive</option>
+          </select>
+        </div>
+        <div class="settings-field settings-field-wide">
+          <label class="field-label">Per-Provider Engine Rules</label>
+          <input
+            type="text"
+            id="downloadEngineRules"
+            placeholder="VOE:ytdlp, Vidmoly:ffmpeg"
+          />
+        </div>
+        <div class="settings-field settings-field-wide">
+          <label class="field-label">Provider Fallback Order</label>
+          <input
+            type="text"
+            id="providerFallbackOrder"
+            placeholder="VOE, Filemoon, Doodstream"
+          />
+        </div>
+      </div>
+      <div class="settings-grid settings-grid-two">
+        <label class="settings-checkbox">
+          <input type="checkbox" id="autoProviderSwitch" />
+          Auto provider switch
+        </label>
+        <label class="settings-checkbox">
+          <input type="checkbox" id="rateLimitGuard" />
+          Rate-limit guard
+        </label>
+        <label class="settings-checkbox">
+          <input type="checkbox" id="preflightCheck" />
+          Preflight check
+        </label>
+        <label class="settings-checkbox">
+          <input type="checkbox" id="mp4FallbackRemux" />
+          MP4 fallback remux
+        </label>
+      </div>
+      <div class="settings-hint">
+        Bandwidth limiting is a soft ffmpeg cap. The download engine can let
+        yt-dlp pull full streams first and then let ffmpeg write metadata and
+        mux the result. Partial repair/missing-stream jobs still use ffmpeg so
+        the existing incremental merge flow stays intact. Provider fallback
+        order controls which hosts are preferred first when the current
+        provider fails. Per-provider engine rules override adaptive selection.
+        Smart retry profiles decide how many alternative hosts are tried
+        automatically before a download is marked as failed. Preflight checks
+        resolve the stream before the actual transfer starts, the rate-limit
+        guard keeps aggressive download settings in check on touchy hosts, and
+        MP4 fallback remux tries a direct provider-page download to temporary
+        MP4 when the usual full-stream path fails, then remuxes it back into
+        MKV with metadata.
+      </div>
     </div>
   </div>
 
   <div class="settings-section">
-    <h2>Disk Space Guard</h2>
-    <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
-      <div class="settings-field">
-        <label class="field-label">Warn Below Free GB</label>
-        <input type="number" id="diskWarnGb" min="0" max="5000" step="0.5" />
+    <div class="settings-section-head">
+      <div>
+        <h2>Disk Space Guard</h2>
+        <p class="settings-section-copy">
+          Warning thresholds that drive the disk pressure indicators across the
+          dashboard and maintenance views.
+        </p>
       </div>
-      <div class="settings-field">
-        <label class="field-label">Warn Below Free %</label>
-        <input
-          type="number"
-          id="diskWarnPercent"
-          min="0"
-          max="100"
-          step="0.5"
-        />
-      </div>
-      <button onclick="saveDiskGuardSettings()">Save Guard Thresholds</button>
     </div>
-    <div class="settings-hint">
-      Disk guard is used across Stats, Settings, and Diagnostics to warn before
-      downloads start failing.
+    <div class="settings-form-card">
+      <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
+        <div class="settings-field">
+          <label class="field-label">Warn Below Free GB</label>
+          <input type="number" id="diskWarnGb" min="0" max="5000" step="0.5" />
+        </div>
+        <div class="settings-field">
+          <label class="field-label">Warn Below Free %</label>
+          <input
+            type="number"
+            id="diskWarnPercent"
+            min="0"
+            max="100"
+            step="0.5"
+          />
+        </div>
+      </div>
+      <div class="settings-hint">
+        Disk guard is used across Stats, Settings, and Diagnostics to warn
+        before downloads start failing.
+      </div>
     </div>
   </div>
 
   <div class="settings-section" id="settings-data">
-    <h2>Backup & Restore</h2>
+    <div class="settings-section-head">
+      <div>
+        <h2>Backup & Restore</h2>
+        <p class="settings-section-copy">
+          Export operational data, bring backups back in, and manage reusable
+          paths and local user accounts.
+        </p>
+      </div>
+    </div>
     <div class="settings-row" style="gap: 10px; flex-wrap: wrap">
       <button type="button" onclick="exportBackup()">Export Backup</button>
       <input type="file" id="backupImportFile" accept="application/json" />

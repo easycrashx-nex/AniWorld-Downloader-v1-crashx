@@ -402,6 +402,18 @@ def _sto_redirect_path(expected_redirect_url: str | None) -> str | None:
         return None
 
 
+def _sto_is_external_provider_url(candidate_url: str | None, episode_netloc: str) -> bool:
+    if not candidate_url:
+        return False
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(candidate_url)
+    except Exception:
+        return False
+    return bool(parsed.scheme and parsed.netloc and parsed.netloc != episode_netloc)
+
+
 def _click_sto_provider_option(
     page,
     provider_name: str,
@@ -584,6 +596,7 @@ def solve_sto_modal(
             episode_netloc = _urlparse(episode_url).netloc
             observed_external_url = None
             bridge_message_seen = False
+            prepare_token_seen = False
             external_url_pattern = _re.compile(r"https?://[^\s\"'<>]+")
 
             def _capture_external_url(candidate_url: str):
@@ -654,6 +667,7 @@ def solve_sto_modal(
             provider_clicked = False
             weiter_clicked = False
             post_clearance_reclick = False
+            last_provider_click_at = 0.0
             start = _time.time()
 
             while _time.time() - start < 300:
@@ -679,12 +693,80 @@ def solve_sto_modal(
                         expected_redirect_url=expected_redirect_url,
                     )
                     if provider_clicked:
+                        last_provider_click_at = _time.time()
                         logger.warning(
                             "Armed s.to provider option for %s / %s",
                             provider_name,
                             language_label,
                         )
                         page.wait_for_timeout(1200)
+
+                try:
+                    gate_state = page.evaluate(
+                        """() => {
+                            const byId = (id) => document.getElementById(id);
+                            const root = byId("episode-redirect-gate-root");
+                            const modal = byId("playerPrepareModal");
+                            const iframe =
+                                byId("player-iframe") ||
+                                document.querySelector('iframe[name="player-iframe"]');
+                            const prepareToken = byId("player-prepare-token")?.value || "";
+                            const turnstileToken =
+                                document.querySelector('input[name="cf-turnstile-response"]')?.value || "";
+                            const turnstileSitekey = root?.dataset?.turnstileSitekey || "";
+                            return {
+                                prepareToken,
+                                turnstileToken,
+                                turnstileRequired: Boolean(turnstileSitekey),
+                                iframeSrc: iframe?.getAttribute("src") || iframe?.src || "",
+                                modalVisible: Boolean(
+                                    modal &&
+                                    (
+                                        modal.classList.contains("show") ||
+                                        modal.classList.contains("showing") ||
+                                        modal.getAttribute("aria-hidden") === "false"
+                                    )
+                                ),
+                            };
+                        }"""
+                    )
+                except Exception:
+                    gate_state = {
+                        "prepareToken": "",
+                        "turnstileToken": "",
+                        "turnstileRequired": False,
+                        "iframeSrc": "",
+                        "modalVisible": False,
+                    }
+
+                prepare_token = str(gate_state.get("prepareToken") or "")
+                turnstile_token = str(gate_state.get("turnstileToken") or "")
+                turnstile_required = bool(gate_state.get("turnstileRequired"))
+                iframe_src = str(gate_state.get("iframeSrc") or "")
+
+                if prepare_token and not prepare_token_seen:
+                    prepare_token_seen = True
+                    logger.warning("Observed s.to player prepare token")
+
+                if (
+                    provider_clicked
+                    and not prepare_token
+                    and not weiter_clicked
+                    and (_time.time() - last_provider_click_at) > 8.0
+                ):
+                    if _click_sto_provider_option(
+                        page,
+                        provider_name,
+                        language_label,
+                        expected_redirect_url=expected_redirect_url,
+                    ):
+                        last_provider_click_at = _time.time()
+                        logger.warning(
+                            "Re-armed s.to provider option for %s / %s",
+                            provider_name,
+                            language_label,
+                        )
+                        page.wait_for_timeout(800)
 
                 try:
                     bridge_messages = page.evaluate(
@@ -716,7 +798,7 @@ def solve_sto_modal(
                     fu = frame.url
                     if not fu or fu in ("about:blank", ""):
                         continue
-                    if _urlparse(fu).netloc != _urlparse(episode_url).netloc:
+                    if _sto_is_external_provider_url(fu, episode_netloc):
                         final_url = fu
                         logger.warning(f"Frame URL found: {final_url}")
                         break
@@ -736,23 +818,15 @@ def solve_sto_modal(
                     break
 
                 if not weiter_clicked:
-                    # Check if Turnstile token is filled (user clicked checkbox
-                    # manually via WebUI click-forward or CLI browser window)
-                    try:
-                        token_ready = page.evaluate(
-                            "() => { const el = document.querySelector"
-                            "('input[name=\"cf-turnstile-response\"]');"
-                            " return !!(el && el.value && el.value.length > 20); }"
-                        )
-                    except Exception:
-                        token_ready = False
+                    token_ready = len(turnstile_token) > 20
+                    gate_ready = bool(prepare_token)
 
-                    if token_ready:
+                    if gate_ready and (token_ready or not turnstile_required):
                         try:
                             weiter = page.locator('button[type="submit"]')
                             weiter.wait_for(state="visible", timeout=2000)
                             weiter.click()
-                            logger.warning("Submit clicked (Turnstile solved)")
+                            logger.warning("Submit clicked for s.to gate")
                             weiter_clicked = True
                             page.wait_for_timeout(800)
                         except Exception as e:
@@ -777,11 +851,16 @@ def solve_sto_modal(
                     for frame in page.frames:
                         if frame.name == "player-iframe":
                             fu = frame.url
-                            if fu and fu not in ("about:blank", ""):
+                            if _sto_is_external_provider_url(fu, episode_netloc):
                                 final_url = fu
                                 break
                     if final_url:
                         logger.warning(f"player-iframe URL found: {final_url}")
+                        break
+
+                    if iframe_src and _sto_is_external_provider_url(iframe_src, episode_netloc):
+                        final_url = iframe_src
+                        logger.warning(f"player-iframe src found: {final_url}")
                         break
 
                     # Also check if a new tab was opened

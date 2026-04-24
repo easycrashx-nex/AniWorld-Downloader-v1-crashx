@@ -52,7 +52,6 @@ const serverVpnClientsWrap = document.getElementById("serverVpnClients");
 const serverVpnInterfaces = document.getElementById("serverVpnInterfaces");
 const diskGuardList = document.getElementById("diskGuardList");
 const dnsModeSelect = document.getElementById("dnsMode");
-const dnsSaveBtn = document.getElementById("dnsSaveBtn");
 const dnsRetestBtn = document.getElementById("dnsRetestBtn");
 const dnsStatusValue = document.getElementById("dnsStatusValue");
 const dnsServersWrap = document.getElementById("dnsServers");
@@ -1793,16 +1792,14 @@ async function refreshDnsDiagnostics(force = false) {
 
 async function saveDnsSettings() {
   if (!dnsModeSelect) return;
+  if (handleSettingsDraft()) return;
   try {
-    if (dnsSaveBtn) dnsSaveBtn.disabled = true;
     await updateSettings({ dns_mode: dnsModeSelect.value });
     mergeSettingsBaseline({ dns_mode: dnsModeSelect.value });
     await refreshDnsDiagnostics(true);
     showToast("DNS mode saved");
   } catch (e) {
     showToast("Failed to save DNS mode: " + e.message);
-  } finally {
-    if (dnsSaveBtn) dnsSaveBtn.disabled = false;
   }
 }
 
@@ -2108,6 +2105,7 @@ async function applyUiPreset() {
 }
 
 async function saveDownloadAdvancedSettings() {
+  if (handleSettingsDraft()) return;
   try {
     const payload = {
       bandwidth_limit_kbps: bandwidthLimitInput?.value || "0",
@@ -2130,6 +2128,7 @@ async function saveDownloadAdvancedSettings() {
 }
 
 async function saveDiskGuardSettings() {
+  if (handleSettingsDraft()) return;
   try {
     const payload = {
       disk_warn_gb: diskWarnGbInput?.value || "8",
@@ -2200,6 +2199,7 @@ async function importBackup() {
 }
 
 async function saveSearchDefaults() {
+  if (handleSettingsDraft()) return;
   try {
     const payload = {
       search_default_sort: searchDefaultSortSelect?.value || "source",
@@ -2229,10 +2229,12 @@ async function resetSearchDefaultsConfig() {
     searchDefaultDownloadedOnlyCb.checked = false;
   }
   refreshSettingsSelects();
-  await saveSearchDefaults();
+  updateSettingsDirtyState();
+  showToast("Search defaults reset in draft");
 }
 
 async function saveDownloadPath() {
+  if (handleSettingsDraft()) return;
   const download_path = downloadPathInput.value.trim();
   try {
     await updateSettings({ download_path });
@@ -2259,9 +2261,6 @@ if (settingsSaveAllBtn) {
 }
 if (settingsDiscardBtn) {
   settingsDiscardBtn.addEventListener("click", discardAllSettingsChanges);
-}
-if (dnsSaveBtn) {
-  dnsSaveBtn.addEventListener("click", saveDnsSettings);
 }
 if (dnsRetestBtn) {
   dnsRetestBtn.addEventListener("click", () => refreshDnsDiagnostics(true));

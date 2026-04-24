@@ -288,26 +288,35 @@ class SerienstreamEpisode:
             from urllib.parse import urlparse
             from ...playwright.captcha import solve_sto_modal
 
-            # Try plain HTTP first — works when no modal is shown
-            resp = GLOBAL_SESSION.get(self.redirect_url)
-            resolved_provider_url = None
-            if urlparse(resp.url).netloc != urlparse(self.redirect_url).netloc:
-                # Redirect left s.to — no modal, plain session worked
-                resolved_provider_url = resp.url
-            else:
-                # Still on s.to — modal was shown, need browser
-                _lang_map = {Audio.GERMAN: "Deutsch", Audio.ENGLISH: "Englisch"}
-                lang = self.selected_language
-                audio = lang[0] if isinstance(lang, tuple) else lang
-                language_label = _lang_map.get(audio, "Deutsch")
+            _lang_map = {Audio.GERMAN: "Deutsch", Audio.ENGLISH: "Englisch"}
+            lang = self.selected_language
+            audio = lang[0] if isinstance(lang, tuple) else lang
+            language_label = _lang_map.get(audio, "Deutsch")
 
-                result = solve_sto_modal(
-                    self.url,
-                    self.selected_provider,
-                    language_label,
-                    expected_redirect_url=self.redirect_url,
-                )
-                resolved_provider_url = result if result else resp.url
+            # Resolve through the episode page first. s.to now gates provider
+            # opens through the iframe/message flow plus POST /r, so a direct
+            # GET on the raw redirect token is no longer a safe primary path.
+            resolved_provider_url = solve_sto_modal(
+                self.url,
+                self.selected_provider,
+                language_label,
+                expected_redirect_url=self.redirect_url,
+            )
+
+            if not resolved_provider_url:
+                try:
+                    resp = GLOBAL_SESSION.get(self.redirect_url)
+                    fallback_url = (resp.url or "").strip()
+                    fallback_parsed = urlparse(fallback_url)
+                    redirect_parsed = urlparse(self.redirect_url)
+                    if (
+                        fallback_parsed.scheme
+                        and fallback_parsed.netloc
+                        and fallback_parsed.netloc != redirect_parsed.netloc
+                    ):
+                        resolved_provider_url = fallback_url
+                except Exception:
+                    resolved_provider_url = None
 
             parsed_provider = urlparse((resolved_provider_url or "").strip())
             redirect_netloc = urlparse(self.redirect_url).netloc

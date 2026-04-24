@@ -5146,6 +5146,40 @@ input[type="checkbox"] {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.settings-form-card {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settings-form-card + .settings-form-card {
+  margin-top: 18px;
+}
+
+.settings-form-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.settings-form-card-head h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.settings-form-card-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .settings-update-note {
   color: var(--muted-strong);
   font-size: 0.92rem;
@@ -5296,10 +5330,6 @@ input[type="checkbox"] {
   flex: 1 1 320px;
 }
 
-.settings-dns-row > button {
-  min-width: 140px;
-}
-
 .settings-dns-card {
   margin-top: 16px;
 }
@@ -5339,12 +5369,6 @@ input[type="checkbox"] {
 .settings-row-download-rules .settings-field-wide {
   grid-column: span 2;
   min-width: 0;
-}
-
-.settings-row-download-rules button {
-  width: 100%;
-  min-width: 0;
-  grid-column: span 1;
 }
 
 .settings-field input,
@@ -5555,8 +5579,7 @@ input[type="checkbox"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .settings-row-download-rules .settings-field-wide,
-  .settings-row-download-rules button {
+  .settings-row-download-rules .settings-field-wide {
     grid-column: span 2;
   }
 
@@ -5607,8 +5630,7 @@ input[type="checkbox"] {
     grid-template-columns: 1fr;
   }
 
-  .settings-row-download-rules .settings-field-wide,
-  .settings-row-download-rules button {
+  .settings-row-download-rules .settings-field-wide {
     grid-column: span 1;
   }
 
