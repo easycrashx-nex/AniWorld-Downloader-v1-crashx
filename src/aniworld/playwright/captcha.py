@@ -742,125 +742,27 @@ def solve_sto_modal(
 
         _ensure_virtual_display()
         with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=False,
-                args=["--disable-blink-features=AutomationControlled", *extra_args],
-            )
+            browser = p.chromium.launch(headless=False, args=extra_args)
             context = browser.new_context(
                 viewport={"width": 1280, "height": 720},
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                locale="de-DE",
-                extra_http_headers={
-                    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-                },
             )
             _inject_session_cookies(context, episode_url)
             page = context.new_page()
-            page.add_init_script(
-                """() => {
-                    window.__stoBridgeMessages = [];
-                    window.addEventListener("message", (event) => {
-                        try {
-                            const data = event && event.data;
-                            if (data && typeof data === "object" && data.type === "frameBridge") {
-                                window.__stoBridgeMessages.push({
-                                    origin: event.origin || "",
-                                    type: String(data.type || ""),
-                                    token: typeof data.t === "string" ? data.t : "",
-                                    err: data.err == null ? null : String(data.err),
-                                    ts: Date.now(),
-                                });
-                            }
-                        } catch (_) {}
-                    }, true);
-                }"""
-            )
-            from urllib.parse import urlparse as _urlparse
-            import re as _re
-
-            episode_netloc = _urlparse(episode_url).netloc
-            observed_external_url = None
-            bridge_message_seen = False
-            prepare_token_seen = False
-            external_url_pattern = _re.compile(r"https?://[^\s\"'<>]+")
-
-            def _capture_external_url(candidate_url: str):
-                nonlocal observed_external_url
-                if observed_external_url or not candidate_url:
-                    return
-                try:
-                    parsed = _urlparse(candidate_url)
-                except Exception:
-                    return
-                if not parsed.scheme or not parsed.netloc:
-                    return
-                if parsed.netloc != episode_netloc:
-                    observed_external_url = candidate_url
-
-            def _capture_external_url_from_text(body: str):
-                if observed_external_url or not body:
-                    return
-                for match in external_url_pattern.findall(body):
-                    candidate = str(match or "").rstrip(").,;\"'")
-                    try:
-                        parsed = _urlparse(candidate)
-                    except Exception:
-                        continue
-                    if parsed.scheme and parsed.netloc and parsed.netloc != episode_netloc:
-                        _capture_external_url(candidate)
-                        if observed_external_url:
-                            return
-
-            def _capture_response(response):
-                _capture_external_url(response.url)
-                if observed_external_url:
-                    return
-                try:
-                    request = response.request
-                    resource_type = request.resource_type
-                except Exception:
-                    resource_type = ""
-                if resource_type not in ("xhr", "fetch", "document", "iframe"):
-                    return
-                try:
-                    if _urlparse(response.url).netloc != episode_netloc:
-                        return
-                except Exception:
-                    return
-                try:
-                    _capture_external_url_from_text(response.text())
-                except Exception:
-                    return
-
-            context.on("request", lambda request: _capture_external_url(request.url))
-            context.on("response", _capture_response)
 
             with _captcha_state_lock:
                 _captcha_state = {"url": episode_url, "started_at": _time.time(), "solved": False}
 
             logger.warning(f"Opening episode page for modal solving: {episode_url}")
             page.goto(episode_url, wait_until="domcontentloaded")
-            try:
-                page.wait_for_load_state("networkidle", timeout=5000)
-            except Exception:
-                pass
-            page.wait_for_timeout(1800)
 
-            # Single poll loop: streams screenshots from the start, waits for
-            # Turnstile to auto-fill, clicks Weiter once, then waits for result.
+            from urllib.parse import urlparse as _urlparse
+
             final_url = None
-            provider_clicked = False
             weiter_clicked = False
             turnstile_clicked = False
-            post_clearance_reclick = False
-            last_provider_click_at = 0.0
             start = _time.time()
 
-            while _time.time() - start < 300:
+            while _time.time() - start < 90:
                 # WebUI: stream screenshots + forward user clicks
                 if session_obj is not None:
                     try:
@@ -875,150 +777,10 @@ def solve_sto_modal(
                         except Exception:
                             pass
 
-                if not provider_clicked:
-                    provider_clicked = _click_sto_provider_option(
-                        page,
-                        provider_name,
-                        language_label,
-                        expected_redirect_url=expected_redirect_url,
-                    )
-                    if provider_clicked:
-                        last_provider_click_at = _time.time()
-                        logger.warning(
-                            "Armed s.to provider option for %s / %s",
-                            provider_name,
-                            language_label,
-                        )
-                        page.wait_for_timeout(1200)
-
-                try:
-                    gate_state = page.evaluate(
-                        """() => {
-                            const byId = (id) => document.getElementById(id);
-                            const root = byId("episode-redirect-gate-root");
-                            const modal = byId("playerPrepareModal");
-                            const iframe =
-                                byId("player-iframe") ||
-                                document.querySelector('iframe[name="player-iframe"]');
-                            const prepareToken = byId("player-prepare-token")?.value || "";
-                            const turnstileToken =
-                                document.querySelector('input[name="cf-turnstile-response"]')?.value || "";
-                            const turnstileSitekey = root?.dataset?.turnstileSitekey || "";
-                            return {
-                                prepareToken,
-                                turnstileToken,
-                                turnstileRequired: Boolean(turnstileSitekey),
-                                iframeSrc: iframe?.getAttribute("src") || iframe?.src || "",
-                                modalVisible: Boolean(
-                                    modal &&
-                                    (
-                                        modal.classList.contains("show") ||
-                                        modal.classList.contains("showing") ||
-                                        modal.getAttribute("aria-hidden") === "false"
-                                    )
-                                ),
-                            };
-                        }"""
-                    )
-                except Exception:
-                    gate_state = {
-                        "prepareToken": "",
-                        "turnstileToken": "",
-                        "turnstileRequired": False,
-                        "iframeSrc": "",
-                        "modalVisible": False,
-                    }
-
-                prepare_token = str(gate_state.get("prepareToken") or "")
-                turnstile_token = str(gate_state.get("turnstileToken") or "")
-                turnstile_required = bool(gate_state.get("turnstileRequired"))
-                iframe_src = str(gate_state.get("iframeSrc") or "")
-
-                if prepare_token and not prepare_token_seen:
-                    prepare_token_seen = True
-                    logger.warning("Observed s.to player prepare token")
-
-                if (
-                    provider_clicked
-                    and not prepare_token
-                    and not bridge_message_seen
-                    and not weiter_clicked
-                    and (_time.time() - last_provider_click_at) > 6.0
-                ):
-                    if _click_sto_provider_option(
-                        page,
-                        provider_name,
-                        language_label,
-                        expected_redirect_url=expected_redirect_url,
-                    ):
-                        last_provider_click_at = _time.time()
-                        logger.warning(
-                            "Re-armed s.to provider option for %s / %s",
-                            provider_name,
-                            language_label,
-                        )
-                        page.wait_for_timeout(800)
-
-                try:
-                    bridge_messages = page.evaluate(
-                        "() => Array.isArray(window.__stoBridgeMessages) ? window.__stoBridgeMessages.slice(-5) : []"
-                    )
-                except Exception:
-                    bridge_messages = []
-                if bridge_messages and not bridge_message_seen:
-                    bridge_message_seen = True
-                    latest_bridge = bridge_messages[-1]
-                    logger.warning(
-                        "Observed s.to frameBridge message (err=%s)",
-                        latest_bridge.get("err") if isinstance(latest_bridge, dict) else None,
-                    )
-
-                current_page_url = page.url
-                if current_page_url and current_page_url not in ("about:blank", "", episode_url):
-                    if _urlparse(current_page_url).netloc != _urlparse(episode_url).netloc:
-                        final_url = current_page_url
-                        logger.warning(f"External page URL found: {final_url}")
-                        break
-
-                if observed_external_url:
-                    final_url = observed_external_url
-                    logger.warning(f"Observed external request URL: {final_url}")
-                    break
-
-                for frame in page.frames:
-                    fu = frame.url
-                    if not fu or fu in ("about:blank", ""):
-                        continue
-                    if _sto_is_external_provider_url(fu, episode_netloc):
-                        final_url = fu
-                        logger.warning(f"Frame URL found: {final_url}")
-                        break
-                if final_url:
-                    break
-
-                for pg in context.pages:
-                    if pg is page:
-                        continue
-                    pu = pg.url
-                    if pu and pu not in ("about:blank", ""):
-                        if _urlparse(pu).netloc != _urlparse(episode_url).netloc:
-                            final_url = pu
-                            logger.warning(f"New page URL found: {final_url}")
-                            break
-                if final_url:
-                    break
-
                 if not weiter_clicked:
-                    token_ready = len(turnstile_token) > 20 or _is_turnstile_token_ready(page)
-                    gate_ready = bool(
-                        prepare_token
-                        or bridge_message_seen
-                        or gate_state.get("modalVisible")
-                        or iframe_src
-                        or provider_clicked
-                    )
+                    token_ready = _is_turnstile_token_ready(page)
 
-                    if turnstile_required and not token_ready:
+                    if not token_ready:
                         if not turnstile_clicked:
                             if _click_turnstile(page, logger):
                                 turnstile_clicked = True
@@ -1027,47 +789,26 @@ def solve_sto_modal(
                         elif not _is_turnstile_token_ready(page):
                             turnstile_clicked = False
 
-                    if gate_ready and (token_ready or not turnstile_required):
+                    if token_ready:
                         try:
-                            _neutralize_click_blockers(page)
                             if _click_submit_button(page, logger):
-                                logger.warning("Submit clicked for s.to gate")
+                                logger.warning("Submit clicked (Turnstile solved)")
                                 weiter_clicked = True
-                                page.wait_for_timeout(1200)
                             else:
-                                logger.warning("Submit click failed for s.to gate (will retry)")
+                                logger.warning("Submit click failed (will retry)")
+                            page.wait_for_timeout(1200)
                         except Exception as e:
                             logger.warning(f"Submit button error: {e}")
                 else:
-                    has_clearance = any(
-                        c["name"] == "cf_clearance" for c in context.cookies()
-                    )
-                    if has_clearance and not post_clearance_reclick:
-                        if _click_sto_provider_option(
-                            page,
-                            provider_name,
-                            language_label,
-                            expected_redirect_url=expected_redirect_url,
-                        ):
-                            logger.warning(
-                                "Re-clicked s.to provider after Turnstile clearance"
-                            )
-                            page.wait_for_timeout(800)
-                        post_clearance_reclick = True
                     # Weiter was clicked – poll for the VOE URL
                     for frame in page.frames:
                         if frame.name == "player-iframe":
                             fu = frame.url
-                            if _sto_is_external_provider_url(fu, episode_netloc):
+                            if fu and fu not in ("about:blank", ""):
                                 final_url = fu
                                 break
                     if final_url:
                         logger.warning(f"player-iframe URL found: {final_url}")
-                        break
-
-                    if iframe_src and _sto_is_external_provider_url(iframe_src, episode_netloc):
-                        final_url = iframe_src
-                        logger.warning(f"player-iframe src found: {final_url}")
                         break
 
                     # Also check if a new tab was opened
@@ -1106,8 +847,6 @@ def solve_sto_modal(
         if session_obj is not None:
             session_obj.result_url = final_url
             session_obj.done = True
-            if final_url:
-                _time.sleep(2.0)
 
         return final_url
 

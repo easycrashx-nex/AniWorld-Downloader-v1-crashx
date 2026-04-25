@@ -131,33 +131,38 @@ DNS_MODE_CONFIG = {
     DNS_MODE_GOOGLE: {
         "label": "Google (8.8.8.8)",
         "resolver": [
+            "dot://8.8.8.8?server_hostname=dns.google",
+            "dot://8.8.4.4?server_hostname=dns.google",
+            "doh+google://",
             "dou://8.8.8.8",
             "dou://8.8.4.4",
-            "dot+google://",
-            "doh+google://",
         ],
         "servers": ["8.8.8.8", "8.8.4.4"],
-        "env_resolver": "dou://8.8.8.8",
+        "env_resolver": "dot://8.8.8.8?server_hostname=dns.google",
     },
     DNS_MODE_CLOUDFLARE: {
         "label": "Cloudflare (1.1.1.1)",
         "resolver": [
+            "dot://1.1.1.1?server_hostname=cloudflare-dns.com",
+            "dot://1.0.0.1?server_hostname=cloudflare-dns.com",
+            "doh+cloudflare://",
             "dou://1.1.1.1",
             "dou://1.0.0.1",
-            "doh+cloudflare://",
         ],
         "servers": ["1.1.1.1", "1.0.0.1"],
-        "env_resolver": "dou://1.1.1.1",
+        "env_resolver": "dot://1.1.1.1?server_hostname=cloudflare-dns.com",
     },
     DNS_MODE_QUAD9: {
         "label": "Quad9 (9.9.9.9)",
         "resolver": [
+            "dot://9.9.9.9?server_hostname=dns.quad9.net",
+            "dot://149.112.112.112?server_hostname=dns.quad9.net",
+            "doh://dns.quad9.net",
             "dou://9.9.9.9",
             "dou://149.112.112.112",
-            "doh://dns.quad9.net",
         ],
         "servers": ["9.9.9.9", "149.112.112.112"],
-        "env_resolver": "dou://9.9.9.9",
+        "env_resolver": "dot://9.9.9.9?server_hostname=dns.quad9.net",
     },
 }
 

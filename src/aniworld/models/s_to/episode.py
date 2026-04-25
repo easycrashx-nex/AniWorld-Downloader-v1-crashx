@@ -293,48 +293,25 @@ class SerienstreamEpisode:
             audio = lang[0] if isinstance(lang, tuple) else lang
             language_label = _lang_map.get(audio, "Deutsch")
 
-            # Resolve through the episode page first. s.to now gates provider
-            # opens through the iframe/message flow plus POST /r, so a direct
-            # GET on the raw redirect token is no longer a safe primary path.
-            resolved_provider_url = solve_sto_modal(
-                self.url,
-                self.selected_provider,
-                language_label,
-                expected_redirect_url=self.redirect_url,
-            )
-
-            if not resolved_provider_url:
-                try:
-                    resp = GLOBAL_SESSION.get(self.redirect_url)
-                    fallback_url = (resp.url or "").strip()
-                    fallback_parsed = urlparse(fallback_url)
-                    redirect_parsed = urlparse(self.redirect_url)
-                    if (
-                        fallback_parsed.scheme
-                        and fallback_parsed.netloc
-                        and fallback_parsed.netloc != redirect_parsed.netloc
-                    ):
-                        resolved_provider_url = fallback_url
-                except Exception:
-                    resolved_provider_url = None
+            resp = GLOBAL_SESSION.get(self.redirect_url)
+            if urlparse(resp.url).netloc != urlparse(self.redirect_url).netloc:
+                resolved_provider_url = resp.url
+            else:
+                result = solve_sto_modal(
+                    self.url, self.selected_provider, language_label
+                )
+                resolved_provider_url = result if result else resp.url
 
             parsed_provider = urlparse((resolved_provider_url or "").strip())
             redirect_netloc = urlparse(self.redirect_url).netloc
-            if not parsed_provider.scheme or not parsed_provider.netloc:
+            if (
+                not parsed_provider.scheme
+                or not parsed_provider.netloc
+                or parsed_provider.netloc == redirect_netloc
+            ):
                 raise ValueError(
                     f"Failed to resolve provider URL for {self.selected_provider} "
                     f"from redirect {self.redirect_url}"
-                )
-            if parsed_provider.netloc == redirect_netloc:
-                if parsed_provider.path.startswith("/r"):
-                    raise ValueError(
-                        f"Failed to resolve provider URL for {self.selected_provider} "
-                        f"from redirect {self.redirect_url}"
-                    )
-                logger.warning(
-                    "SerienStream provider URL still points to redirect host for %s: %s",
-                    self.selected_provider,
-                    resolved_provider_url,
                 )
             self.__provider_url = resolved_provider_url
         return self.__provider_url
