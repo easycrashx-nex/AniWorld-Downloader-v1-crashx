@@ -1,6 +1,7 @@
 import threading as _threading
 import queue as _queue_module
 import time as _time
+import random as _random
 
 # Threading-local: set queue_id from the web worker to enable interactive mode
 _local = _threading.local()
@@ -19,6 +20,154 @@ _captcha_state = None  # None or {"url": ..., "started_at": ..., "solved": bool}
 
 # Serialise concurrent solve attempts
 _captcha_lock = _threading.Lock()
+
+
+def _ensure_virtual_display() -> None:
+    """Best-effort xvfb bootstrap for Linux/server environments."""
+    try:
+        from ..autodeps import _ensure_xvfb
+    except Exception:
+        return
+    try:
+        _ensure_xvfb()
+    except Exception:
+        pass
+
+
+def _click_turnstile(page, logger=None) -> bool:
+    """Locate the Turnstile iframe and click its checkbox with human-like motion."""
+    selectors = (
+        "iframe[src*='challenges.cloudflare.com']",
+        "iframe[src*='cdn-cgi/challenge-platform']",
+    )
+    for selector in selectors:
+        try:
+            iframe_el = page.locator(selector).first
+            iframe_el.wait_for(state="visible", timeout=2500)
+            box = iframe_el.bounding_box()
+            if not box:
+                continue
+
+            x = box["x"] + 28 + _random.uniform(-4, 4)
+            y = box["y"] + box["height"] / 2 + _random.uniform(-3, 3)
+
+            page.mouse.move(x, y, steps=_random.randint(8, 20))
+            page.wait_for_timeout(_random.randint(80, 250))
+            page.mouse.down()
+            page.wait_for_timeout(_random.randint(40, 100))
+            page.mouse.up()
+
+            if logger:
+                logger.info("Turnstile checkbox clicked")
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _is_turnstile_token_ready(page) -> bool:
+    """Check whether the Turnstile hidden input already carries a token."""
+    try:
+        return page.evaluate(
+            "() => { const el = document.querySelector"
+            "('input[name=\"cf-turnstile-response\"]');"
+            " return !!(el && el.value && el.value.length > 20); }"
+        )
+    except Exception:
+        return False
+
+
+def _neutralize_click_blockers(page) -> None:
+    """Disable common overlays/popups that intercept submit clicks."""
+    try:
+        page.evaluate(
+            """
+            () => {
+                const selectors = [
+                    "iframe[id^='container-']",
+                    "a[id^='lk']",
+                    "div[id^='b'] iframe",
+                ];
+
+                for (const sel of selectors) {
+                    for (const el of document.querySelectorAll(sel)) {
+                        el.style.pointerEvents = "none";
+                        el.style.display = "none";
+                        el.setAttribute("aria-hidden", "true");
+                    }
+                }
+
+                for (const iframe of document.querySelectorAll("iframe")) {
+                    const r = iframe.getBoundingClientRect();
+                    if (r.width >= 700 && r.height >= 500) {
+                        iframe.style.pointerEvents = "none";
+                        iframe.style.display = "none";
+                        iframe.setAttribute("aria-hidden", "true");
+                    }
+                }
+            }
+            """
+        )
+    except Exception:
+        pass
+
+
+def _click_submit_button(page, logger=None) -> bool:
+    """Click the gate submit button with normal, force, and JS fallbacks."""
+    selectors = (
+        'button[type="submit"]',
+        "button:has-text('Weiter')",
+    )
+
+    for selector in selectors:
+        try:
+            button = page.locator(selector).first
+            button.wait_for(state="visible", timeout=2000)
+        except Exception:
+            continue
+
+        try:
+            button.click(timeout=2000)
+            return True
+        except Exception as err:
+            if logger:
+                logger.warning(f"Submit normal click failed: {err}")
+
+        _neutralize_click_blockers(page)
+
+        try:
+            button.click(force=True, timeout=2000)
+            return True
+        except Exception as err:
+            if logger:
+                logger.warning(f"Submit force-click failed: {err}")
+
+        try:
+            clicked = page.evaluate(
+                """
+                () => {
+                    const byType = document.querySelector("button[type='submit']");
+                    if (byType) {
+                        byType.click();
+                        return true;
+                    }
+                    const byText = Array.from(document.querySelectorAll("button"))
+                        .find((b) => (b.textContent || "").trim().toLowerCase() === "weiter");
+                    if (byText) {
+                        byText.click();
+                        return true;
+                    }
+                    return false;
+                }
+                """
+            )
+            if clicked:
+                return True
+        except Exception as err:
+            if logger:
+                logger.warning(f"Submit JS click failed: {err}")
+
+    return False
 
 
 def is_captcha_page(html: str, status_code: int = 200) -> bool:
@@ -100,6 +249,7 @@ def _solve_captcha_cli(url: str) -> bool:
         logger.warning(f"CAPTCHA detected for {url} — opening browser for manual solving")
 
         try:
+            _ensure_virtual_display()
             with sync_playwright() as p:
                 browser = p.chromium.launch(
                     headless=False,
@@ -118,6 +268,7 @@ def _solve_captcha_cli(url: str) -> bool:
                 timeout = 300  # 5 minutes
                 start = _time.time()
                 solved = False
+                turnstile_clicked = False
 
                 while _time.time() - start < timeout:
                     # Standard Cloudflare full-page challenge
@@ -146,14 +297,20 @@ def _solve_captcha_cli(url: str) -> bool:
                     except Exception:
                         pass
 
-                    # Auto-click Weiter once Turnstile token is present
-                    try:
-                        weiter = page.locator('button[type="submit"]')
-                        weiter.wait_for(state="visible", timeout=1500)
-                        weiter.click()
-                        page.wait_for_timeout(2000)
-                    except Exception:
-                        pass
+                    if not turnstile_clicked and not _is_turnstile_token_ready(page):
+                        if _click_turnstile(page, logger):
+                            turnstile_clicked = True
+                            page.wait_for_timeout(_random.randint(2000, 4000))
+                            continue
+                    elif turnstile_clicked and not _is_turnstile_token_ready(page):
+                        turnstile_clicked = False
+
+                    if _is_turnstile_token_ready(page):
+                        try:
+                            if _click_submit_button(page, logger):
+                                page.wait_for_timeout(2000)
+                        except Exception:
+                            pass
 
                     _time.sleep(1.5)
 
@@ -230,6 +387,7 @@ def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
 
     global _captcha_state
     try:
+        _ensure_virtual_display()
         with sync_playwright() as p:
             # headless=False required for Cloudflare/Turnstile to work.
             # Window pushed off-screen to avoid visible popup on server desktops.
@@ -245,6 +403,7 @@ def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
                 _captcha_state = {"url": url, "started_at": _time.time(), "solved": False}
 
             solved = False
+            turnstile_clicked = False
             for _ in range(300):  # up to ~5 minutes
                 # Stream screenshot to Web UI
                 try:
@@ -286,14 +445,20 @@ def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
                 except Exception:
                     pass
 
-                # Auto-click Weiter button
-                try:
-                    weiter_button = page.locator('button[type="submit"]')
-                    weiter_button.wait_for(state="visible", timeout=2000)
-                    weiter_button.click()
-                    page.wait_for_timeout(2000)
-                except Exception:
-                    pass
+                if not turnstile_clicked and not _is_turnstile_token_ready(page):
+                    if _click_turnstile(page):
+                        turnstile_clicked = True
+                        page.wait_for_timeout(_random.randint(2000, 4000))
+                        continue
+                elif turnstile_clicked and not _is_turnstile_token_ready(page):
+                    turnstile_clicked = False
+
+                if _is_turnstile_token_ready(page):
+                    try:
+                        if _click_submit_button(page, logger):
+                            page.wait_for_timeout(2000)
+                    except Exception:
+                        pass
 
                 page.wait_for_timeout(1000)
 
@@ -427,12 +592,16 @@ def _click_sto_provider_option(
     click is more reliable than hoping a raw GET on the redirect URL still
     leaves the site.
     """
-    redirect_path = _sto_redirect_path(expected_redirect_url)
-    selector = f'[data-provider-name="{provider_name}"]'
-    if language_label:
-        selector += f'[data-language-label="{language_label}"]'
+    redirect_path = (_sto_redirect_path(expected_redirect_url) or "").strip()
+    provider_name = str(provider_name or "").strip()
+    language_label = str(language_label or "").strip()
 
+    clicked = False
     try:
+        selector_parts = ['[data-play-url][data-provider-name]']
+        if provider_name:
+            selector_parts.append(f'[data-provider-name="{provider_name}"]')
+        selector = "".join(selector_parts)
         locator = page.locator(selector)
         if locator.count() > 0:
             target = locator.first
@@ -441,36 +610,53 @@ def _click_sto_provider_option(
             except Exception:
                 pass
             try:
-                target.click(timeout=2000, force=True)
+                target.click(timeout=2000)
                 page.wait_for_timeout(250)
+                clicked = True
             except Exception:
-                pass
+                try:
+                    target.click(timeout=2000, force=True)
+                    page.wait_for_timeout(250)
+                    clicked = True
+                except Exception:
+                    pass
     except Exception:
         pass
 
     try:
-        return bool(
+        dom_armed = bool(
             page.evaluate(
                 """({ providerName, languageLabel, redirectPath }) => {
                     const norm = (v) => String(v || "").trim();
                     const nodes = [...document.querySelectorAll("[data-play-url][data-provider-name]")];
                     if (!nodes.length) return false;
 
-                    let match = nodes.find((node) => {
+                    let exactByPath = nodes.find((node) => {
                         const nodePath = norm(node.dataset.playUrl);
                         return (
                             redirectPath &&
-                            nodePath === norm(redirectPath) &&
-                            norm(node.dataset.providerName) === providerName &&
-                            (!languageLabel || norm(node.dataset.languageLabel) === languageLabel)
+                            nodePath === norm(redirectPath)
                         );
                     });
 
-                    if (!match) {
-                        match = nodes.find((node) =>
-                            norm(node.dataset.providerName) === providerName &&
-                            (!languageLabel || norm(node.dataset.languageLabel) === languageLabel)
+                    let providerMatches = nodes.filter((node) =>
+                        !providerName || norm(node.dataset.providerName) === providerName
+                    );
+
+                    let match = exactByPath;
+
+                    if (!match && providerMatches.length && languageLabel) {
+                        match = providerMatches.find((node) =>
+                            norm(node.dataset.languageLabel) === languageLabel
                         );
+                    }
+
+                    if (!match && providerMatches.length) {
+                        match = providerMatches[0];
+                    }
+
+                    if (!match && exactByPath) {
+                        match = exactByPath;
                     }
 
                     if (!match) return false;
@@ -492,6 +678,7 @@ def _click_sto_provider_option(
                         document.querySelector("iframe");
 
                     if (typeof clickable.click === "function") clickable.click();
+                    clickable.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
                     if (iframe && fullPlayUrl) {
                         iframe.setAttribute("src", fullPlayUrl);
                     }
@@ -504,8 +691,9 @@ def _click_sto_provider_option(
                 },
             )
         )
+        return bool(clicked or dom_armed)
     except Exception:
-        return False
+        return clicked
 
 
 def solve_sto_modal(
@@ -552,6 +740,7 @@ def solve_sto_modal(
             else []
         )
 
+        _ensure_virtual_display()
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=False,
@@ -666,6 +855,7 @@ def solve_sto_modal(
             final_url = None
             provider_clicked = False
             weiter_clicked = False
+            turnstile_clicked = False
             post_clearance_reclick = False
             last_provider_click_at = 0.0
             start = _time.time()
@@ -751,8 +941,9 @@ def solve_sto_modal(
                 if (
                     provider_clicked
                     and not prepare_token
+                    and not bridge_message_seen
                     and not weiter_clicked
-                    and (_time.time() - last_provider_click_at) > 8.0
+                    and (_time.time() - last_provider_click_at) > 6.0
                 ):
                     if _click_sto_provider_option(
                         page,
@@ -818,17 +1009,33 @@ def solve_sto_modal(
                     break
 
                 if not weiter_clicked:
-                    token_ready = len(turnstile_token) > 20
-                    gate_ready = bool(prepare_token)
+                    token_ready = len(turnstile_token) > 20 or _is_turnstile_token_ready(page)
+                    gate_ready = bool(
+                        prepare_token
+                        or bridge_message_seen
+                        or gate_state.get("modalVisible")
+                        or iframe_src
+                        or provider_clicked
+                    )
+
+                    if turnstile_required and not token_ready:
+                        if not turnstile_clicked:
+                            if _click_turnstile(page, logger):
+                                turnstile_clicked = True
+                                page.wait_for_timeout(_random.randint(2000, 4000))
+                                continue
+                        elif not _is_turnstile_token_ready(page):
+                            turnstile_clicked = False
 
                     if gate_ready and (token_ready or not turnstile_required):
                         try:
-                            weiter = page.locator('button[type="submit"]')
-                            weiter.wait_for(state="visible", timeout=2000)
-                            weiter.click()
-                            logger.warning("Submit clicked for s.to gate")
-                            weiter_clicked = True
-                            page.wait_for_timeout(800)
+                            _neutralize_click_blockers(page)
+                            if _click_submit_button(page, logger):
+                                logger.warning("Submit clicked for s.to gate")
+                                weiter_clicked = True
+                                page.wait_for_timeout(1200)
+                            else:
+                                logger.warning("Submit click failed for s.to gate (will retry)")
                         except Exception as e:
                             logger.warning(f"Submit button error: {e}")
                 else:
