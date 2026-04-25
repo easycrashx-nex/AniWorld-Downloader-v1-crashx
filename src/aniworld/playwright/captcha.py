@@ -760,6 +760,8 @@ def solve_sto_modal(
             final_url = None
             weiter_clicked = False
             turnstile_clicked = False
+            provider_armed = False
+            last_provider_arm_at = 0.0
             start = _time.time()
 
             while _time.time() - start < 90:
@@ -776,6 +778,21 @@ def solve_sto_modal(
                             page.wait_for_timeout(300)
                         except Exception:
                             pass
+
+                if not weiter_clicked and (
+                    not provider_armed or (_time.time() - last_provider_arm_at) > 6.0
+                ):
+                    try:
+                        provider_armed = _click_sto_provider_option(
+                            page,
+                            provider_name,
+                            language_label,
+                            expected_redirect_url=expected_redirect_url,
+                        ) or provider_armed
+                        if provider_armed:
+                            last_provider_arm_at = _time.time()
+                    except Exception:
+                        pass
 
                 if not weiter_clicked:
                     token_ready = _is_turnstile_token_ready(page)

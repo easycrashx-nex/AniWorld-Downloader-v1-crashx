@@ -298,7 +298,10 @@ class SerienstreamEpisode:
                 resolved_provider_url = resp.url
             else:
                 result = solve_sto_modal(
-                    self.url, self.selected_provider, language_label
+                    self.url,
+                    self.selected_provider,
+                    language_label,
+                    expected_redirect_url=self.redirect_url,
                 )
                 resolved_provider_url = result if result else resp.url
 
