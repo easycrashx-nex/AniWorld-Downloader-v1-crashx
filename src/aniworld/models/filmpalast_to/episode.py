@@ -34,6 +34,8 @@ except ImportError:
         watch as episode_watch,
     )
 
+from .shared import FILMPALAST_REQUEST_HEADERS, parse_filmpalast_title_info
+
 FILMPALAST_EPISODE_PATTERN = re.compile(
     r"^https?://(?:www\.)?filmpalast\.to/stream/[A-Za-z0-9\-]+/?(?:[?#].*)?$",
     re.IGNORECASE,
@@ -74,25 +76,14 @@ _FILMPALAST_PROVIDER_PREFERENCE = (
     "VOE",
 )
 
-_FILMPALAST_REQUEST_HEADERS = {
-    "User-Agent": os.getenv(
-        "ANIWORLD_FILMPALAST_UA",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-    ),
-    "Referer": "https://filmpalast.to/",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.7,en;q=0.6",
-}
-
-
 def _fetch_filmpalast_text(url):
-    request = Request(url, headers=_FILMPALAST_REQUEST_HEADERS)
+    request = Request(url, headers=FILMPALAST_REQUEST_HEADERS)
     with urlopen(request, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
 def _resolve_filmpalast_redirect(url):
-    request = Request(url, headers=_FILMPALAST_REQUEST_HEADERS)
+    request = Request(url, headers=FILMPALAST_REQUEST_HEADERS)
     with urlopen(request, timeout=20) as response:
         return response.geturl()
 
@@ -106,6 +97,9 @@ class FilmPalastEpisode:
         selected_path: str = None,
         selected_language: str = None,
         selected_provider: str = None,
+        season=None,
+        series=None,
+        parsed_info=None,
     ):
         if not self.is_valid_filmpalast_episode_url(url):
             raise ValueError(f"Invalid FilmPalast URL: {url}")
@@ -114,6 +108,9 @@ class FilmPalastEpisode:
         self.__selected_path_param = selected_path
         self.__selected_language_param = selected_language
         self.__selected_provider_param = selected_provider
+        self._season_ref = season
+        self._series_ref = series
+        self.__parsed_info = parsed_info
 
         self.__html = None
         self.__title_de = None
@@ -135,6 +132,11 @@ class FilmPalastEpisode:
         self.__file_extension = None
         self.__episode_path = None
         self.__is_downloaded = None
+        self.__series_title = None
+        self.__series_title_cleaned = None
+        self.__season_number = None
+        self.__episode_number = None
+        self.__episode_display_title = None
 
     @staticmethod
     def is_valid_filmpalast_episode_url(url):
@@ -165,6 +167,39 @@ class FilmPalastEpisode:
     @property
     def title_cleaned(self):
         return clean_title(self.title_de)
+
+    @property
+    def _title_info(self):
+        if self.__parsed_info is None:
+            self.__parsed_info = parse_filmpalast_title_info(self.title_de) or {}
+        return self.__parsed_info
+
+    @property
+    def is_series_episode(self):
+        return bool(self._title_info.get("is_series_episode"))
+
+    @property
+    def series_title(self):
+        if self.__series_title is None:
+            self.__series_title = self._title_info.get("series_title") or self.title_de
+        return self.__series_title
+
+    @property
+    def series_title_cleaned(self):
+        if self.__series_title_cleaned is None:
+            self.__series_title_cleaned = clean_title(self.series_title)
+        return self.__series_title_cleaned
+
+    @property
+    def episode_display_title(self):
+        if self.__episode_display_title is None:
+            if self._title_info.get("episode_title"):
+                self.__episode_display_title = self._title_info["episode_title"]
+            elif self.is_series_episode:
+                self.__episode_display_title = f"Episode {self.episode_number}"
+            else:
+                self.__episode_display_title = self.title_de
+        return self.__episode_display_title
 
     @property
     def description(self):
@@ -392,7 +427,7 @@ class FilmPalastEpisode:
     @property
     def _base_folder(self):
         if self.__base_folder is None:
-            folder_name = self.title_cleaned
+            folder_name = self.series_title_cleaned
             if self.release_year:
                 folder_name = f"{folder_name} ({self.release_year})"
             self.__base_folder = Path(self.selected_path) / folder_name
@@ -428,16 +463,16 @@ class FilmPalastEpisode:
 
             try:
                 rendered = file_template.format(
-                    title=self.title_cleaned,
+                    title=self.series_title_cleaned,
                     year=self.release_year or "",
                     imdbid="",
-                    season="01",
-                    episode="001",
+                    season=f"{self.season.season_number:02d}",
+                    episode=f"{self.episode_number:03d}",
                     language=self.selected_language,
                 )
-                rendered = clean_title(rendered) or fallback_name
+                rendered = clean_title(rendered) or self.series_title_cleaned
             except Exception:
-                rendered = fallback_name
+                rendered = self.series_title_cleaned if self.is_series_episode else fallback_name
 
             self.__file_name = rendered
         return self.__file_name
@@ -468,11 +503,21 @@ class FilmPalastEpisode:
 
     @property
     def episode_number(self):
-        return 1
+        if self.__episode_number is None:
+            self.__episode_number = int(self._title_info.get("episode_number") or 1)
+        return self.__episode_number
 
     @property
     def season(self):
-        return SimpleNamespace(season_number=1)
+        if self._season_ref is not None:
+            return self._season_ref
+        if self.__season_number is None:
+            self.__season_number = int(self._title_info.get("season_number") or 1)
+        return SimpleNamespace(season_number=self.__season_number)
+
+    @property
+    def season_number(self):
+        return self.season.season_number
 
     def provider_link(self, language, provider):
         language_key = _LANGUAGE_KEY_MAP.get(

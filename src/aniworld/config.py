@@ -439,6 +439,16 @@ FILMPALAST_EPISODE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+FILMPALAST_SERIES_PATTERN = re.compile(
+    r"^https?://(?:www\.)?filmpalast\.to/stream/[A-Za-z0-9\-]+/?\?(?:[^#]*&)?aw_mode=series(?:&[^#]*)?$",
+    re.IGNORECASE,
+)
+
+FILMPALAST_SEASON_PATTERN = re.compile(
+    r"^https?://(?:www\.)?filmpalast\.to/stream/[A-Za-z0-9\-]+/?\?(?:[^#]*&)?aw_mode=season(?:&[^#]*aw_season=\d+[^#]*)?$",
+    re.IGNORECASE,
+)
+
 SERIENSTREAM_SERIES_PATTERN = re.compile(
     r"^https?://(www\.)?(serienstream|s)\.to/serie/[a-zA-Z0-9\-]+/?$", re.IGNORECASE
 )

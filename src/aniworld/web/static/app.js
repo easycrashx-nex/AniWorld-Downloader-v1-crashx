@@ -224,16 +224,16 @@ const SITE_CONFIG = {
   },
   filmpalast: {
     label: "FilmPalast",
-    heading: "FilmPalast Movie Downloader",
+    heading: "FilmPalast Series & Movie Downloader",
     placeholder: {
-      default: "Search for movies on FilmPalast...",
-      extended: "Search for movies on FilmPalast...",
+      default: "Search for series or movies on FilmPalast...",
+      extended: "Search for series or movies on FilmPalast...",
     },
     subheading: {
       default:
-        "Search FilmPalast movie titles and open them as direct movie downloads with the same queue workflow.",
+        "Search FilmPalast series and movies, group episodic results, and queue them through the same download workflow.",
       extended:
-        "Search FilmPalast movie titles and open them as direct movie downloads with the same queue workflow.",
+        "Search FilmPalast series and movies, group episodic results, and queue them through the same download workflow.",
     },
     providerPreference: ["Vidhide", "Vidara", "VOE"],
     modalLanguages: ["German Dub"],

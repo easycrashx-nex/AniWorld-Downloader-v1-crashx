@@ -5077,6 +5077,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                         "title": item.get("title", "Unknown"),
                         "url": url,
                         "poster_url": item.get("poster_url") or "",
+                        "is_series": bool(item.get("is_series")),
                     }
                 )
         elif site == "sto":
@@ -5254,7 +5255,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                             {
                                 "url": episode.url,
                                 "episode_number": 1,
-                                "title_de": getattr(episode, "title", None)
+                                "title_de": getattr(episode, "episode_display_title", None)
+                                or getattr(episode, "title", None)
                                 or getattr(episode, "title_de", "")
                                 or "",
                                 "title_en": "",
