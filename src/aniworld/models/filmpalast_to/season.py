@@ -48,6 +48,17 @@ class FilmPalastSeason:
                 for entry in self.series._entries
                 if entry["season_number"] == self.season_number
             ]
+            if not entries and self.series._representative.is_series_episode:
+                representative = self.series._representative
+                if representative.season_number == self.season_number:
+                    entries = [
+                        {
+                            "url": representative.url,
+                            "title": representative.title_de,
+                            "poster_url": representative.poster_url or "",
+                            **representative._title_info,
+                        }
+                    ]
             self.__episodes = [
                 FilmPalastEpisode(
                     entry["url"],

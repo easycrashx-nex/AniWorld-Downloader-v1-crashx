@@ -1,5 +1,3 @@
-from urllib.parse import urlparse
-
 try:
     from ..common import clean_title
 except ImportError:
@@ -59,6 +57,27 @@ class FilmPalastSeries:
                         "url": entry_url,
                     }
                 )
+            if not matches and self.source_url:
+                try:
+                    fallback_episode = FilmPalastEpisode(self.source_url)
+                    fallback_info = fallback_episode._title_info
+                    if (
+                        fallback_info
+                        and normalize_filmpalast_series_key(
+                            fallback_info.get("series_title")
+                        )
+                        == target_key
+                    ):
+                        matches.append(
+                            {
+                                "title": fallback_episode.title_de,
+                                "poster_url": fallback_episode.poster_url or "",
+                                "url": self.source_url,
+                                **fallback_info,
+                            }
+                        )
+                except Exception:
+                    pass
             matches.sort(key=lambda item: (item["season_number"], item["episode_number"]))
             self.__entries = matches
         return self.__entries
@@ -66,12 +85,12 @@ class FilmPalastSeries:
     @property
     def _representative(self):
         if self.__representative is None:
-            if not self._entries:
+            first_url = self.source_url or (self._entries[0]["url"] if self._entries else "")
+            if not first_url:
                 raise ValueError(f"No FilmPalast episodes found for series '{self.title}'")
-            first_url = self._entries[0]["url"]
             self.__representative = FilmPalastEpisode(
                 first_url,
-                parsed_info=self._entries[0],
+                parsed_info=self._entries[0] if self._entries else None,
             )
         return self.__representative
 
@@ -96,6 +115,8 @@ class FilmPalastSeries:
     def seasons(self):
         if self.__seasons is None:
             season_numbers = sorted({entry["season_number"] for entry in self._entries})
+            if not season_numbers and self._representative.is_series_episode:
+                season_numbers = [self._representative.season_number]
             self.__seasons = [
                 FilmPalastSeason(
                     self._build_season_url(season_number),
@@ -128,4 +149,3 @@ class FilmPalastSeries:
         for season in self.seasons:
             for episode in season.episodes:
                 episode.syncplay()
-
