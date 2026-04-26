@@ -2048,6 +2048,15 @@ def _absolute_asset_url(source_url, asset_url):
     return absolute_url
 
 
+def _provider_url_kind(prov, url):
+    normalized = normalize_url(url)
+    if prov.series_pattern and prov.series_pattern.fullmatch(normalized):
+        return "series"
+    if prov.season_pattern and prov.season_pattern.fullmatch(normalized):
+        return "season"
+    return "episode"
+
+
 def _image_proxy_allowed(source_url):
     if not source_url:
         return False
@@ -5148,7 +5157,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         try:
             prov = resolve_provider(url)
-            target = prov.series_cls(url=url) if prov.series_cls else prov.episode_cls(url=url)
+            url_kind = _provider_url_kind(prov, url)
+            if url_kind == "series" and prov.series_cls:
+                target = prov.series_cls(url=url)
+            else:
+                target = prov.episode_cls(url=url)
             poster = _absolute_asset_url(
                 url,
                 getattr(target, "poster_url", None) or getattr(target, "image_url", None),
@@ -5173,7 +5186,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "genres": getattr(target, "genres", []),
                     "release_year": getattr(target, "release_year", ""),
                     "is_favorite": bool(get_favorite(url, username=username)),
-                    "auto_sync_supported": bool(prov.series_cls),
+                    "auto_sync_supported": bool(url_kind == "series" and prov.series_cls),
                     "last_downloaded_at": series_meta.get("last_downloaded_at"),
                     "last_synced_at": series_meta.get("last_synced_at"),
                 }
@@ -5190,7 +5203,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         try:
             prov = resolve_provider(url)
-            if not prov.series_cls or not prov.season_cls:
+            url_kind = _provider_url_kind(prov, url)
+            if url_kind != "series" or not prov.series_cls or not prov.season_cls:
                 return jsonify(
                     {
                         "seasons": [
@@ -5228,7 +5242,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
 
         try:
             prov = resolve_provider(url)
-            if not prov.series_cls or not prov.season_cls:
+            url_kind = _provider_url_kind(prov, url)
+            if url_kind != "season" or not prov.series_cls or not prov.season_cls:
                 episode = prov.episode_cls(url=url)
                 downloaded = bool(getattr(episode, "is_downloaded", {}).get("exists"))
                 if not downloaded:

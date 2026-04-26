@@ -2734,15 +2734,21 @@ async function openSeries(url) {
   resetProviderDropdown();
   loadCustomPaths();
 
-  try {
-    const [seriesResp, seasonsResp] = await Promise.all([
-      fetch("/api/series?url=" + encodeURIComponent(url)),
-      fetch("/api/seasons?url=" + encodeURIComponent(url)),
-    ]);
-    const seriesData = await seriesResp.json();
-    const seasonsData = await seasonsResp.json();
+    try {
+      const [seriesResp, seasonsResp] = await Promise.all([
+        fetch("/api/series?url=" + encodeURIComponent(url)),
+        fetch("/api/seasons?url=" + encodeURIComponent(url)),
+      ]);
+      const seriesData = await seriesResp.json();
+      const seasonsData = await seasonsResp.json();
+      if (!seriesResp.ok || seriesData.error) {
+        throw new Error(seriesData.error || "Series details could not be loaded");
+      }
+      if (!seasonsResp.ok || seasonsData.error) {
+        throw new Error(seasonsData.error || "Season list could not be loaded");
+      }
 
-    currentSeriesTitle = seriesData.title || "Unknown";
+      currentSeriesTitle = seriesData.title || "Unknown";
     if (modalTitle) modalTitle.textContent = currentSeriesTitle;
     if (seriesData.poster_url && modalPoster) modalPoster.src = seriesData.poster_url;
     renderModalGenres(seriesData.genres || []);
