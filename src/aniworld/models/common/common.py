@@ -27,7 +27,10 @@ try:
         PROVIDER_HEADERS_W,
         Audio,
         Subtitles,
-        get_video_codec,
+        apply_ffmpeg_encoding_args,
+        get_active_encoding_settings,
+        get_ffmpeg_audio_kwargs,
+        get_ffmpeg_video_kwargs,
         logger,
     )
 except ImportError:
@@ -40,7 +43,10 @@ except ImportError:
         PROVIDER_HEADERS_W,
         Audio,
         Subtitles,
-        get_video_codec,
+        apply_ffmpeg_encoding_args,
+        get_active_encoding_settings,
+        get_ffmpeg_audio_kwargs,
+        get_ffmpeg_video_kwargs,
         logger,
     )
 
@@ -873,16 +879,46 @@ def _cleanup_ytdlp_outputs(output_template):
                 pass
 
 
+def _build_ffmpeg_output_kwargs(
+    settings=None,
+    *,
+    include_video=True,
+    include_audio=True,
+    extra_kwargs=None,
+):
+    settings = settings or get_active_encoding_settings()
+    kwargs = {}
+    if include_video:
+        kwargs.update(get_ffmpeg_video_kwargs(settings))
+    if include_audio:
+        kwargs.update(get_ffmpeg_audio_kwargs(settings))
+    if extra_kwargs:
+        kwargs.update(extra_kwargs)
+    return kwargs
+
+
+def _apply_encoding_to_output(node, settings=None):
+    return apply_ffmpeg_encoding_args(node, settings or get_active_encoding_settings())
+
+
 def _tag_downloaded_stream(input_path, output_path, audio_code, wants_clean_video, sub_video_code):
     _set_transfer_runtime(phase="metadata", active=True)
     stream_metadata = {"metadata:s:a:0": f"language={audio_code}"}
     if (not wants_clean_video) and sub_video_code:
         stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
+    encoding_settings = get_active_encoding_settings()
     _run_ffmpeg_with_progress(
-        ffmpeg.input(str(input_path)).output(
-            str(output_path),
-            c="copy",
-            **stream_metadata,
+        _apply_encoding_to_output(
+            ffmpeg.input(str(input_path)).output(
+                str(output_path),
+                **_build_ffmpeg_output_kwargs(
+                    encoding_settings,
+                    include_video=True,
+                    include_audio=True,
+                    extra_kwargs=stream_metadata,
+                ),
+            ),
+            encoding_settings,
         )
     )
 
@@ -1048,6 +1084,7 @@ def download(self):
             temp_video = self._episode_path.with_suffix(".temp_video.mkv")
             temp_full = self._episode_path.with_suffix(".temp_full.mkv")
             temp_ytdlp_template = str(self._episode_path.with_suffix(".temp_ytdlp.%(ext)s"))
+            encoding_settings = get_active_encoding_settings()
 
             if full_stream_needed:
                 logger.debug(
@@ -1082,15 +1119,21 @@ def download(self):
                         if (not wants_clean_video) and sub_video_code:
                             stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
                         bandwidth_kwargs = _bandwidth_limit_output_kwargs()
-
-                        video_codec = get_video_codec()
                         _run_ffmpeg_with_progress(
-                            ffmpeg.input(self.stream_url, **input_kwargs).output(
-                                str(temp_full),
-                                vcodec=video_codec,
-                                acodec=video_codec,
-                                **stream_metadata,
-                                **bandwidth_kwargs,
+                            _apply_encoding_to_output(
+                                ffmpeg.input(self.stream_url, **input_kwargs).output(
+                                    str(temp_full),
+                                    **_build_ffmpeg_output_kwargs(
+                                        encoding_settings,
+                                        include_video=True,
+                                        include_audio=True,
+                                        extra_kwargs={
+                                            **stream_metadata,
+                                            **bandwidth_kwargs,
+                                        },
+                                    ),
+                                ),
+                                encoding_settings,
                             ),
                             label=ep_label,
                         )
@@ -1146,15 +1189,20 @@ def download(self):
             if need_audio:
                 logger.debug("[DOWNLOADING] audio stream")
                 _set_transfer_runtime(engine="ffmpeg", phase="audio", active=True)
-                video_codec = get_video_codec()
                 bandwidth_kwargs = _bandwidth_limit_output_kwargs()
                 _run_ffmpeg_with_progress(
                     ffmpeg.input(self.stream_url, **input_kwargs).output(
                         str(temp_audio),
-                        acodec=video_codec,
                         map="0:a:0?",
-                        **{"metadata:s:a:0": f"language={audio_code}"},
-                        **bandwidth_kwargs,
+                        **_build_ffmpeg_output_kwargs(
+                            encoding_settings,
+                            include_video=False,
+                            include_audio=True,
+                            extra_kwargs={
+                                "metadata:s:a:0": f"language={audio_code}",
+                                **bandwidth_kwargs,
+                            },
+                        ),
                     ),
                     label=ep_label,
                 )
@@ -1162,19 +1210,27 @@ def download(self):
             if need_video:
                 logger.debug("[DOWNLOADING] video stream")
                 _set_transfer_runtime(engine="ffmpeg", phase="video", active=True)
-                video_codec = get_video_codec()
                 bandwidth_kwargs = _bandwidth_limit_output_kwargs()
                 _run_ffmpeg_with_progress(
-                    ffmpeg.input(self.stream_url, **input_kwargs).output(
-                        str(temp_video),
-                        vcodec=video_codec,
-                        map="0:v:0?",
-                        **(
-                            {}
-                            if wants_clean_video
-                            else {"metadata:s:v:0": f"language={sub_video_code}"}
+                    _apply_encoding_to_output(
+                        ffmpeg.input(self.stream_url, **input_kwargs).output(
+                            str(temp_video),
+                            map="0:v:0?",
+                            **_build_ffmpeg_output_kwargs(
+                                encoding_settings,
+                                include_video=True,
+                                include_audio=False,
+                                extra_kwargs={
+                                    **(
+                                        {}
+                                        if wants_clean_video
+                                        else {"metadata:s:v:0": f"language={sub_video_code}"}
+                                    ),
+                                    **bandwidth_kwargs,
+                                },
+                            ),
                         ),
-                        **bandwidth_kwargs,
+                        encoding_settings,
                     ),
                     label=ep_label,
                 )

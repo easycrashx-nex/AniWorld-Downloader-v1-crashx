@@ -35,6 +35,21 @@ const providerFallbackOrderInput = document.getElementById(
   "providerFallbackOrder",
 );
 const smartRetryProfileSelect = document.getElementById("smartRetryProfile");
+const encodingModeGroup = document.getElementById("encodingModeGroup");
+const encodingVideoEncoderSelect = document.getElementById(
+  "encodingVideoEncoder",
+);
+const encodingVideoPresetSelect = document.getElementById("encodingVideoPreset");
+const encodingVideoCrfInput = document.getElementById("encodingVideoCrf");
+const encodingAudioCodecSelect = document.getElementById("encodingAudioCodec");
+const encodingDetectBtn = document.getElementById("encodingDetectBtn");
+const encodingSummaryValue = document.getElementById("encodingSummaryValue");
+const encodingCpuChips = document.getElementById("encodingCpuChips");
+const encodingNvencChips = document.getElementById("encodingNvencChips");
+const encodingVaapiChips = document.getElementById("encodingVaapiChips");
+const encodingVideotoolboxChips = document.getElementById(
+  "encodingVideotoolboxChips",
+);
 const diskWarnGbInput = document.getElementById("diskWarnGb");
 const diskWarnPercentInput = document.getElementById("diskWarnPercent");
 const libraryAutoRepairCb = document.getElementById("libraryAutoRepair");
@@ -171,6 +186,7 @@ let restartReloadTimer = null;
 let updateCommitPage = 1;
 let updateCommitPages = 0;
 let updateCommitRequest = null;
+let encodingCapabilitiesRequest = null;
 let settingsBaselineState = null;
 let settingsDirty = false;
 let settingsApplyingState = false;
@@ -275,6 +291,15 @@ function refreshSettingsSelects() {
   if (dnsModeSelect) window.refreshCustomSelect(dnsModeSelect);
   if (downloadSpeedProfileSelect) {
     window.refreshCustomSelect(downloadSpeedProfileSelect);
+  }
+  if (encodingVideoEncoderSelect) {
+    window.refreshCustomSelect(encodingVideoEncoderSelect);
+  }
+  if (encodingVideoPresetSelect) {
+    window.refreshCustomSelect(encodingVideoPresetSelect);
+  }
+  if (encodingAudioCodecSelect) {
+    window.refreshCustomSelect(encodingAudioCodecSelect);
   }
   if (searchDefaultSortSelect)
     window.refreshCustomSelect(searchDefaultSortSelect);
@@ -430,6 +455,157 @@ function renderVpnInterfaces(data) {
     .join("");
 }
 
+function getEncodingModeValue() {
+  const raw = String(encodingModeGroup?.dataset.value || "copy").trim().toLowerCase();
+  return ["copy", "h264", "h265", "expert"].includes(raw) ? raw : "copy";
+}
+
+function renderEncodingModeButtons() {
+  if (!encodingModeGroup) return;
+  const value = getEncodingModeValue();
+  encodingModeGroup
+    .querySelectorAll(".settings-encoding-mode-btn")
+    .forEach((button) => {
+      const active = button.dataset.value === value;
+      button.dataset.active = active ? "1" : "0";
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+}
+
+function updateEncodingControlState() {
+  const mode = getEncodingModeValue();
+  const isCopy = mode === "copy";
+  const isPresetLocked = isCopy;
+  if (encodingVideoEncoderSelect) {
+    encodingVideoEncoderSelect.disabled = false;
+  }
+  if (encodingVideoPresetSelect) {
+    encodingVideoPresetSelect.disabled = isPresetLocked;
+  }
+  if (encodingVideoCrfInput) {
+    encodingVideoCrfInput.disabled = isPresetLocked;
+  }
+  if (encodingAudioCodecSelect) {
+    encodingAudioCodecSelect.disabled = false;
+  }
+  [
+    encodingVideoEncoderSelect,
+    encodingVideoPresetSelect,
+    encodingAudioCodecSelect,
+  ].forEach((select) => {
+    if (select && typeof window.refreshCustomSelect === "function") {
+      window.refreshCustomSelect(select);
+    }
+  });
+}
+
+function setEncodingModeValue(value, options = {}) {
+  if (!encodingModeGroup) return;
+  const normalized = ["copy", "h264", "h265", "expert"].includes(
+    String(value || "").trim().toLowerCase(),
+  )
+    ? String(value || "").trim().toLowerCase()
+    : "copy";
+  encodingModeGroup.dataset.value = normalized;
+  renderEncodingModeButtons();
+  updateEncodingControlState();
+  if (options.refreshDirty !== false) {
+    refreshSettingsDirtyState();
+  }
+}
+
+function renderEncodingFamilyChips(container, items) {
+  if (!container) return;
+  container.innerHTML = "";
+  const entries = Array.isArray(items) ? items : [];
+  if (!entries.length) {
+    const chip = document.createElement("span");
+    chip.className = "settings-chip settings-chip-muted";
+    chip.textContent = "Unavailable";
+    container.appendChild(chip);
+    return;
+  }
+  entries.forEach((item) => {
+    const chip = document.createElement("span");
+    const available = !!item?.available;
+    chip.className =
+      "settings-chip " +
+      (available ? "settings-chip-success" : "settings-chip-muted");
+    chip.textContent = item?.label || item?.name || "Unknown";
+    container.appendChild(chip);
+  });
+}
+
+function renderEncodingCapabilities(data) {
+  const supported = !!data?.ffmpeg_found;
+  const current = data?.current || {};
+  const mode = String(current.mode || getEncodingModeValue());
+  const videoLabel = String(current.video_label || "Copy");
+  const audioCodec = String(current.audio_codec || "copy").toUpperCase();
+  const ffmpegPath = String(data?.ffmpeg_path || "").trim();
+  const error = String(data?.error || "").trim();
+
+  if (encodingSummaryValue) {
+    if (!supported) {
+      encodingSummaryValue.textContent = error
+        ? `FFmpeg not available: ${error}`
+        : "FFmpeg could not be detected on this system.";
+    } else {
+      const parts = [];
+      parts.push(
+        mode === "copy"
+          ? "Active mode: Copy (no re-encoding)"
+          : `Active mode: ${videoLabel}`,
+      );
+      parts.push(`Audio: ${audioCodec}`);
+      if (ffmpegPath) parts.push(ffmpegPath);
+      encodingSummaryValue.textContent = parts.join(" • ");
+    }
+  }
+
+  renderEncodingFamilyChips(encodingCpuChips, data?.families?.cpu);
+  renderEncodingFamilyChips(encodingNvencChips, data?.families?.nvenc);
+  renderEncodingFamilyChips(encodingVaapiChips, data?.families?.vaapi);
+  renderEncodingFamilyChips(
+    encodingVideotoolboxChips,
+    data?.families?.videotoolbox,
+  );
+}
+
+async function loadEncodingCapabilities(force = false) {
+  if (!encodingSummaryValue) return null;
+  if (encodingCapabilitiesRequest && !force) return encodingCapabilitiesRequest;
+  const request = (async () => {
+    if (encodingDetectBtn) {
+      encodingDetectBtn.disabled = true;
+      encodingDetectBtn.textContent = "Detecting...";
+    }
+    try {
+      const suffix = force ? "?force=1" : "";
+      const resp = await fetch("/api/settings/encoding-capabilities" + suffix, {
+        cache: "no-store",
+      });
+      const data = await resp.json();
+      renderEncodingCapabilities(data || {});
+      return data;
+    } catch (e) {
+      renderEncodingCapabilities({
+        ffmpeg_found: false,
+        error: e.message || "Encoding capabilities could not be loaded.",
+      });
+      return null;
+    } finally {
+      if (encodingDetectBtn) {
+        encodingDetectBtn.disabled = false;
+        encodingDetectBtn.textContent = "Detect";
+      }
+      encodingCapabilitiesRequest = null;
+    }
+  })();
+  encodingCapabilitiesRequest = request;
+  return request;
+}
+
 function collectUiSettingsPayload() {
   return {
     ui_preset: uiPresetSelect?.value || "custom",
@@ -504,6 +680,11 @@ function captureSettingsState() {
     mp4_fallback_remux: !!mp4FallbackRemuxCb?.checked,
     provider_fallback_order: providerFallbackOrderInput?.value || "",
     smart_retry_profile: smartRetryProfileSelect?.value || "balanced",
+    encoding_mode: getEncodingModeValue(),
+    encoding_video_encoder: encodingVideoEncoderSelect?.value || "auto",
+    encoding_video_preset: encodingVideoPresetSelect?.value || "medium",
+    encoding_video_crf: encodingVideoCrfInput?.value || "23",
+    encoding_audio_codec: encodingAudioCodecSelect?.value || "copy",
     library_auto_repair: !!libraryAutoRepairCb?.checked,
     disk_warn_gb: diskWarnGbInput?.value || "8",
     disk_warn_percent: diskWarnPercentInput?.value || "12",
@@ -1062,6 +1243,7 @@ async function saveAllSettings() {
     syncSettingsBaselineFromDom();
     invalidateQueuePrefs();
     await refreshDnsDiagnostics(true);
+    await loadEncodingCapabilities(true);
     await loadUpdateStatus(false);
     showToast("All settings saved");
   } catch (e) {
@@ -1419,6 +1601,19 @@ async function loadSettings() {
       if (smartRetryProfileSelect) {
         smartRetryProfileSelect.value = data.smart_retry_profile || "balanced";
       }
+      if (encodingVideoEncoderSelect) {
+        encodingVideoEncoderSelect.value = data.encoding_video_encoder || "auto";
+      }
+      if (encodingVideoPresetSelect) {
+        encodingVideoPresetSelect.value = data.encoding_video_preset || "medium";
+      }
+      if (encodingVideoCrfInput) {
+        encodingVideoCrfInput.value = data.encoding_video_crf || "23";
+      }
+      if (encodingAudioCodecSelect) {
+        encodingAudioCodecSelect.value = data.encoding_audio_codec || "copy";
+      }
+      setEncodingModeValue(data.encoding_mode || "copy", { refreshDirty: false });
       if (diskWarnGbInput) {
         diskWarnGbInput.value = data.disk_warn_gb || "8";
       }
@@ -1490,6 +1685,7 @@ async function loadSettings() {
       if (syncProviderSelect && data.sync_provider)
         syncProviderSelect.value = data.sync_provider;
       refreshSettingsSelects();
+      await loadEncodingCapabilities(false);
       syncSettingsBaselineFromDom();
     } catch (e) {
       showToast("Failed to load settings: " + e.message);
@@ -2264,6 +2460,18 @@ if (settingsDiscardBtn) {
 }
 if (dnsRetestBtn) {
   dnsRetestBtn.addEventListener("click", () => refreshDnsDiagnostics(true));
+}
+if (encodingModeGroup) {
+  encodingModeGroup
+    .querySelectorAll(".settings-encoding-mode-btn")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        setEncodingModeValue(button.dataset.value || "copy");
+      });
+    });
+}
+if (encodingDetectBtn) {
+  encodingDetectBtn.addEventListener("click", () => loadEncodingCapabilities(true));
 }
 if (updateCommitHistoryDetails) {
   updateCommitHistoryDetails.addEventListener("toggle", () => {

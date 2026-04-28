@@ -73,16 +73,98 @@ NAMING_TEMPLATE = os.getenv(
     "{title} ({year}) [imdbid-{imdbid}]/Season {season}/{title} S{season}E{episode}.mkv",
 )
 
-# Video codec configuration
+# Legacy video codec configuration
 VIDEO_CODEC = os.getenv("ANIWORLD_VIDEO_CODEC", "copy")
 
-# Simple codec mapping using ffmpeg defaults
 VIDEO_CODEC_MAP = {
     "copy": "copy",
     "h264": "libx264",
     "h265": "libx265",
     "av1": "libsvtav1",
 }
+
+ENCODING_MODE_COPY = "copy"
+ENCODING_MODE_H264 = "h264"
+ENCODING_MODE_H265 = "h265"
+ENCODING_MODE_EXPERT = "expert"
+
+ENCODING_AUDIO_COPY = "copy"
+ENCODING_AUDIO_AAC = "aac"
+ENCODING_AUDIO_AC3 = "ac3"
+
+ENCODING_MODES = {
+    ENCODING_MODE_COPY,
+    ENCODING_MODE_H264,
+    ENCODING_MODE_H265,
+    ENCODING_MODE_EXPERT,
+}
+
+ENCODING_AUDIO_CODECS = {
+    ENCODING_AUDIO_COPY,
+    ENCODING_AUDIO_AAC,
+    ENCODING_AUDIO_AC3,
+}
+
+ENCODING_VIDEO_ENCODERS = {
+    "libx264": {"label": "CPU (libx264)", "family": "cpu", "codec": "h264"},
+    "libx265": {"label": "CPU (libx265)", "family": "cpu", "codec": "h265"},
+    "h264_nvenc": {"label": "NVENC H.264", "family": "nvenc", "codec": "h264"},
+    "hevc_nvenc": {"label": "NVENC H.265", "family": "nvenc", "codec": "h265"},
+    "h264_vaapi": {"label": "VAAPI H.264", "family": "vaapi", "codec": "h264"},
+    "hevc_vaapi": {"label": "VAAPI H.265", "family": "vaapi", "codec": "h265"},
+    "h264_videotoolbox": {
+        "label": "VideoToolbox H.264",
+        "family": "videotoolbox",
+        "codec": "h264",
+    },
+    "hevc_videotoolbox": {
+        "label": "VideoToolbox H.265",
+        "family": "videotoolbox",
+        "codec": "h265",
+    },
+    "libsvtav1": {"label": "CPU (SVT-AV1)", "family": "cpu", "codec": "av1"},
+}
+
+ENCODING_MODE_DEFAULT_ENCODERS = {
+    ENCODING_MODE_H264: {
+        "cpu": "libx264",
+        "nvenc": "h264_nvenc",
+        "vaapi": "h264_vaapi",
+        "videotoolbox": "h264_videotoolbox",
+    },
+    ENCODING_MODE_H265: {
+        "cpu": "libx265",
+        "nvenc": "hevc_nvenc",
+        "vaapi": "hevc_vaapi",
+        "videotoolbox": "hevc_videotoolbox",
+    },
+}
+
+ENCODING_PRESET_VALUES = {
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+}
+
+ENCODING_MODE = os.getenv("ANIWORLD_ENCODING_MODE", "").strip().lower()
+ENCODING_VIDEO_ENCODER = os.getenv("ANIWORLD_ENCODING_VIDEO_ENCODER", "auto").strip()
+ENCODING_VIDEO_PRESET = (
+    os.getenv("ANIWORLD_ENCODING_VIDEO_PRESET", "medium").strip().lower()
+)
+ENCODING_VIDEO_CRF = os.getenv("ANIWORLD_ENCODING_VIDEO_CRF", "23").strip()
+ENCODING_AUDIO_CODEC = (
+    os.getenv("ANIWORLD_ENCODING_AUDIO_CODEC", ENCODING_AUDIO_COPY).strip().lower()
+)
+ENCODING_VAAPI_DEVICE = os.getenv(
+    "ANIWORLD_ENCODING_VAAPI_DEVICE",
+    "/dev/dri/renderD128",
+).strip()
 
 ACTION_METHODS = {
     "Download": "download",
@@ -92,14 +174,179 @@ ACTION_METHODS = {
 
 
 def get_video_codec():
-    """Get and validate video codec from environment variable."""
-    codec = VIDEO_CODEC
-    if codec not in VIDEO_CODEC_MAP:
-        logger.warning(
-            f"Invalid video codec '{codec}', falling back to 'copy'. Valid options: {list(VIDEO_CODEC_MAP.keys())}"
-        )
+    """Backward-compatible helper used by older code paths."""
+    return get_ffmpeg_video_kwargs().get("vcodec", "copy")
+
+
+def _legacy_encoding_mode_default():
+    codec = str(VIDEO_CODEC or "").strip().lower()
+    if codec == "h264":
+        return ENCODING_MODE_H264
+    if codec == "h265":
+        return ENCODING_MODE_H265
+    if codec == "av1":
+        return ENCODING_MODE_EXPERT
+    return ENCODING_MODE_COPY
+
+
+def normalize_encoding_mode(value):
+    mode = str(value or "").strip().lower()
+    if not mode:
+        return _legacy_encoding_mode_default()
+    return mode if mode in ENCODING_MODES else ENCODING_MODE_COPY
+
+
+def normalize_encoding_video_encoder(value):
+    encoder = str(value or "auto").strip().lower()
+    if not encoder:
+        return "auto"
+    return encoder if encoder == "auto" or encoder in ENCODING_VIDEO_ENCODERS else "auto"
+
+
+def normalize_encoding_video_preset(value):
+    preset = str(value or "medium").strip().lower()
+    return preset if preset in ENCODING_PRESET_VALUES else "medium"
+
+
+def normalize_encoding_video_crf(value):
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        parsed = 23
+    return str(max(0, min(parsed, 51)))
+
+
+def normalize_encoding_audio_codec(value):
+    codec = str(value or ENCODING_AUDIO_COPY).strip().lower()
+    return codec if codec in ENCODING_AUDIO_CODECS else ENCODING_AUDIO_COPY
+
+
+def get_encoding_mode():
+    return normalize_encoding_mode(os.getenv("ANIWORLD_ENCODING_MODE", ENCODING_MODE))
+
+
+def get_encoding_video_encoder_preference():
+    return normalize_encoding_video_encoder(
+        os.getenv("ANIWORLD_ENCODING_VIDEO_ENCODER", ENCODING_VIDEO_ENCODER)
+    )
+
+
+def get_encoding_video_preset():
+    return normalize_encoding_video_preset(
+        os.getenv("ANIWORLD_ENCODING_VIDEO_PRESET", ENCODING_VIDEO_PRESET)
+    )
+
+
+def get_encoding_video_crf():
+    return normalize_encoding_video_crf(
+        os.getenv("ANIWORLD_ENCODING_VIDEO_CRF", ENCODING_VIDEO_CRF)
+    )
+
+
+def get_encoding_audio_codec():
+    return normalize_encoding_audio_codec(
+        os.getenv("ANIWORLD_ENCODING_AUDIO_CODEC", ENCODING_AUDIO_CODEC)
+    )
+
+
+def get_encoding_vaapi_device():
+    device = str(
+        os.getenv("ANIWORLD_ENCODING_VAAPI_DEVICE", ENCODING_VAAPI_DEVICE) or ""
+    ).strip()
+    return device or "/dev/dri/renderD128"
+
+
+def resolve_encoding_video_encoder():
+    mode = get_encoding_mode()
+    preferred = get_encoding_video_encoder_preference()
+    if mode == ENCODING_MODE_COPY:
         return "copy"
-    return VIDEO_CODEC_MAP[codec]
+    if mode == ENCODING_MODE_EXPERT:
+        if preferred != "auto":
+            return preferred
+        return "libx264"
+
+    target_codec = "h264" if mode == ENCODING_MODE_H264 else "h265"
+    if preferred != "auto":
+        encoder_meta = ENCODING_VIDEO_ENCODERS.get(preferred)
+        if encoder_meta and encoder_meta.get("codec") == target_codec:
+            return preferred
+        family = (encoder_meta or {}).get("family", "cpu")
+    else:
+        family = "cpu"
+    return ENCODING_MODE_DEFAULT_ENCODERS[target_codec].get(
+        family, ENCODING_MODE_DEFAULT_ENCODERS[target_codec]["cpu"]
+    )
+
+
+def get_active_encoding_settings():
+    mode = get_encoding_mode()
+    encoder = resolve_encoding_video_encoder()
+    return {
+        "mode": mode,
+        "video_encoder_preference": get_encoding_video_encoder_preference(),
+        "video_encoder": encoder,
+        "video_preset": get_encoding_video_preset(),
+        "video_crf": get_encoding_video_crf(),
+        "audio_codec": get_encoding_audio_codec(),
+        "vaapi_device": get_encoding_vaapi_device(),
+        "enabled": mode != ENCODING_MODE_COPY or get_encoding_audio_codec() != ENCODING_AUDIO_COPY,
+        "video_family": ENCODING_VIDEO_ENCODERS.get(encoder, {}).get("family", "copy"),
+        "video_label": ENCODING_VIDEO_ENCODERS.get(encoder, {}).get("label", "Copy"),
+    }
+
+
+def get_ffmpeg_video_kwargs(settings=None):
+    settings = settings or get_active_encoding_settings()
+    encoder = str(settings.get("video_encoder") or "copy")
+    if encoder == "copy" or settings.get("mode") == ENCODING_MODE_COPY:
+        return {"vcodec": "copy"}
+
+    preset = str(settings.get("video_preset") or "medium")
+    crf = str(settings.get("video_crf") or "23")
+    family = ENCODING_VIDEO_ENCODERS.get(encoder, {}).get("family", "cpu")
+
+    if family == "nvenc":
+        return {
+            "vcodec": encoder,
+            "preset": preset,
+            "rc": "vbr",
+            "cq": crf,
+            "b:v": "0",
+        }
+    if family == "vaapi":
+        return {
+            "vcodec": encoder,
+            "qp": crf,
+            "vf": "format=nv12,hwupload",
+        }
+    if family == "videotoolbox":
+        quality = max(1, min(100, 100 - int((int(crf) / 51) * 80)))
+        return {
+            "vcodec": encoder,
+            "q:v": str(quality),
+        }
+    return {
+        "vcodec": encoder,
+        "preset": preset,
+        "crf": crf,
+    }
+
+
+def get_ffmpeg_audio_kwargs(settings=None):
+    settings = settings or get_active_encoding_settings()
+    codec = str(settings.get("audio_codec") or ENCODING_AUDIO_COPY)
+    if codec == ENCODING_AUDIO_COPY:
+        return {"acodec": "copy"}
+    return {"acodec": codec}
+
+
+def apply_ffmpeg_encoding_args(node, settings=None):
+    settings = settings or get_active_encoding_settings()
+    encoder = str(settings.get("video_encoder") or "copy")
+    if ENCODING_VIDEO_ENCODERS.get(encoder, {}).get("family") == "vaapi":
+        return node.global_args("-vaapi_device", settings.get("vaapi_device") or get_encoding_vaapi_device())
+    return node
 
 
 # NIQUESTS

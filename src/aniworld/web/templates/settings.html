@@ -1012,6 +1012,128 @@
         MKV with metadata.
       </div>
     </div>
+
+    <div class="settings-form-card">
+      <div class="settings-form-card-head">
+        <div>
+          <h3>Encoding & Compression</h3>
+          <p class="settings-form-card-copy">
+            Keep the default copy path for fastest remuxes or switch to H.264 /
+            H.265 when you want smaller files and broader device compatibility.
+          </p>
+        </div>
+      </div>
+      <div class="settings-encoding-mode" id="encodingModeGroup" data-value="copy">
+        <button type="button" class="settings-encoding-mode-btn" data-value="copy">
+          Copy
+        </button>
+        <button type="button" class="settings-encoding-mode-btn" data-value="h264">
+          H.264
+        </button>
+        <button type="button" class="settings-encoding-mode-btn" data-value="h265">
+          H.265
+        </button>
+        <button type="button" class="settings-encoding-mode-btn" data-value="expert">
+          Expert
+        </button>
+      </div>
+      <div class="settings-encoding-grid">
+        <div class="settings-info-card settings-encoding-capabilities-card">
+          <div class="settings-encoding-head">
+            <div>
+              <span class="field-label">Hardware Detection</span>
+              <strong id="encodingSummaryValue" class="settings-static-value"
+                >Checking available FFmpeg encoders...</strong
+              >
+            </div>
+            <button type="button" class="btn-secondary" id="encodingDetectBtn">
+              Detect
+            </button>
+          </div>
+          <div class="settings-encoding-family-grid">
+            <div class="settings-encoding-family">
+              <span class="field-label">CPU</span>
+              <div class="settings-chip-list" id="encodingCpuChips">
+                <span class="settings-chip">Checking...</span>
+              </div>
+            </div>
+            <div class="settings-encoding-family">
+              <span class="field-label">NVENC</span>
+              <div class="settings-chip-list" id="encodingNvencChips">
+                <span class="settings-chip">Checking...</span>
+              </div>
+            </div>
+            <div class="settings-encoding-family">
+              <span class="field-label">VAAPI</span>
+              <div class="settings-chip-list" id="encodingVaapiChips">
+                <span class="settings-chip">Checking...</span>
+              </div>
+            </div>
+            <div class="settings-encoding-family">
+              <span class="field-label">VideoToolbox</span>
+              <div class="settings-chip-list" id="encodingVideotoolboxChips">
+                <span class="settings-chip">Checking...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-form-card settings-encoding-settings-card">
+          <div class="settings-row settings-row-download-rules">
+            <div class="settings-field">
+              <label class="field-label" for="encodingVideoEncoder">Encoder</label>
+              <select id="encodingVideoEncoder" class="sync-select">
+                <option value="auto">Auto</option>
+                <option value="libx264">CPU (libx264)</option>
+                <option value="libx265">CPU (libx265)</option>
+                <option value="h264_nvenc">NVENC H.264</option>
+                <option value="hevc_nvenc">NVENC H.265</option>
+                <option value="h264_vaapi">VAAPI H.264</option>
+                <option value="hevc_vaapi">VAAPI H.265</option>
+                <option value="h264_videotoolbox">VideoToolbox H.264</option>
+                <option value="hevc_videotoolbox">VideoToolbox H.265</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label class="field-label" for="encodingVideoPreset">Preset</label>
+              <select id="encodingVideoPreset" class="sync-select">
+                <option value="ultrafast">ultrafast</option>
+                <option value="superfast">superfast</option>
+                <option value="veryfast">veryfast</option>
+                <option value="faster">faster</option>
+                <option value="fast">fast</option>
+                <option value="medium">medium</option>
+                <option value="slow">slow</option>
+                <option value="slower">slower</option>
+                <option value="veryslow">veryslow</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label class="field-label" for="encodingVideoCrf">CRF / Quality</label>
+              <input
+                type="number"
+                id="encodingVideoCrf"
+                min="0"
+                max="51"
+                placeholder="23"
+              />
+            </div>
+            <div class="settings-field">
+              <label class="field-label" for="encodingAudioCodec">Audio Codec</label>
+              <select id="encodingAudioCodec" class="sync-select">
+                <option value="copy">Copy</option>
+                <option value="aac">AAC</option>
+                <option value="ac3">AC3</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-hint">
+            Copy keeps the fastest no-reencode path. H.264 is the safest size /
+            compatibility compromise. H.265 usually saves more space but needs
+            newer devices. CRF 18-28 is the practical range for normal use.
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="settings-section">

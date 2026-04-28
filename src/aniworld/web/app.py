@@ -35,9 +35,11 @@ from ..config import (
     ANIWORLD_SEASON_PATTERN,
     ANIWORLD_SERIES_PATTERN,
     DEFAULT_USER_AGENT,
+    ENCODING_VIDEO_ENCODERS,
     FILMPALAST_EPISODE_PATTERN,
     GLOBAL_SESSION,
     apply_global_dns_mode,
+    get_active_encoding_settings,
     get_dns_mode_label,
     get_dns_resolver_servers,
     get_global_dns_mode,
@@ -49,6 +51,11 @@ from ..config import (
     SUPPORTED_PROVIDERS,
     VERSION,
     display_version,
+    normalize_encoding_audio_codec,
+    normalize_encoding_mode,
+    normalize_encoding_video_crf,
+    normalize_encoding_video_encoder,
+    normalize_encoding_video_preset,
     normalize_dns_mode,
 )
 from ..extractors import provider_functions
@@ -167,6 +174,11 @@ _ENV_AUTO_PROVIDER_SWITCH = "ANIWORLD_AUTO_PROVIDER_SWITCH"
 _ENV_RATE_LIMIT_GUARD = "ANIWORLD_RATE_LIMIT_GUARD"
 _ENV_PREFLIGHT_CHECK = "ANIWORLD_PREFLIGHT_CHECK"
 _ENV_MP4_FALLBACK_REMUX = "ANIWORLD_MP4_FALLBACK_REMUX"
+_ENV_ENCODING_MODE = "ANIWORLD_ENCODING_MODE"
+_ENV_ENCODING_VIDEO_ENCODER = "ANIWORLD_ENCODING_VIDEO_ENCODER"
+_ENV_ENCODING_VIDEO_PRESET = "ANIWORLD_ENCODING_VIDEO_PRESET"
+_ENV_ENCODING_VIDEO_CRF = "ANIWORLD_ENCODING_VIDEO_CRF"
+_ENV_ENCODING_AUDIO_CODEC = "ANIWORLD_ENCODING_AUDIO_CODEC"
 _ENV_DNS_MODE = "ANIWORLD_DNS_MODE"
 _ENV_UPDATE_REMOTE_URL = "ANIWORLD_UPDATE_REMOTE_URL"
 _ENV_UPDATE_REMOTE_BRANCH = "ANIWORLD_UPDATE_REMOTE_BRANCH"
@@ -514,6 +526,75 @@ def _dns_diagnostics_payload(force=False):
         "status": _dns_status_message(mode, servers),
         "reachability": [_dns_probe_domain(domain) for domain in _DNS_TEST_DOMAINS],
     }
+    return _cache_set(cache_key, payload)
+
+
+def _encoding_capabilities_payload(force=False):
+    cache_key = "settings:encoding_capabilities"
+    if not force:
+        cached = _cache_get(cache_key, 300)
+        if cached is not None:
+            return cached
+
+    ffmpeg_path = shutil.which("ffmpeg")
+    payload = {
+        "ffmpeg_found": bool(ffmpeg_path),
+        "ffmpeg_path": ffmpeg_path or "",
+        "error": "",
+        "encoders": {},
+        "families": {},
+        "current": get_active_encoding_settings(),
+    }
+
+    available = set()
+    if ffmpeg_path:
+        try:
+            completed = subprocess.run(
+                [ffmpeg_path, "-hide_banner", "-encoders"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            output = f"{completed.stdout or ''}\n{completed.stderr or ''}"
+            for line in output.splitlines():
+                match = re.match(r"^\s*[A-Z\.]{6}\s+([A-Za-z0-9_]+)\s", line)
+                if match:
+                    available.add(match.group(1).strip())
+            if completed.returncode != 0 and not available:
+                payload["error"] = (completed.stderr or completed.stdout or "ffmpeg encoder listing failed").strip()
+        except Exception as exc:
+            payload["error"] = str(exc)
+    else:
+        payload["error"] = "ffmpeg was not found in PATH"
+
+    payload["encoders"] = {
+        name: {
+            "available": name in available,
+            "label": meta.get("label") or name,
+            "family": meta.get("family") or "cpu",
+            "codec": meta.get("codec") or "",
+        }
+        for name, meta in ENCODING_VIDEO_ENCODERS.items()
+    }
+
+    for family, label in (
+        ("cpu", "CPU"),
+        ("nvenc", "NVENC"),
+        ("vaapi", "VAAPI"),
+        ("videotoolbox", "VideoToolbox"),
+    ):
+        family_encoders = [
+            info
+            for info in payload["encoders"].values()
+            if info["family"] == family and info["codec"] in {"h264", "h265"}
+        ]
+        payload["families"][family] = {
+            "label": label,
+            "available": any(item["available"] for item in family_encoders),
+            "encoders": family_encoders,
+        }
+
     return _cache_set(cache_key, payload)
 
 
@@ -1789,6 +1870,21 @@ def _settings_payload(
         "download_speed_profile": _normalize_download_speed_profile(
             os.environ.get(_ENV_DOWNLOAD_SPEED_PROFILE, "balanced")
         ),
+        "encoding_mode": normalize_encoding_mode(
+            os.environ.get(_ENV_ENCODING_MODE, "")
+        ),
+        "encoding_video_encoder": normalize_encoding_video_encoder(
+            os.environ.get(_ENV_ENCODING_VIDEO_ENCODER, "auto")
+        ),
+        "encoding_video_preset": normalize_encoding_video_preset(
+            os.environ.get(_ENV_ENCODING_VIDEO_PRESET, "medium")
+        ),
+        "encoding_video_crf": normalize_encoding_video_crf(
+            os.environ.get(_ENV_ENCODING_VIDEO_CRF, "23")
+        ),
+        "encoding_audio_codec": normalize_encoding_audio_codec(
+            os.environ.get(_ENV_ENCODING_AUDIO_CODEC, "copy")
+        ),
         "auto_provider_switch": _normalize_pref_bool(
             os.environ.get(_ENV_AUTO_PROVIDER_SWITCH, "1")
         ),
@@ -2783,6 +2879,7 @@ def _build_diagnostics_payload():
             "download_backend": _normalize_download_backend(
                 os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto")
             ),
+            "encoding": get_active_encoding_settings(),
             "download_engine_rules": _normalize_engine_rules(
                 os.environ.get(_ENV_DOWNLOAD_ENGINE_RULES, "")
             ),
@@ -6012,6 +6109,26 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             os.environ[_ENV_DOWNLOAD_SPEED_PROFILE] = (
                 _normalize_download_speed_profile(data["download_speed_profile"])
             )
+        if "encoding_mode" in data:
+            os.environ[_ENV_ENCODING_MODE] = normalize_encoding_mode(
+                data["encoding_mode"]
+            )
+        if "encoding_video_encoder" in data:
+            os.environ[_ENV_ENCODING_VIDEO_ENCODER] = normalize_encoding_video_encoder(
+                data["encoding_video_encoder"]
+            )
+        if "encoding_video_preset" in data:
+            os.environ[_ENV_ENCODING_VIDEO_PRESET] = normalize_encoding_video_preset(
+                data["encoding_video_preset"]
+            )
+        if "encoding_video_crf" in data:
+            os.environ[_ENV_ENCODING_VIDEO_CRF] = normalize_encoding_video_crf(
+                data["encoding_video_crf"]
+            )
+        if "encoding_audio_codec" in data:
+            os.environ[_ENV_ENCODING_AUDIO_CODEC] = normalize_encoding_audio_codec(
+                data["encoding_audio_codec"]
+            )
         if "auto_provider_switch" in data:
             _set_bool_env(_ENV_AUTO_PROVIDER_SWITCH, data["auto_provider_switch"])
         if "rate_limit_guard" in data:
@@ -6258,6 +6375,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
                     "download_path",
                     "bandwidth_limit_kbps",
                     "download_backend",
+                    "encoding_mode",
+                    "encoding_video_encoder",
+                    "encoding_video_preset",
+                    "encoding_video_crf",
+                    "encoding_audio_codec",
                     "dns_mode",
                     "provider_fallback_order",
                     "disk_warn_gb",
@@ -6320,6 +6442,16 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             "on",
         }
         return jsonify(_dns_diagnostics_payload(force=force))
+
+    @app.route("/api/settings/encoding-capabilities")
+    def api_settings_encoding_capabilities():
+        force = str(request.args.get("force", "")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        return jsonify(_encoding_capabilities_payload(force=force))
 
     @app.route("/api/custom-paths")
     def api_custom_paths():
@@ -7027,6 +7159,33 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             )
             os.environ[_ENV_DOWNLOAD_BACKEND] = _normalize_download_backend(
                 settings_payload.get("download_backend", os.environ.get(_ENV_DOWNLOAD_BACKEND, "auto"))
+            )
+            os.environ[_ENV_ENCODING_MODE] = normalize_encoding_mode(
+                settings_payload.get("encoding_mode", os.environ.get(_ENV_ENCODING_MODE, ""))
+            )
+            os.environ[_ENV_ENCODING_VIDEO_ENCODER] = normalize_encoding_video_encoder(
+                settings_payload.get(
+                    "encoding_video_encoder",
+                    os.environ.get(_ENV_ENCODING_VIDEO_ENCODER, "auto"),
+                )
+            )
+            os.environ[_ENV_ENCODING_VIDEO_PRESET] = normalize_encoding_video_preset(
+                settings_payload.get(
+                    "encoding_video_preset",
+                    os.environ.get(_ENV_ENCODING_VIDEO_PRESET, "medium"),
+                )
+            )
+            os.environ[_ENV_ENCODING_VIDEO_CRF] = normalize_encoding_video_crf(
+                settings_payload.get(
+                    "encoding_video_crf",
+                    os.environ.get(_ENV_ENCODING_VIDEO_CRF, "23"),
+                )
+            )
+            os.environ[_ENV_ENCODING_AUDIO_CODEC] = normalize_encoding_audio_codec(
+                settings_payload.get(
+                    "encoding_audio_codec",
+                    os.environ.get(_ENV_ENCODING_AUDIO_CODEC, "copy"),
+                )
             )
             os.environ[_ENV_DOWNLOAD_ENGINE_RULES] = _normalize_engine_rules(
                 settings_payload.get(
