@@ -5915,7 +5915,11 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         entry = _browse_cache.get(key)
         if entry and now - entry[0] < _BROWSE_TTL:
             return entry[1]
-        results = fetch_fn()
+        try:
+            results = fetch_fn()
+        except Exception:
+            logger.exception("Browse fetch failed for %s", key)
+            return None
         if results is not None:
             _browse_cache[key] = (now, results)
         return results

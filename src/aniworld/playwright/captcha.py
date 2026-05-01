@@ -34,6 +34,56 @@ def _ensure_virtual_display() -> None:
         pass
 
 
+def _get_sync_playwright():
+    try:
+        from patchright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError(
+            "patchright ist nicht installiert. "
+            "Bitte installieren mit: pip install patchright && patchright install chromium"
+        ) from exc
+    return sync_playwright
+
+
+def _launch_chromium(p, logger=None, extra_args=None):
+    """Launch Chromium with safer defaults for Linux servers, containers, and desktops."""
+    launch_variants = []
+    base_args = [
+        "--disable-blink-features=AutomationControlled",
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+    ]
+    variant_args = base_args + list(extra_args or [])
+    launch_variants.append({"headless": False, "args": variant_args})
+    launch_variants.append(
+        {
+            "headless": False,
+            "args": ["--disable-blink-features=AutomationControlled"]
+            + list(extra_args or []),
+        }
+    )
+    launch_variants.append({"headless": True, "args": variant_args})
+
+    last_error = None
+    for variant in launch_variants:
+        try:
+            return p.chromium.launch(
+                headless=variant["headless"],
+                args=variant["args"],
+            )
+        except Exception as exc:
+            last_error = exc
+            if logger:
+                logger.warning(
+                    "Chromium launch failed (headless=%s): %s",
+                    variant["headless"],
+                    exc,
+                )
+    raise last_error
+
+
 def _click_turnstile(page, logger=None) -> bool:
     """Locate the Turnstile iframe and click its checkbox with human-like motion."""
     selectors = (
@@ -229,13 +279,7 @@ def solve_captcha(url: str):
 
 def _solve_captcha_cli(url: str) -> bool:
     """CLI mode captcha solver — opens a visible browser, injects cookies on success."""
-    try:
-        from patchright.sync_api import sync_playwright
-    except ImportError:
-        raise RuntimeError(
-            "patchright ist nicht installiert. "
-            "Bitte installieren mit: pip install patchright && patchright install chromium"
-        )
+    sync_playwright = _get_sync_playwright()
 
     from ..config import GLOBAL_SESSION
     from ..logger import get_logger
@@ -251,10 +295,7 @@ def _solve_captcha_cli(url: str) -> bool:
         try:
             _ensure_virtual_display()
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=False,
-                    args=["--disable-blink-features=AutomationControlled"],
-                )
+                browser = _launch_chromium(p, logger=logger)
                 context = browser.new_context(
                     user_agent=(
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -363,13 +404,7 @@ class CaptchaSession:
 
 def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
     """WebUI mode: stream screenshots, accept clicks, inject cookies on success."""
-    try:
-        from patchright.sync_api import sync_playwright
-    except ImportError:
-        raise RuntimeError(
-            "patchright ist nicht installiert. "
-            "Bitte installieren mit: pip install patchright && patchright install chromium"
-        )
+    sync_playwright = _get_sync_playwright()
 
     from ..config import GLOBAL_SESSION
     from ..logger import get_logger
@@ -391,9 +426,10 @@ def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
         with sync_playwright() as p:
             # headless=False required for Cloudflare/Turnstile to work.
             # Window pushed off-screen to avoid visible popup on server desktops.
-            browser = p.chromium.launch(
-                headless=False,
-                args=["--window-position=-32000,-32000", "--window-size=1280,720"],
+            browser = _launch_chromium(
+                p,
+                logger=logger,
+                extra_args=["--window-position=-32000,-32000", "--window-size=1280,720"],
             )
             context = browser.new_context(viewport={"width": 1280, "height": 720})
             page = context.new_page()
@@ -708,13 +744,7 @@ def solve_sto_modal(
     URL (e.g. voe.sx/e/...).  Works in CLI and WebUI mode.
     Returns the iframe URL on success, None on timeout.
     """
-    try:
-        from patchright.sync_api import sync_playwright
-    except ImportError:
-        raise RuntimeError(
-            "patchright ist nicht installiert. "
-            "Bitte installieren mit: pip install patchright && patchright install chromium"
-        )
+    sync_playwright = _get_sync_playwright()
 
     from ..config import GLOBAL_SESSION
     from ..logger import get_logger
@@ -742,7 +772,7 @@ def solve_sto_modal(
 
         _ensure_virtual_display()
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False, args=extra_args)
+            browser = _launch_chromium(p, logger=logger, extra_args=extra_args)
             context = browser.new_context(
                 viewport={"width": 1280, "height": 720},
             )
