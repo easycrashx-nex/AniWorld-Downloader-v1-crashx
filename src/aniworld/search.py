@@ -1,3 +1,4 @@
+import html as html_module
 import random
 import re
 
