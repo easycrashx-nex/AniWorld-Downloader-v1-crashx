@@ -45,45 +45,6 @@ def _get_sync_playwright():
     return sync_playwright
 
 
-def _launch_chromium(p, logger=None, extra_args=None):
-    """Launch Chromium with safer defaults for Linux servers, containers, and desktops."""
-    launch_variants = []
-    base_args = [
-        "--disable-blink-features=AutomationControlled",
-        "--disable-dev-shm-usage",
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-    ]
-    variant_args = base_args + list(extra_args or [])
-    launch_variants.append({"headless": False, "args": variant_args})
-    launch_variants.append(
-        {
-            "headless": False,
-            "args": ["--disable-blink-features=AutomationControlled"]
-            + list(extra_args or []),
-        }
-    )
-    launch_variants.append({"headless": True, "args": variant_args})
-
-    last_error = None
-    for variant in launch_variants:
-        try:
-            return p.chromium.launch(
-                headless=variant["headless"],
-                args=variant["args"],
-            )
-        except Exception as exc:
-            last_error = exc
-            if logger:
-                logger.warning(
-                    "Chromium launch failed (headless=%s): %s",
-                    variant["headless"],
-                    exc,
-                )
-    raise last_error
-
-
 def _click_turnstile(page, logger=None) -> bool:
     """Locate the Turnstile iframe and click its checkbox with human-like motion."""
     selectors = (
@@ -295,14 +256,8 @@ def _solve_captcha_cli(url: str) -> bool:
         try:
             _ensure_virtual_display()
             with sync_playwright() as p:
-                browser = _launch_chromium(p, logger=logger)
-                context = browser.new_context(
-                    user_agent=(
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/124.0.0.0 Safari/537.36"
-                    )
-                )
+                browser = p.chromium.launch(headless=False)
+                context = browser.new_context()
                 page = context.new_page()
                 page.goto(url, wait_until="domcontentloaded")
 
@@ -426,10 +381,9 @@ def _solve_captcha_interactive(url: str, queue_id: int) -> bool:
         with sync_playwright() as p:
             # headless=False required for Cloudflare/Turnstile to work.
             # Window pushed off-screen to avoid visible popup on server desktops.
-            browser = _launch_chromium(
-                p,
-                logger=logger,
-                extra_args=["--window-position=-32000,-32000", "--window-size=1280,720"],
+            browser = p.chromium.launch(
+                headless=False,
+                args=["--window-position=-32000,-32000", "--window-size=1280,720"],
             )
             context = browser.new_context(viewport={"width": 1280, "height": 720})
             page = context.new_page()
@@ -772,7 +726,7 @@ def solve_sto_modal(
 
         _ensure_virtual_display()
         with sync_playwright() as p:
-            browser = _launch_chromium(p, logger=logger, extra_args=extra_args)
+            browser = p.chromium.launch(headless=False, args=extra_args)
             context = browser.new_context(
                 viewport={"width": 1280, "height": 720},
             )
